@@ -1,8 +1,8 @@
 /* ---------- tokens ---------- */
 :root {
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  --font-mono: "Cascadia Mono", "Consolas", monospace;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI Variable Display", "Segoe UI", "DIN Alternate", "Helvetica Neue", sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", "SF Mono", "Menlo", monospace;
 
   /* brand, taken from the unit badge */
   --navy-900: #080e18;
@@ -161,6 +161,9 @@ body.fullscreen #titlebar {
   box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.5);
 }
 body.fullscreen.tb-reveal #titlebar { transform: none; }
+/* macOS slides its own menu bar over the top edge of a fullscreen window; ours sits just below it. */
+body.mac.fullscreen #titlebar { top: 24px; }
+body.mac.fullscreen:not(.tb-reveal) #titlebar { transform: translateY(calc(-100% - 24px)); }
 
 /* ---------- header ---------- */
 #header {

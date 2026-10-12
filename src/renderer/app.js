@@ -7,6 +7,11 @@
 const COLS = 96;
 const ROWS = 54;
 const WEB_PARTITION = 'persist:palv-web';
+// The same dashboard runs on Windows and macOS; only the wording of keys and paths differs.
+const IS_MAC = window.palv.platform === 'darwin';
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+const FS_KEY = IS_MAC ? '⌃⌘F' : 'F11';
+const APP_HINT = IS_MAC ? '/Applications/Programma.app of alleen de naam, bv. Safari' : 'C:\\Program Files\\…\\programma.exe';
 // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
 // same area stays in view on any screen resolution and in any window size.
 const REF_W = 939, REF_H = 1041;
@@ -348,11 +353,11 @@ const THEME_META = { auto: { icon: 'auto', label: 'Auto' }, light: { icon: 'sun'
 function renderTitlebar() {
   const actions = $('#tb-actions');
   actions.replaceChildren(
-    h('button', { class: 'tb-btn' + (editing ? ' on' : ''), title: 'Indeling bewerken (Ctrl+E)', onclick: () => setEditing(!editing) }, icon('edit'), editing ? 'Gereed' : 'Bewerken'),
+    h('button', { class: 'tb-btn' + (editing ? ' on' : ''), title: `Indeling bewerken (${MOD}E)`, onclick: () => setEditing(!editing) }, icon('edit'), editing ? 'Gereed' : 'Bewerken'),
     h('button', { class: 'tb-btn', title: 'Widget of app-tegel toevoegen', onclick: openAddWidget }, icon('plus'), 'Toevoegen'),
     h('button', { class: 'tb-btn', title: 'Thema wisselen: automatisch / licht / donker', onclick: cycleTheme }, icon(THEME_META[state.settings.theme].icon), THEME_META[state.settings.theme].label),
     h('button', { class: 'tb-btn', title: 'Instellingen', onclick: () => openSettings() }, icon('gear'), 'Instellingen'),
-    h('button', { class: 'tb-btn', title: 'Volledig scherm zonder randen en menubalk (F11)', onclick: () => window.palv.win.setFullscreen(!winState.fullscreen) }, icon(winState.fullscreen ? 'shrink' : 'expand'), winState.fullscreen ? 'Venster' : 'Volledig scherm')
+    h('button', { class: 'tb-btn', title: `Volledig scherm zonder randen en menubalk (${FS_KEY})`, onclick: () => window.palv.win.setFullscreen(!winState.fullscreen) }, icon(winState.fullscreen ? 'shrink' : 'expand'), winState.fullscreen ? 'Venster' : 'Volledig scherm')
   );
   $('#tb-window').replaceChildren(
     h('button', { class: 'tb-win', title: 'Minimaliseren', onclick: () => window.palv.win.minimize() }, icon('min')),
@@ -377,7 +382,7 @@ function renderTabs() {
     nav.append(
       h(
         'button',
-        { class: 'tab' + (active ? ' active' : ''), title: `Ctrl+${i + 1}`, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
+        { class: 'tab' + (active ? ' active' : ''), title: `${MOD}${i + 1}`, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
         p.name,
         h('span', { class: 'tab-tool', title: 'Naam wijzigen', onclick: (e) => { e.stopPropagation(); renamePage(i); } }, icon('edit')),
         state.pages.length > 1 ? h('span', { class: 'tab-tool', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null
@@ -1208,7 +1213,7 @@ const WIDGETS = {
     },
     form(cfg) {
       let kind = cfg.kind, iconData = cfg.icon;
-      const target = textInput(cfg.target, { placeholder: kind === 'url' ? 'https://…' : 'C:\\Program Files\\…\\programma.exe' });
+      const target = textInput(cfg.target, { placeholder: kind === 'url' ? 'https://…' : APP_HINT });
       const args = textInput(cfg.args, { placeholder: 'Optioneel' });
       const browse = h('button', { class: 'btn', onclick: async () => {
         const res = await window.palv.tile.pickFile();
@@ -1219,7 +1224,7 @@ const WIDGETS = {
         if (title && (!title.value.trim() || title.value === 'App-tegel')) title.value = res.name;
       } }, icon('folder'), 'Bladeren…');
       const argsField = field('Opstartparameters', args);
-      const sync = () => { browse.style.display = argsField.style.display = kind === 'url' ? 'none' : ''; target.placeholder = kind === 'url' ? 'https://…' : 'C:\\Program Files\\…\\programma.exe'; };
+      const sync = () => { browse.style.display = argsField.style.display = kind === 'url' ? 'none' : ''; target.placeholder = kind === 'url' ? 'https://…' : APP_HINT; };
       const seg = segmented([{ value: 'app', label: 'Programma of bestand', icon: 'apps' }, { value: 'url', label: 'Website', icon: 'globe' }], kind, (v) => { kind = v; iconData = null; sync(); });
       sync();
       return {
@@ -1545,12 +1550,12 @@ function openSettings(startTab) {
       build: () => [
         h('h3', {}, 'Opstarten'),
         checkbox('Starten in volledig scherm (zonder randen en menubalk)', s.startFullscreen, changed((v) => (s.startFullscreen = v))),
-        checkbox('P-ALV Dashboard automatisch starten met Windows', s.autoStart, changed(async (v) => { s.autoStart = v; await window.palv.app.setAutoStart(v); })),
+        checkbox(IS_MAC ? 'P-ALV Dashboard automatisch starten bij het inloggen op deze Mac' : 'P-ALV Dashboard automatisch starten met Windows', s.autoStart, changed(async (v) => { s.autoStart = v; await window.palv.app.setAutoStart(v); })),
         h('hr'),
         h('h3', {}, 'Pagina\'s'),
         field('Automatisch wisselen tussen pagina\'s (seconden)', h('input', { class: 'input', type: 'number', min: 0, step: 5, value: s.rotate, onchange: changed((e) => { s.rotate = Math.max(0, parseInt(e.target.value, 10) || 0); }) }), '0 = niet automatisch wisselen. Handig wanneer het dashboard onbeheerd op de tv draait.'),
         h('hr'),
-        h('p', {}, 'Volledig scherm: F11 of de knop in de menubalk. Verlaat het met Esc of F11. Beweeg in volledig scherm de muis naar de bovenrand om de menubalk tijdelijk te tonen.'),
+        h('p', {}, `Volledig scherm: ${FS_KEY} of de knop in de menubalk. Verlaat het met Esc of ${FS_KEY}. ` + 'Beweeg in volledig scherm de muis naar de bovenrand om de menubalk tijdelijk te tonen.'),
       ],
     },
     klokken: {
@@ -1665,7 +1670,7 @@ function onWinState(ws) {
   document.body.classList.toggle('fullscreen', ws.fullscreen);
   document.body.classList.remove('tb-reveal');
   renderTitlebar();
-  if (entered) toast('Volledig scherm — Esc of F11 om te verlaten, muis naar de bovenrand voor de menubalk');
+  if (entered) toast(`Volledig scherm — Esc of ${FS_KEY} om te verlaten, muis naar de bovenrand voor de menubalk`);
 }
 
 let lastRotate = Date.now();
@@ -1681,6 +1686,7 @@ function everySecond() {
 }
 
 async function boot() {
+  document.body.classList.toggle('mac', IS_MAC);
   state = normalize(await window.palv.config.load());
   applyScale();
   applyTheme(false);
@@ -1707,9 +1713,9 @@ async function boot() {
       if (modalOpen()) $('#modal-root').lastChild.remove();
       else if (editing) setEditing(false);
       else if (winState.fullscreen) window.palv.win.setFullscreen(false);
-    } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
+    } else if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'e') {
       setEditing(!editing);
-    } else if (e.ctrlKey && /^[1-9]$/.test(e.key) && +e.key <= state.pages.length) {
+    } else if ((IS_MAC ? e.metaKey : e.ctrlKey) && /^[1-9]$/.test(e.key) && +e.key <= state.pages.length) {
       setPage(+e.key - 1);
     }
   });

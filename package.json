@@ -1,7 +1,7 @@
 {
   "name": "p-alv-dashboard",
   "productName": "P-ALV Dashboard",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Aanpasbaar operationeel dashboard voor de Police Air Support Unit",
   "author": "P-ALV",
   "license": "UNLICENSED",
@@ -9,7 +9,8 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "dist:mac": "node scripts/build-mac.js"
   },
   "devDependencies": {
     "electron": "^38.0.0",

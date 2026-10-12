@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -7,6 +7,11 @@ const runways = require('./runways');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
 const WEB_PARTITION = 'persist:palv-web';
+const isMac = process.platform === 'darwin';
+
+// The Mac build is not signed with a developer certificate; without this macOS asks for the login
+// keychain password every time the app has been replaced by a newer version.
+if (isMac) app.commandLine.appendSwitch('use-mock-keychain');
 
 let win = null;
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
@@ -49,6 +54,38 @@ function sendWinState(known = {}) {
   });
 }
 
+// macOS keeps its menu bar at the top of the screen and routes Cmd+Q, Cmd+C/V and the like through it.
+function buildMenu() {
+  if (!isMac) return Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: app.name, submenu: [
+      { role: 'about', label: 'Over P-ALV Dashboard' },
+      { type: 'separator' },
+      { role: 'hide', label: 'Verberg P-ALV Dashboard' },
+      { role: 'hideOthers', label: 'Verberg andere' },
+      { role: 'unhide', label: 'Toon alles' },
+      { type: 'separator' },
+      { role: 'quit', label: 'Stop P-ALV Dashboard' },
+    ] },
+    { label: 'Wijzig', submenu: [
+      { role: 'undo', label: 'Herstel' },
+      { role: 'redo', label: 'Opnieuw' },
+      { type: 'separator' },
+      { role: 'cut', label: 'Knip' },
+      { role: 'copy', label: 'Kopieer' },
+      { role: 'paste', label: 'Plak' },
+      { role: 'selectAll', label: 'Selecteer alles' },
+    ] },
+    { label: 'Weergave', submenu: [
+      { label: 'Volledig scherm', accelerator: 'Ctrl+Cmd+F', click: () => win && win.setFullScreen(!win.isFullScreen()) },
+    ] },
+    { label: 'Venster', submenu: [
+      { role: 'minimize', label: 'Minimaliseer' },
+      { role: 'zoom', label: 'Vergroot/verklein' },
+    ] },
+  ]));
+}
+
 function createWindow() {
   const cfg = readConfig();
   // Fullscreen is the standard; configs from the first release are migrated to it by the renderer.
@@ -74,7 +111,7 @@ function createWindow() {
     },
   });
 
-  Menu.setApplicationMenu(null);
+  buildMenu();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.once('ready-to-show', () => {
@@ -104,7 +141,7 @@ function createWindow() {
     if (input.key === 'F11') {
       win.setFullScreen(!win.isFullScreen());
       event.preventDefault();
-    } else if (input.key === 'F12' && input.control && input.shift) {
+    } else if ((input.key === 'F12' && input.control && input.shift) || (isMac && input.meta && input.alt && input.code === 'KeyI')) {
       win.webContents.openDevTools({ mode: 'detach' });
     }
   });
@@ -231,15 +268,49 @@ ipcMain.handle('app:version', () => app.getVersion());
 /* ---------- app tiles ---------- */
 async function fileIcon(file) {
   try {
-    const img = await app.getFileIcon(file, { size: 'large' });
+    if (isMac) {
+      // Quick Look hands out the full-size icon of an app bundle; getFileIcon stops at 32 pixels on macOS.
+      try {
+        const thumb = await nativeImage.createThumbnailFromPath(file, { width: 128, height: 128 });
+        if (!thumb.isEmpty()) return thumb.toDataURL();
+      } catch { /* fall through to the small icon */ }
+    }
+    const img = await app.getFileIcon(file, { size: isMac ? 'normal' : 'large' });
     return img.isEmpty() ? null : img.toDataURL();
   } catch {
     return null;
   }
 }
 
+// Bare program names: on Windows a command in the system folders, on macOS an app by its name.
+const macAppDirs = () => ['/Applications', '/Applications/Utilities', '/System/Applications', '/System/Applications/Utilities', path.join(app.getPath('home'), 'Applications')];
+const expandHome = (file) => (isMac && /^~(?=\/|$)/.test(file) ? path.join(app.getPath('home'), file.slice(1)) : file);
+function resolveBare(name) {
+  if (isMac) {
+    const bundle = /\.app$/i.test(name) ? name : name + '.app';
+    return macAppDirs().map((dir) => path.join(dir, bundle)).find((p) => fs.existsSync(p)) || name;
+  }
+  const winDir = process.env.WINDIR || 'C:\\Windows';
+  return [path.join(winDir, 'System32', name), path.join(winDir, name)].find((p) => fs.existsSync(p)) || name;
+}
+
+// Runs a shell command and reports how it ended; `open` returns as soon as the app has been handed over.
+function runShell(cmd) {
+  return new Promise((resolve) => {
+    let err = '';
+    const child = spawn(cmd, { shell: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', (e) => resolve({ ok: false, error: String(e.message || e) }));
+    child.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: err.trim() || `Foutcode ${code}` }));
+  });
+}
+
 ipcMain.handle('tile:pickFile', async () => {
-  const res = await dialog.showOpenDialog(win, {
+  const res = await dialog.showOpenDialog(win, isMac ? {
+    title: 'Kies een programma of bestand',
+    defaultPath: '/Applications',
+    properties: ['openFile'],
+  } : {
     title: 'Kies een programma of bestand',
     properties: ['openFile'],
     filters: [
@@ -272,11 +343,8 @@ ipcMain.handle('tile:icon', async (_e, tile) => {
         clearTimeout(timer);
       }
     }
-    let file = tile.target.trim();
-    if (!/[\\/]/.test(file)) {
-      const winDir = process.env.WINDIR || 'C:\\Windows';
-      file = [path.join(winDir, 'System32', file), path.join(winDir, file)].find((p) => fs.existsSync(p)) || file;
-    }
+    let file = expandHome(tile.target.trim());
+    if (!/[\\/]/.test(file)) file = resolveBare(file);
     return fs.existsSync(file) ? await fileIcon(file) : null;
   } catch {
     return null;
@@ -296,7 +364,25 @@ ipcMain.handle('tile:launch', async (_e, tile) => {
     await shell.openExternal(url.toString());
     return { ok: true };
   }
-  const target = tile.target.trim();
+  const target = expandHome(tile.target.trim());
+  if (isMac) {
+    const args = (tile.args || '').trim();
+    const quoted = `"${target.replace(/(["\\$`])/g, '\\$1')}"`;
+    // Apps (by name or as a bundle) go through `open`, which also passes the parameters on.
+    if (/\.app\/?$/i.test(target) || !target.includes('/')) return runShell(`open -a ${quoted}` + (args ? ` --args ${args}` : ''));
+    if (!args) {
+      const err = await shell.openPath(target);
+      return err ? { ok: false, error: err } : { ok: true };
+    }
+    try {
+      const child = spawn(`${quoted} ${args}`, { shell: true, detached: true, stdio: 'ignore' });
+      child.on('error', () => {});
+      child.unref();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err.message || err) };
+    }
+  }
   if (tile.args && tile.args.trim()) {
     try {
       const child = spawn(`"${target}" ${tile.args}`, { shell: true, detached: true, stdio: 'ignore', windowsHide: false });
