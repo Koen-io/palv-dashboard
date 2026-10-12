@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="nl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; frame-src *; child-src *; object-src *; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>P-ALV Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div id="titlebar">
+      <div class="tb-brand">
+        <img src="../../assets/logo.png" alt="">
+        <span>P-ALV Dashboard</span>
+      </div>
+      <nav id="page-tabs" aria-label="Pagina's"></nav>
+      <div class="tb-spacer"></div>
+      <div class="tb-actions" id="tb-actions"></div>
+      <div class="tb-window" id="tb-window"></div>
+    </div>
+
+    <header id="header">
+      <div class="hd-brand">
+        <img class="hd-logo" src="../../assets/logo.png" alt="Police Air Support Unit">
+        <div class="hd-title">
+          <div class="hd-name">P-ALV <span>DASHBOARD</span></div>
+          <div class="hd-sub">POLICE AIR SUPPORT UNIT</div>
+          <div class="hd-motto">OPERAM SUPER OMNIA</div>
+        </div>
+      </div>
+      <div class="hd-time">
+        <div class="hd-clocks" id="clocks"></div>
+        <div class="hd-udp" id="udp" aria-label="Uniforme daglichtperiode"></div>
+      </div>
+      <section class="hd-eham" id="eham" aria-label="Schiphol luchtvaartweer en baangebruik"></section>
+    </header>
+
+    <main id="canvas"></main>
+
+    <div id="edit-bar" hidden></div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script src="suntable.js"></script>
+  <script src="wx.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

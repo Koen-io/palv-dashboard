@@ -1,0 +1,41 @@
+{
+  "name": "p-alv-dashboard",
+  "productName": "P-ALV Dashboard",
+  "version": "1.8.1",
+  "description": "Aanpasbaar operationeel dashboard voor de Police Air Support Unit",
+  "author": "P-ALV",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "nl.palv.dashboard",
+    "productName": "P-ALV Dashboard",
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "P-ALV Dashboard",
+      "artifactName": "P-ALV-Dashboard-Setup-${version}.${ext}"
+    }
+  }
+}

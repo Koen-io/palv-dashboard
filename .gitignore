@@ -1,0 +1,8 @@
+# Dependencies and build output: restored with `npm install` and `npm run dist`
+node_modules/
+dist/
+
+# Local leftovers
+*.log
+Thumbs.db
+.DS_Store
