@@ -236,6 +236,10 @@ ipcMain.handle('config:save', (_e, cfg) => {
   writeConfig(cfg);
   return true;
 });
+// Last write on the way out: the renderer's debounced save would not get there in time.
+ipcMain.on('config:saveSync', (e, cfg) => {
+  try { writeConfig(cfg); e.returnValue = true; } catch { e.returnValue = false; }
+});
 ipcMain.handle('config:export', async (_e, cfg) => {
   const res = await dialog.showSaveDialog(win, {
     title: 'Dashboard-indeling exporteren',

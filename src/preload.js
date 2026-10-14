@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('palv', {
   config: {
     load: () => ipcRenderer.invoke('config:load'),
     save: (cfg) => ipcRenderer.invoke('config:save', cfg),
+    saveSync: (cfg) => ipcRenderer.sendSync('config:saveSync', cfg),
     exportFile: (cfg) => ipcRenderer.invoke('config:export', cfg),
     importFile: () => ipcRenderer.invoke('config:import'),
   },

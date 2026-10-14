@@ -144,7 +144,14 @@ const instances = new Map(); // widget id -> { el, destroy }
 let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.palv.config.save(state), 350);
+  saveTimer = setTimeout(() => { saveTimer = null; window.palv.config.save(state); }, 350);
+}
+// A whole new configuration (import, reset): written as it is, and the dashboard starts over on it.
+async function replaceConfig(cfg) {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  await window.palv.config.save(cfg);
+  location.reload();
 }
 
 function normalize(loaded) {
@@ -382,14 +389,14 @@ function renderTabs() {
     nav.append(
       h(
         'button',
-        { class: 'tab' + (active ? ' active' : ''), title: `${MOD}${i + 1}`, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
+        { class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), title: i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
         p.name,
         h('span', { class: 'tab-tool', title: 'Naam wijzigen', onclick: (e) => { e.stopPropagation(); renamePage(i); } }, icon('edit')),
-        state.pages.length > 1 ? h('span', { class: 'tab-tool', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null
+        state.pages.length > 1 ? h('span', { class: 'tab-tool danger', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null
       )
     );
   });
-  nav.append(h('button', { class: 'tab tab-add', title: 'Pagina toevoegen', onclick: addPage }, icon('plus')));
+  nav.append(h('button', { class: 'tab tab-add', title: 'Pagina toevoegen', 'aria-label': 'Pagina toevoegen', onclick: addPage }, icon('plus')));
 }
 
 function pageNameDialog(title, value, onOk) {
@@ -1001,14 +1008,34 @@ const WIDGETS = {
       // Flown routes of the police & emergency aircraft. The site only draws the full route of an aircraft
       // that is selected (its "all tracks" option merely starts a trail at page load), so every filtered
       // aircraft that shows up gets selected, with the details panel that selecting opens kept out of sight.
+      // The site never clears a selected aircraft away, so one that has gone quiet (landed, out of range) is
+      // let go again: its route goes, and the aircraft follows once the site's own timeout has passed. Of the
+      // route only the current flight is drawn; the site keeps up to a day of earlier flights with it.
+      // And the site refreshes up to four times slower once nobody has touched the map for a few minutes,
+      // which on an unattended screen leaves it behind; the dashboard counts as someone watching.
+      const ROUTE_QUIET_S = 75, REAP_S = 120;
       const routesOn = () => w.cfg.mode === 'police' && !!w.cfg.trails;
+      let infoCss = false;
+      view.wv.addEventListener('did-navigate', () => { infoCss = false; });
       const drawRoutes = () => {
-        if (!routesOn() || !view.wv.isConnected) return;
-        view.wv.insertCSS('#selected_infoblock{display:none!important}').catch(() => {});
+        if (!view.wv.isConnected) return;
+        const routes = routesOn();
+        if (routes && !infoCss) { infoCss = true; view.wv.insertCSS('#selected_infoblock{display:none!important}').catch(() => { infoCss = false; }); }
         view.wv.executeJavaScript(`(() => { try {
+          if (typeof active === 'function') active();
+          if (${w.cfg.mode === 'police'} && typeof reapTimeout !== 'undefined') reapTimeout = ${REAP_S};
+          if (!${routes}) return;
           const planes = typeof g !== 'undefined' && g.planes ? g.planes : Planes;
+          if (typeof lastLeg !== 'undefined' && !lastLeg) { try { toggles.lastLeg.toggle(); } catch (e) { lastLeg = true; } }
           if (typeof multiSelect !== 'undefined' && !multiSelect) toggleMultiSelect(true);
-          for (const hex of ${JSON.stringify(hexList('police', 'hems', 'coastguard'))}) { const p = planes[hex]; if (p && !p.selected) selectPlaneByHex(hex, { noDeselect: true, follow: false }); }
+          const now = Date.now() / 1000;
+          for (const hex of ${JSON.stringify(hexList('police', 'hems', 'coastguard'))}) {
+            const p = planes[hex];
+            if (!p) continue;
+            const quiet = now - p.last_message_time;
+            if (quiet > ${ROUTE_QUIET_S}) { if (p.selected) deselect(p); }
+            else if (!p.selected) selectPlaneByHex(hex, { noDeselect: true, follow: false });
+          }
         } catch (e) {} })()`).catch(() => {});
       };
       // Labels with the aircraft: speed and altitude above the callsign. The site keeps its own setting
@@ -1618,10 +1645,9 @@ function openSettings(startTab) {
             const res = await window.palv.config.importFile();
             if (!res) return;
             if (res.error || !Array.isArray(res.pages)) return toast(res.error || 'Dit is geen geldige dashboard-indeling.', true);
-            await window.palv.config.save(res);
-            location.reload();
+            await replaceConfig(res);
           } }, 'Importeren…'),
-          h('button', { class: 'btn danger', onclick: () => confirmDialog('Standaardindeling herstellen', 'Alle pagina\'s, widgets en instellingen worden teruggezet naar de standaard. Dit kan niet ongedaan worden gemaakt.', 'Herstellen', async () => { await window.palv.config.save(defaultState()); location.reload(); }) }, 'Standaardindeling herstellen')),
+          h('button', { class: 'btn danger', onclick: () => confirmDialog('Standaardindeling herstellen', 'Alle pagina\'s, widgets en instellingen worden teruggezet naar de standaard. Dit kan niet ongedaan worden gemaakt.', 'Herstellen', () => replaceConfig(defaultState())) }, 'Standaardindeling herstellen')),
       ],
     },
     over: {
@@ -1673,12 +1699,13 @@ function onWinState(ws) {
   if (entered) toast(`Volledig scherm — Esc of ${FS_KEY} om te verlaten, muis naar de bovenrand voor de menubalk`);
 }
 
-let lastRotate = Date.now();
+let lastRotate = Date.now(), lastTheme = 0, lastUdp = 0;
 function everySecond() {
   tickClocks();
-  const sec = new Date().getSeconds();
-  if (sec % 20 === 0) applyTheme(true);
-  if (sec % 10 === 0) renderUdp();
+  // By elapsed time rather than on exact seconds: a timer that runs late would otherwise skip a turn.
+  const now = Date.now();
+  if (now - lastTheme >= 20000) { lastTheme = now; applyTheme(true); }
+  if (now - lastUdp >= 10000) { lastUdp = now; renderUdp(); }
   const r = state.settings.rotate;
   if (r > 0 && state.pages.length > 1 && !editing && !modalOpen()) {
     if (Date.now() - lastRotate >= r * 1000) { lastRotate = Date.now(); setPage((state.activePage + 1) % state.pages.length); }
@@ -1707,6 +1734,8 @@ async function boot() {
   setInterval(everySecond, 1000);
 
   window.addEventListener('resize', applyScale);
+  // A change made just before closing is still waiting for its save.
+  window.addEventListener('beforeunload', () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; window.palv.config.saveSync(state); } });
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
