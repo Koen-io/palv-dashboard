@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const runways = require('./runways');
+const fleet = require('./fleet');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
@@ -409,11 +410,11 @@ ipcMain.handle('tile:launch', async (_e, tile) => {
 });
 
 /* ---------- aviation data ---------- */
-async function fetchText(url, timeoutMs = 20000, ua = UA) {
+async function fetchText(url, timeoutMs = 20000, ua = UA, extra = {}) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': ua, 'Cache-Control': 'no-cache' }, signal: ctl.signal });
+    const res = await fetch(url, { headers: { 'User-Agent': ua, 'Cache-Control': 'no-cache', ...extra }, signal: ctl.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
   } finally {
@@ -471,6 +472,16 @@ ipcMain.handle('data:wxmap', async () => {
 });
 
 // Runways actually in use, observed from live ADS-B traffic around the field.
+// Own aircraft in the air; the renderer hands over the Mode-S codes from the settings with every call.
+ipcMain.handle('data:fleet', (_e, groups) => {
+  fleet.setHexes(groups);
+  fleet.start(
+    async (url) => JSON.parse(await fetchText(url, 8000, APP_UA)),
+    async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' }))
+  );
+  return fleet.snapshot();
+});
+
 ipcMain.handle('data:runways', () => {
   runways.start(async (url) => JSON.parse(await fetchText(url, 8000, APP_UA)));
   return runways.snapshot();

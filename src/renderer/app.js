@@ -87,7 +87,7 @@ const DEFAULT_HEX = {
 function defaultState() {
   const tile = (x, y, title, kind, target) => ({ id: uid(), type: 'tile', x, y, w: 12, h: 9, z: 1, title, cfg: { kind, target, args: '', icon: null } });
   return {
-    version: 4,
+    version: 5,
     settings: {
       theme: 'auto',
       autoMode: 'sun',
@@ -96,6 +96,7 @@ function defaultState() {
       uiScale: 1,
       showSeconds: true,
       startFullscreen: true,
+      nightlyReload: true,
       autoStart: false,
       snap: true,
       rotate: 0,
@@ -117,7 +118,8 @@ function defaultState() {
           { id: uid(), type: 'windy', x: 36, y: 0, w: 36, h: 54, z: 2, title: 'Weerradar', cfg: { ...WIDGETS.windy.defaults } },
           tile(72, 0, 'LVNL Baangebruik', 'url', 'https://www.lvnl.nl/omgeving/actueel-baangebruik-schiphol'),
           tile(84, 0, 'KNMI Luchtvaart', 'url', 'https://www.knmi.nl/nederland-nu/luchtvaart'),
-          { id: uid(), type: 'runway', x: 72, y: 9, w: 24, h: 45, z: 3, title: WIDGETS.runway.name, cfg: {} },
+          { id: uid(), type: 'runway', x: 72, y: 9, w: 24, h: 27, z: 3, title: WIDGETS.runway.name, cfg: {} },
+          { id: uid(), type: 'fleet', x: 72, y: 36, w: 24, h: 18, z: 3, title: WIDGETS.fleet.name, cfg: {} },
         ],
       },
       {
@@ -161,7 +163,7 @@ function normalize(loaded) {
   const fromV1 = from < 2;
   loaded.settings = { ...def.settings, ...(loaded.settings || {}) };
   if (fromV1) loaded.settings.startFullscreen = true;
-  loaded.version = 4;
+  loaded.version = 5;
   loaded.settings.hex = { ...def.settings.hex, ...(loaded.settings.hex || {}) };
   if (!Array.isArray(loaded.settings.clocks) || loaded.settings.clocks.length !== 2) loaded.settings.clocks = def.settings.clocks;
   for (const p of loaded.pages) {
@@ -180,6 +182,7 @@ function normalize(loaded) {
   }
   if (from < 3) migrateV3(loaded);
   if (from < 4) migrateV4(loaded);
+  if (from < 5) migrateV5(loaded);
   loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
   return loaded;
 }
@@ -234,6 +237,20 @@ function migrateV4(st) {
     if (w.type === 'adsb' && w.title === 'ADS-B Exchange') w.title = WIDGETS.adsb.name;
     if (w.type === 'metar' && w.cfg.icao === 'EHGG' && w.title === 'Groningen Eelde') { w.title = 'Eindhoven Airport'; w.cfg.icao = 'EHEH'; }
   }
+}
+
+// 1.11: the own aircraft in the air, in the lower part of the runway column.
+function migrateV5(st) {
+  if (st.pages.some((p) => p.widgets.some((w) => w.type === 'fleet'))) return;
+  const page = st.pages.find((p) => p.widgets.some((w) => w.type === 'runway')) || st.pages[0];
+  const rwy = page.widgets.find((w) => w.type === 'runway');
+  const H = 18;
+  let spot;
+  if (rwy && rwy.h >= 34) {
+    rwy.h -= H;
+    spot = { x: rwy.x, y: rwy.y + rwy.h, w: rwy.w, h: H };
+  } else spot = { ...findFreeSpot(page, 24, H), w: 24, h: H };
+  page.widgets.push({ id: uid(), type: 'fleet', ...spot, z: Math.max(0, ...page.widgets.map((o) => o.z || 1)) + 1, title: WIDGETS.fleet.name, cfg: {} });
 }
 
 /* ---------- toasts & modals ---------- */
@@ -691,17 +708,112 @@ async function refreshMetar() {
   const res = await window.palv.data.metar('EHAM').catch(() => ({ ok: false }));
   if (res.ok) { eham.metar = res; eham.metarFail = false; } else eham.metarFail = true;
   renderEham();
+  const m = eham.metar, obsAge = m && m.obsTime ? Date.now() - m.obsTime : Infinity;
+  report('metar', 'METAR Schiphol', !eham.metarFail && obsAge < 75 * 60000,
+    eham.metarFail ? (m ? `geen verbinding, laatste ${zulu(m.obsTime)}` : 'geen verbinding') : `waarneming ${zulu(m.obsTime)}`, 10 * 60000);
 }
 async function refreshRunways() {
   const res = await window.palv.data.runways().catch(() => null);
   if (res) eham.live = res;
   else if (eham.live) eham.live.ok = false;
   for (const paint of runwayViews) paint();
+  const live = eham.live;
+  if (!runwayViews.size) report('runways');
+  else report('runways', 'Baangebruik', !!(live && live.ok), live && live.lastOk ? `laatst ${zulu(live.lastOk)}` : 'geen verbinding', 3 * 60000);
+}
+
+/* ============================================================
+   Bronbewaking: a clear warning when a source has stopped delivering
+   ============================================================ */
+// Every source reports whether its data is current. One that stays behind for longer than its own grace
+// shows in a red warning at the right of the tab bar, with when it last delivered.
+const health = new Map(); // key -> { label, detail, since, grace }
+const BOOT_GRACE = 90000;
+const bootAt = Date.now();
+// report(key) without a label: the source no longer exists (widget removed, page out of view).
+function report(key, label, ok, detail, grace = 120000) {
+  if (!label || ok) { if (health.delete(key)) paintHealth(); return; }
+  const cur = health.get(key);
+  health.set(key, { label, detail, grace, since: cur ? cur.since : Date.now() });
+  paintHealth();
+}
+function paintHealth() {
+  const el = $('#health');
+  if (!el) return;
+  const now = Date.now();
+  const due = now - bootAt < BOOT_GRACE ? [] : [...health.values()].filter((e) => now - e.since >= e.grace);
+  const sig = due.map((e) => e.label + e.detail).join('|');
+  if (sig === el.dataset.sig) return;
+  el.dataset.sig = sig;
+  el.hidden = !due.length;
+  if (!due.length) return el.replaceChildren();
+  el.title = 'Deze bronnen leveren al een tijd geen verse gegevens. Wat ze tonen kan verouderd zijn; ze worden automatisch opnieuw geprobeerd.\n\n' + due.map((e) => `${e.label}: ${e.detail}`).join('\n');
+  el.replaceChildren(
+    h('span', { class: 'health-icon', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20Z"/><path d="M12 10v4.5M12 17.5v.3"/></svg>' }),
+    h('b', {}, 'GEEN VERSE GEGEVENS'),
+    ...due.map((e) => h('span', { class: 'health-item' }, e.label, h('small', {}, e.detail)))
+  );
+}
+
+/* ---------- own aircraft in the air ---------- */
+const FLEET_GROUPS = { police: 'Politie', hems: 'Trauma', coastguard: 'Kustwacht' };
+const fleetFeed = { data: null, views: new Set(), timer: null };
+async function refreshFleet() {
+  const groups = Object.fromEntries(Object.keys(FLEET_GROUPS).map((k) => [k, hexList(k)]));
+  const res = await window.palv.data.fleet(groups).catch(() => null);
+  fleetFeed.data = res || (fleetFeed.data && { ...fleetFeed.data, ok: false });
+  for (const paint of fleetFeed.views) paint();
+  const d = fleetFeed.data;
+  report('fleet', 'In de lucht', !!(d && d.ok), d && d.lastOk ? `laatst ${zulu(d.lastOk)}` : 'geen verbinding', 3 * 60000);
+}
+function watchFleet(paint) {
+  fleetFeed.views.add(paint);
+  if (!fleetFeed.timer) { fleetFeed.timer = setInterval(refreshFleet, 10000); refreshFleet(); }
+  return () => {
+    fleetFeed.views.delete(paint);
+    if (!fleetFeed.views.size) { clearInterval(fleetFeed.timer); fleetFeed.timer = null; report('fleet'); }
+  };
+}
+
+const flightTime = (ms) => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 60)}:${pad2(m % 60)}`; };
+
+function renderFleet(root) {
+  const d = fleetFeed.data, now = Date.now();
+  const list = d ? d.aircraft : [];
+  const rows = list.map((a) => {
+    const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
+    const climb = a.vs == null || Math.abs(a.vs) < 300 ? '' : a.vs > 0 ? ' ▲' : ' ▼';
+    const time = a.onGround
+      ? h('div', { class: 'fl-time' }, h('span', { class: 'fl-ground' }, 'GROND'))
+      : h('div', { class: 'fl-time', title: a.approx ? (a.atLeast ? 'Was al in de lucht toen het dashboard startte; vliegt minstens zo lang.' : 'Starttijd niet uit de route te halen; geteld vanaf de eerste waarneming.') : `Gestart om ${zulu(a.takeoff)}` },
+        h('b', {}, (a.atLeast ? '≥ ' : a.approx ? '≈ ' : '') + flightTime(now - a.takeoff)),
+        h('small', {}, a.atLeast ? 'vliegtijd' : `start ${zulu(a.takeoff)}`));
+    return h('div', { class: 'fl-row ' + a.group + (a.onGround ? ' ground' : '') + (alert ? ' alert' : ''), title: `${a.reg || a.hex.toUpperCase()}${a.type ? ' · ' + a.type : ''} · ${FLEET_GROUPS[a.group] || ''}${a.squawk ? ' · squawk ' + a.squawk : ''} · ${a.ageS} s geleden` },
+      h('i', { class: 'fl-bar' }),
+      h('div', { class: 'fl-id' }, h('b', {}, a.flight || a.reg || a.hex.toUpperCase()), h('small', {}, [a.flight && a.reg ? a.reg : null, a.type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · '))),
+      alert ? h('span', { class: 'fl-sq' }, a.emergency ? a.emergency.toUpperCase() : a.squawk) : null,
+      h('div', { class: 'fl-num' }, h('b', {}, a.alt == null ? '—' : a.alt.toLocaleString('nl-NL')), h('small', {}, 'ft' + climb)),
+      h('div', { class: 'fl-num fl-gs' }, h('b', {}, a.gs == null ? '—' : a.gs), h('small', {}, 'kt')),
+      time);
+  });
+  const up = list.filter((a) => !a.onGround).length;
+  let dot = '', src;
+  if (!d) { dot = 'warn'; src = 'Laden…'; }
+  else if (!d.ok) { dot = 'bad'; src = d.lastOk ? `Geen verbinding · laatst ${zulu(d.lastOk)}` : 'Geen verbinding met live-bron'; }
+  else src = `Live · ${zulu(d.lastOk)} · ${d.tracked} toestellen gevolgd`;
+  root.replaceChildren(
+    h('div', { class: 'fl-list' }, rows.length ? rows : h('div', { class: 'fl-empty' }, icon('shield'), h('span', {}, d ? 'Geen eigen toestellen in de lucht' : 'Gegevens worden opgehaald…'))),
+    h('div', { class: 'fl-src', title: 'Politie-, trauma- en kustwachttoestellen uit de lijsten onder Instellingen › ADS-B filter. Posities van adsb.lol (reserve adsb.fi), elke 10 seconden. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' },
+      h('span', { class: 'dot ' + dot }), src, up ? h('span', { class: 'fl-count' }, `${up} in de lucht`) : null)
+  );
 }
 
 /* ============================================================
    Widgets
    ============================================================ */
+// Whether a widget can be seen right now: on the active page, in a window that is not minimised.
+const onScreen = (el) => el.isConnected && !!el.closest('.page.active') && document.visibilityState === 'visible';
+
 function makeWebview(body, getUrl) {
   const wv = document.createElement('webview');
   wv.setAttribute('partition', WEB_PARTITION);
@@ -711,9 +823,10 @@ function makeWebview(body, getUrl) {
   let retry = null;
   let ready = false;
   wv.addEventListener('dom-ready', () => { ready = true; });
-  wv.addEventListener('did-finish-load', () => stateEl.remove());
+  wv.addEventListener('did-finish-load', () => { stateEl.remove(); api.failedSince = 0; });
   wv.addEventListener('did-fail-load', (e) => {
     if (!e.isMainFrame || e.errorCode === -3) return;
+    api.failedSince = api.failedSince || Date.now();
     stateEl.replaceChildren(h('div', {}, h('strong', {}, 'Kan de pagina niet laden'), 'Controleer de internetverbinding. Er wordt automatisch opnieuw geprobeerd.'));
     body.append(stateEl);
     clearTimeout(retry);
@@ -721,6 +834,7 @@ function makeWebview(body, getUrl) {
   });
   const api = {
     wv,
+    failedSince: 0, // since when the page has not loaded, 0 while it is there
     load() {
       clearTimeout(retry);
       const url = getUrl();
@@ -849,6 +963,10 @@ async function refreshWx() {
   if (res.ok) { wxFeed.stations = WX.stations(res, Date.now()); wxFeed.lastOk = res.fetchedAt; wxFeed.fails = 0; }
   else wxFeed.fails += 1;
   for (const fn of wxFeed.subs) fn();
+  const nl = wxFeed.stations.filter((s) => s.icao.startsWith('EH'));
+  const newest = nl.length ? Math.max(...nl.map((s) => s.obsTime)) : 0;
+  const fresh = !!wxFeed.lastOk && Date.now() - wxFeed.lastOk < 3 * 60000;
+  if (wxFeed.subs.size) report('wx', 'Weerstations', fresh && Date.now() - newest < 90 * 60000, !fresh ? (wxFeed.lastOk ? `laatst opgehaald ${zulu(wxFeed.lastOk)}` : 'geen verbinding') : `nieuwste METAR ${zulu(newest)}`, 7 * 60000);
 }
 // Margins for "marginal" from the settings into the assessment, and every radar repainted with them.
 function applyWxMargins() {
@@ -859,7 +977,7 @@ function applyWxMargins() {
 function watchWx(fn) {
   wxFeed.subs.add(fn);
   if (!wxFeed.timer) { wxFeed.timer = setInterval(refreshWx, 60000); refreshWx(); }
-  return () => { wxFeed.subs.delete(fn); if (!wxFeed.subs.size) { clearInterval(wxFeed.timer); wxFeed.timer = null; } };
+  return () => { wxFeed.subs.delete(fn); if (!wxFeed.subs.size) { clearInterval(wxFeed.timer); wxFeed.timer = null; report('wx'); } };
 }
 
 const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1024,7 +1142,9 @@ const WIDGETS = {
         view.wv.executeJavaScript(`(() => { try {
           if (typeof active === 'function') active();
           if (${w.cfg.mode === 'police'} && typeof reapTimeout !== 'undefined') reapTimeout = ${REAP_S};
-          if (!${routes}) return;
+          // How old the newest traffic data is, for the warning in the dashboard's tab bar.
+          const info = { age: typeof now === 'number' && now > 0 ? Date.now() / 1000 - now : null, hidden: typeof tabHidden !== 'undefined' && !!tabHidden };
+          if (!${routes}) return info;
           const planes = typeof g !== 'undefined' && g.planes ? g.planes : Planes;
           if (typeof lastLeg !== 'undefined' && !lastLeg) { try { toggles.lastLeg.toggle(); } catch (e) { lastLeg = true; } }
           if (typeof multiSelect !== 'undefined' && !multiSelect) toggleMultiSelect(true);
@@ -1036,7 +1156,16 @@ const WIDGETS = {
             if (quiet > ${ROUTE_QUIET_S}) { if (p.selected) deselect(p); }
             else if (!p.selected) selectPlaneByHex(hex, { noDeselect: true, follow: false });
           }
-        } catch (e) {} })()`).catch(() => {});
+          return info;
+        } catch (e) { return null; } })()`).then(checkHealth, () => checkHealth(null));
+      };
+      // Warning in the tab bar when the map has stopped receiving traffic while it is on screen.
+      const hkey = 'adsb:' + w.id;
+      const checkHealth = (info) => {
+        if (!onScreen(body)) return report(hkey);
+        if (view.failedSince) return report(hkey, 'ADS-B', false, `pagina laadt niet sinds ${zulu(view.failedSince)}`, 3 * 60000);
+        if (!info || info.hidden || info.age == null) return; // not loaded yet: judged at the next round
+        report(hkey, 'ADS-B', info.age < 120, `geen verkeersdata sinds ${zulu(Date.now() - info.age * 1000)}`, 60000);
       };
       // Labels with the aircraft: speed and altitude above the callsign. The site keeps its own setting
       // for this, so the switch here is laid over it again and again.
@@ -1072,7 +1201,7 @@ const WIDGETS = {
       );
       scaleWebview(view.wv, adsbScale(body));
       keep.attach(view);
-      return { destroy() { keep.stop(); clearInterval(routeTimer); view.destroy(); } };
+      return { destroy() { keep.stop(); clearInterval(routeTimer); view.destroy(); report(hkey); } };
     },
     form(cfg) {
       const lat = textInput(cfg.lat), lon = textInput(cfg.lon), zoom = textInput(cfg.zoom), def = WIDGETS.adsb.defaults;
@@ -1170,12 +1299,20 @@ const WIDGETS = {
       followUdp();
       const unwatch = watchWx(push);
       // Keeps trying until the map exists, then keeps ages, radar time and the status current.
-      const tick = setInterval(() => (followUdp() || !mapInfo || Date.now() - lastPush > 15000 ? push() : paintStatus()), 2000);
+      // Radar picture for the warning in the tab bar, judged only while the widget is in view.
+      const hkey = 'radar:' + w.id;
+      const checkHealth = () => {
+        const radar = mapInfo && mapInfo.overlay === 'radar' ? mapInfo.radar : null;
+        if (!onScreen(body)) report(hkey);
+        else if (view.failedSince) report(hkey, 'Weerradar', false, `pagina laadt niet sinds ${zulu(view.failedSince)}`, 3 * 60000);
+        else report(hkey, 'Weerradar', !radar || Date.now() - radar < 30 * 60000, radar ? `radarbeeld ${zulu(radar)}` : '', 2 * 60000);
+      };
+      const tick = setInterval(() => { (followUdp() || !mapInfo || Date.now() - lastPush > 15000 ? push() : paintStatus()); checkHealth(); }, 2000);
       paintStatus();
       tools.append(prof, recentreTool(keep), reloadTool(view));
       fit(keep.current());
       keep.attach(view);
-      return { destroy() { keep.stop(); unwatch(); clearInterval(tick); clearInterval(kick); clearInterval(watchdog); view.destroy(); } };
+      return { destroy() { keep.stop(); unwatch(); clearInterval(tick); clearInterval(kick); clearInterval(watchdog); view.destroy(); report(hkey); } };
     },
     form(cfg) {
       const overlay = h('select', { class: 'input' }, [['radar', 'Weerradar'], ['rain', 'Regen & onweer'], ['wind', 'Wind'], ['gust', 'Windstoten'], ['clouds', 'Bewolking'], ['lclouds', 'Lage bewolking'], ['cbase', 'Wolkenbasis'], ['visibility', 'Zicht'], ['temp', 'Temperatuur'], ['satellite', 'Satelliet'], ['thunder', 'Onweer']].map(([v, l]) => h('option', { value: v }, l)));
@@ -1305,6 +1442,22 @@ const WIDGETS = {
       runwayViews.add(paint);
       paint();
       return { destroy: () => runwayViews.delete(paint) };
+    },
+  },
+
+  fleet: {
+    name: 'In de lucht',
+    desc: 'Politie-, trauma- en kustwachttoestellen die nu vliegen, met hoogte, snelheid en vliegtijd.',
+    icon: 'shield',
+    size: [24, 18],
+    mount(w, body) {
+      const root = h('div', { class: 'fl-widget' });
+      body.append(root);
+      const paint = () => renderFleet(root);
+      paint();
+      const unwatch = watchFleet(paint);
+      const tick = setInterval(paint, 20000); // flight times run on between updates
+      return { destroy() { unwatch(); clearInterval(tick); } };
     },
   },
 
@@ -1577,6 +1730,7 @@ function openSettings(startTab) {
       build: () => [
         h('h3', {}, 'Opstarten'),
         checkbox('Starten in volledig scherm (zonder randen en menubalk)', s.startFullscreen, changed((v) => (s.startFullscreen = v))),
+        checkbox('Elke nacht om 04:00 vernieuwen (houdt het dashboard fris als het dagenlang aan staat)', s.nightlyReload, changed((v) => (s.nightlyReload = v))),
         checkbox(IS_MAC ? 'P-ALV Dashboard automatisch starten bij het inloggen op deze Mac' : 'P-ALV Dashboard automatisch starten met Windows', s.autoStart, changed(async (v) => { s.autoStart = v; await window.palv.app.setAutoStart(v); })),
         h('hr'),
         h('h3', {}, 'Pagina\'s'),
@@ -1664,6 +1818,8 @@ function openSettings(startTab) {
           h('p', {}, 'Meetstations op de weerradar: getoetst aan de weerminima uit de tabel van het BOM, per gekozen profiel. Groen: binnen limieten. Oranje: binnen limieten maar marginaal (minder marge dan ingesteld onder Weerradar, standaard 200 ft of 1000 m) of volgens de trend binnen 2 uur eronder. Rood: buiten limieten. Grijs: zicht of bewolking niet gemeten, of waarneming ouder dan 90 minuten. Verticaal zicht (VV) telt niet als wolkenbasis. Pijl: trend uit de METAR, anders uit de TAF, anders het waargenomen verloop. Plus: buiten Aided Nacht maar binnen Advanced Operations, alleen AW139.'),
           h('p', {}, 'UDP: 15 minuten vóór zonsopkomst tot 15 minuten na zonsondergang op 52°N 005°E, volgens de KNMI-tabellen voor 2026 en 2027. Voor latere jaren wordt gerekend (hooguit één minuut verschil met de tabel) en staat er "BEREKEND" in de balk, tot de tabel van dat jaar is toegevoegd. Het profiel op de weerradar schakelt op deze tijden automatisch tussen het laatst gebruikte dag- en nachtprofiel.'),
           h('p', {}, 'Actueel baangebruik: live waargenomen uit het vliegverkeer rond Schiphol (ADS-B-gegevens van adsb.lol, reserve adsb.fi), elke 12 seconden bijgewerkt. Te zien in de widget "Baangebruik Schiphol". Een baan wordt getoond wanneer er in het laatste kwartier toestellen op eindnadering of net na de start zijn gezien. Groene stip: actueel. Oranje: nog geen of geen verkeer. Rood: bron niet bereikbaar.'),
+          h('p', {}, 'In de lucht: de toestellen uit de lijsten onder ADS-B filter, met posities van adsb.lol (reserve adsb.fi), elke 10 seconden bijgewerkt. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
+          h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
           h('p', {}, 'Vliegverkeer: ADS-B Exchange. Weerradar: Windy.com.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),
         ];
@@ -1699,6 +1855,16 @@ function onWinState(ws) {
   if (entered) toast(`Volledig scherm — Esc of ${FS_KEY} om te verlaten, muis naar de bovenrand voor de menubalk`);
 }
 
+// Embedded sites that stay open for days slowly fill up memory. At 04:00 local time the dashboard starts
+// afresh, unless someone is busy with it; then it waits until they are done, up to 05:00.
+function nightlyReload() {
+  if (!state.settings.nightlyReload || editing || modalOpen()) return;
+  const d = new Date();
+  if (d.getHours() !== 4 || performance.now() < 3600e3) return;
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; window.palv.config.saveSync(state); }
+  location.reload();
+}
+
 let lastRotate = Date.now(), lastTheme = 0, lastUdp = 0;
 function everySecond() {
   tickClocks();
@@ -1706,6 +1872,8 @@ function everySecond() {
   const now = Date.now();
   if (now - lastTheme >= 20000) { lastTheme = now; applyTheme(true); }
   if (now - lastUdp >= 10000) { lastUdp = now; renderUdp(); }
+  paintHealth();
+  nightlyReload();
   const r = state.settings.rotate;
   if (r > 0 && state.pages.length > 1 && !editing && !modalOpen()) {
     if (Date.now() - lastRotate >= r * 1000) { lastRotate = Date.now(); setPage((state.activePage + 1) % state.pages.length); }

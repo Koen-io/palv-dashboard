@@ -207,6 +207,21 @@ body.editing .tab.active .tab-tool { display: block; }
 .tab-add svg { width: 1rem; height: 1rem; }
 body.editing .tab-add { color: var(--amber); }
 
+/* Warning at the right of the tab bar: sources that have stopped delivering */
+#health {
+  position: relative; z-index: 2; margin-left: auto; align-self: center; min-width: 0;
+  display: flex; align-items: center; gap: 0.7rem; height: 1.85rem; padding: 0 0.85rem 0 0.6rem;
+  border-radius: 99px; background: #c0271f; color: #fff; overflow: hidden; white-space: nowrap;
+  font-size: 0.78rem; box-shadow: 0 0 0 0 rgba(255, 81, 72, 0.7); animation: health-pulse 2s ease-out infinite;
+}
+#health[hidden] { display: none; }
+#health b { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.14em; }
+.health-icon { display: grid; place-items: center; flex: none; }
+.health-icon svg { width: 1.1rem; height: 1.1rem; }
+.health-item { display: flex; align-items: baseline; gap: 0.35rem; padding-left: 0.7rem; border-left: 1px solid rgba(255, 255, 255, 0.35); font-weight: 700; }
+.health-item small { font-size: 0.72rem; font-weight: 400; opacity: 0.9; font-variant-numeric: tabular-nums; }
+@keyframes health-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 81, 72, 0.65); } 70%, 100% { box-shadow: 0 0 0 0.6rem rgba(255, 81, 72, 0); } }
+
 .hd-brand { display: flex; align-items: center; gap: 1rem; flex: none; }
 .hd-logo { height: 8.5rem; width: 8.5rem; filter: drop-shadow(0 0.2rem 0.5rem rgba(0, 0, 0, 0.5)); }
 .hd-name { font-family: var(--font-display); font-size: 2.15rem; font-weight: 700; letter-spacing: 0.04em; line-height: 1; color: #fff; white-space: nowrap; }
@@ -400,6 +415,39 @@ html[data-theme="dark"] .rwy-map .osm { opacity: 0.3; filter: invert(1) hue-rota
 .rwy-map .arrow line { stroke-width: 1.6; stroke-dasharray: 2.4 1.6; }
 .rwy-map text { font-family: var(--font-display); font-size: 8.5px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
 .rwy-map text.idle { fill: var(--muted); font-size: 4.6px; font-weight: 400; }
+/* own aircraft in the air */
+.fl-widget { position: absolute; inset: 0; display: flex; flex-direction: column; container-type: inline-size; }
+.fl-list { flex: 1; min-height: 0; overflow: auto; padding: 0.55rem 0.7rem 0.2rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.fl-row {
+  position: relative; flex: none; display: flex; align-items: center; gap: 0.9rem;
+  min-height: 3.1rem; padding: 0.35rem 0.8rem 0.35rem 1rem;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.fl-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0.28rem; background: var(--owl-500); }
+.fl-row.hems .fl-bar { background: #e5484d; }
+.fl-row.coastguard .fl-bar { background: var(--amber); }
+.fl-row.ground { opacity: 0.6; }
+.fl-row.alert { border-color: #ff5148; background: color-mix(in srgb, #ff5148 16%, var(--surface-2)); }
+.fl-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fl-id b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; letter-spacing: 0.04em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-id small { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-sq { flex: none; padding: 0.1rem 0.45rem; border-radius: 0.25rem; background: #ff5148; color: #fff; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; }
+.fl-num, .fl-time { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.fl-num { min-width: 3.4rem; }
+.fl-num b, .fl-time b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; white-space: nowrap; }
+.fl-num small, .fl-time small { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+.fl-time { min-width: 4.6rem; }
+.fl-time b { color: var(--accent); }
+.fl-ground { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; color: var(--muted); }
+.fl-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: var(--muted); font-size: 0.9rem; text-align: center; }
+.fl-empty svg { width: 1.8rem; height: 1.8rem; opacity: 0.55; }
+.fl-src { flex: none; display: flex; align-items: center; gap: 0.45rem; padding: 0.45rem 1.1rem 0.6rem; font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+.fl-count { margin-left: auto; font-weight: 700; color: var(--text); }
+/* In a narrow widget the speed makes way first, then the callsign details. */
+@container (max-width: 25rem) { .fl-gs { display: none; } }
+@container (max-width: 19rem) { .fl-id small, .fl-src .fl-count { display: none; } }
+
 /* edit mode */
 .w-edit { display: none; position: absolute; inset: 0.3rem; border-radius: var(--radius); z-index: 5; }
 body.editing .w-edit {
