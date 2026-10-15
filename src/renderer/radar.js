@@ -191,7 +191,8 @@ function vrCreate(body, w) {
     h('div', { class: 'vr-legend-ticks' }, ['0', '1k', '4k', '8k', '20k', '40k ft'].map((t) => h('span', {}, t))));
   const status = h('div', { class: 'vr-status' });
   const card = h('div', { class: 'vr-card', hidden: true });
-  el.append(h('div', { class: 'vr-corner' }, scale, legend), status, card);
+  const top = h('div', { class: 'vr-top' }, status);
+  el.append(h('div', { class: 'vr-corner' }, scale, legend), top, card);
   const paintScale = () => {
     const y = map.getSize().y / 2;
     const nmPer100 = map.distance(map.containerPointToLatLng([0, y]), map.containerPointToLatLng([100, y])) / 1852;
@@ -418,7 +419,7 @@ function vrCreate(body, w) {
 
   renderer.on('update', draw);
   return {
-    map, el, applyLayers, refreshRain, paintDim, paintScale,
+    map, el, top, applyLayers, refreshRain, paintDim, paintScale,
     setSnap(s) { snap = s; paintStatus(); paintCard(); },
     draw, paintStatus,
     destroy() { map.remove(); },

@@ -1297,7 +1297,8 @@ const WIDGETS = {
       const closePop = (e) => { if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target)) pop.hidden = true; };
       document.addEventListener('pointerdown', closePop, true);
       body.append(pop);
-      tools.append(labels, routes, cats, layersBtn,
+      vr.top.prepend(cats);
+      tools.append(labels, routes, layersBtn,
         h('button', { class: 'w-tool', title: 'Kaart terugzetten naar de standaardpositie en het standaard zoomniveau', onclick: () => { user = null; fit(); trafficWatch(); } }, icon('target')));
       return {
         destroy() {
@@ -2149,6 +2150,7 @@ async function boot() {
   window.palv.win.onState(onWinState);
 
   renderTitlebar();
+  window.palv.app.version().then((v) => { $('#tb-version').textContent = 'v' + v; });
   renderClocks();
   renderUdp();
   applyWxMargins();

@@ -593,7 +593,7 @@ html[data-theme="light"] .vr-map { background: #dfe6ee; }
 .vr-map .leaflet-bar a:hover { background: #1f3050; color: #fff; }
 .vr-map .leaflet-bottom.leaflet-right .leaflet-bar { margin-bottom: 1.6rem; }
 
-.vr-status { position: absolute; left: 0.5rem; top: 0.5rem; z-index: 1000; display: flex; align-items: center; gap: 0.6rem; padding: 0.32rem 0.7rem; border-radius: 99px; background: rgba(7, 13, 24, 0.88); border: 1px solid rgba(255, 255, 255, 0.16); color: #c6d4e8; font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); pointer-events: auto; }
+.vr-status { align-self: flex-start; display: flex; align-items: center; gap: 0.6rem; padding: 0.32rem 0.7rem; border-radius: 99px; background: rgba(7, 13, 24, 0.88); border: 1px solid rgba(255, 255, 255, 0.16); color: #c6d4e8; font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); pointer-events: auto; }
 .vr-status b { color: #fff; letter-spacing: 0.08em; }
 .vr-status .wxm-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #ffb020; flex: none; }
 .vr-status.bad .wxm-dot { background: #ff5148; }
@@ -627,3 +627,10 @@ html[data-theme="light"] .vr-map { background: #dfe6ee; }
 
 .w-head .chips button { gap: 0.3rem; }
 @container (max-width: 60rem) { .w-head .chips button svg { display: none; } }
+
+.vr-top { position: absolute; left: 0.5rem; top: 0.5rem; right: 3rem; z-index: 1000; display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; pointer-events: none; }
+.vr-top > * { pointer-events: auto; }
+.vr-top .chips { background: rgba(7, 13, 24, 0.88); border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); flex-wrap: wrap; }
+.vr-top .chips button { height: 1.75rem; padding: 0 0.6rem; gap: 0.3rem; color: #c6d4e8; }
+.vr-top .chips button.on { color: var(--accent-text); }
+#tb-version { margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: rgba(255, 255, 255, 0.08); color: #8ea2bf; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
