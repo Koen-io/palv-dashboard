@@ -1,23 +1,38 @@
-// Live air traffic for the Vluchtradar and for "In de lucht", from the open ADS-B aggregators.
-// adsb.fi answers once a second with positions that are mostly well under a second old; adsb.lol
-// fills in every few seconds with what its own receivers hear. Per aircraft the newest message and
-// the newest position win, so two sources never make an aircraft jump back. Every round is pushed
-// to the dashboard straight away instead of waiting for it to ask.
+// Live air traffic for the Vluchtradar, for "In de lucht", for the runways in use and for the emergency
+// watch, from the open ADS-B aggregators. adsb.fi answers about once a second with positions that are
+// mostly well under a second old; adsb.lol fills in every few seconds with what its own receivers hear.
+// Per aircraft the newest message and the newest position win, so two sources never make an aircraft
+// jump back. Every round is pushed to the dashboard straight away instead of waiting for it to ask.
+//
+// Both sources limit how often they may be asked, and refuse (HTTP 429) when asked too often, also when
+// several dashboards share one internet connection. Every request therefore goes through one regulator
+// per source: a minimum time between requests, and after a refusal a pause that grows each time
+// (2, 4, 8 ... up to 60 s, or what the source asks for itself) and is reset by the first success. While
+// one source pauses the other one takes over, so the feed keeps running.
 
 const FI = 'https://opendata.adsb.fi/api/v2';
 const LOL = 'https://api.adsb.lol/v2';
-const TICK_MS = 1000;      // adsb.fi allows one request a second
-const LOL_GAP_MS = 8000;   // adsb.lol throttles hard; now and then is what it takes
+const TICK_MS = 1000;      // one round a second
+const LOL_GAP_MS = 6000;   // adsb.lol as a supplement, now and then
 const KEEP_MS = 90000;     // an aircraft is forgotten this long after its last message
 const WATCH_MS = 20000;    // a watcher that has not renewed for this long has gone
 const MAX_NM = 250;        // largest area the sources answer for
 
+// The regulator: minimum spacing between two requests to a source, and the pause after a refusal.
+const SOURCES = {
+  fi: { name: 'adsb.fi', gap: 1000, timeout: 4000 },
+  lol: { name: 'adsb.lol', gap: 3000, timeout: 5000 },
+};
+const gate = Object.fromEntries(Object.keys(SOURCES).map((k) => [k, { last: 0, until: 0, refusals: 0, busy: false, ok: 0, fail: 0, lastError: null }]));
+
 const store = new Map(); // hex -> record
 const status = { lastOk: 0, failures: 0, startedAt: 0, src: null, latency: null };
-const pause = { fi: 0, lol: 0 }; // no requests to a source before this moment (after a refusal)
 let area = null, areaAt = 0, watchedAt = 0;
 let hexes = new Map(); // hex -> group of the own aircraft
 let fetchJson = null, onUpdate = null, timer = null, round = 0, lastLol = 0;
+// Exactly one round loop at a time: it runs from the first watcher until nobody watches any more.
+let looping = false;
+let log = { info() {}, warn() {} };
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -35,22 +50,47 @@ function watch(req) {
     for (const hex of list || []) if (/^[0-9a-f]{6}$/.test(hex)) next.set(hex, group);
   }
   hexes = next;
-  if (!timer) {
+  if (!looping) {
+    looping = true;
     status.startedAt = status.startedAt || now;
     timer = setTimeout(tick, 0);
   }
   return snapshot();
 }
 
-async function get(src, url) {
-  if (Date.now() < pause[src]) return null;
+// May this source be asked now?
+const free = (src, now = Date.now()) => { const g = gate[src]; return !g.busy && now >= g.until && now - g.last >= SOURCES[src].gap; };
+
+// One request through the regulator; null when the source is resting or did not answer usefully.
+async function request(src, url) {
+  const g = gate[src], now = Date.now();
+  if (!free(src, now)) return null;
+  g.busy = true;
+  g.last = now;
   try {
-    const data = await fetchJson(url, src === 'fi' ? 5000 : 4000);
-    return data && (Array.isArray(data.ac) || Array.isArray(data.aircraft)) ? data : null;
+    const data = await fetchJson(url, SOURCES[src].timeout);
+    if (!data || !(Array.isArray(data.ac) || Array.isArray(data.aircraft))) throw new Error('onbruikbaar antwoord');
+    if (g.refusals) log.info('verkeer', `${SOURCES[src].name} levert weer`);
+    g.refusals = 0;
+    g.ok += 1;
+    g.lastError = null;
+    return data;
   } catch (err) {
-    // Asked to slow down: leave the source alone for a while.
-    if (/429|403/.test(String(err && err.message))) pause[src] = Date.now() + (src === 'fi' ? 5000 : 60000);
+    g.fail += 1;
+    const msg = String((err && err.message) || err);
+    g.lastError = msg;
+    const m = /\b(429|403|503)\b/.exec(msg);
+    if (m) {
+      // Refused: rest, longer each time, or as long as the source asks.
+      g.refusals += 1;
+      const asked = err && err.retryAfter ? err.retryAfter * 1000 : 0;
+      const pause = Math.min(60000, Math.max(asked, 2000 * 2 ** (g.refusals - 1)));
+      g.until = Date.now() + pause;
+      if (g.refusals === 1 || g.refusals % 5 === 0) log.warn('verkeer', `${SOURCES[src].name} weigert (HTTP ${m[1]}), pauze ${Math.round(pause / 1000)} s`);
+    }
     return null;
+  } finally {
+    g.busy = false;
   }
 }
 
@@ -94,20 +134,42 @@ function merge(data, src) {
 async function tick() {
   timer = null;
   const started = Date.now();
-  if (started - watchedAt > WATCH_MS) return; // nobody is looking any more
+  if (started - watchedAt > WATCH_MS) { looping = false; return; } // nobody is looking any more
+  try {
+    await runRound(started);
+  } catch (err) {
+    log.warn('verkeer', 'ronde mislukt: ' + ((err && err.message) || err));
+  }
+  // The next round as soon as a second has passed and adsb.fi may be asked again.
+  const g = gate.fi, end = Date.now();
+  const fiDue = Math.max(g.last + SOURCES.fi.gap, end < g.until ? end : 0) - end;
+  timer = setTimeout(tick, Math.max(50, TICK_MS - (end - started), Math.min(fiDue, TICK_MS)));
+}
+
+async function runRound(started) {
   round += 1;
   const wantArea = !!area && started - areaAt < WATCH_MS;
   const own = [...hexes.keys()];
   // Mostly the area; every fifth round the own aircraft by code, for the ones outside the area.
   const byHex = own.length && (!wantArea || round % 5 === 0);
   const path = byHex ? `/hex/${own.join(',')}` : wantArea ? `/lat/${area.lat}/lon/${area.lon}/dist/${area.nm}` : null;
-  const jobs = [];
-  if (path) jobs.push(get('fi', FI + path).then((d) => d || get('lol', LOL + path).then((l) => (l ? ['adsb.lol', l] : null))).then((d) => (Array.isArray(d) ? d : d ? ['adsb.fi', d] : null)));
-  if (wantArea && started - lastLol >= LOL_GAP_MS) {
+  const results = [];
+  // adsb.lol as a supplement over the area: what its own receivers hear that adsb.fi misses. It runs
+  // alongside and is merged whenever it answers, so a slow answer never holds up a round.
+  if (wantArea && started - lastLol >= LOL_GAP_MS && free('lol')) {
     lastLol = started;
-    jobs.push(get('lol', `${LOL}/lat/${area.lat}/lon/${area.lon}/dist/${area.nm}`).then((d) => (d ? ['adsb.lol', d] : null)));
+    request('lol', `${LOL}/lat/${area.lat}/lon/${area.lon}/dist/${area.nm}`).then((d) => {
+      if (!d) return;
+      merge(d, 'adsb.lol');
+      status.lastOk = Date.now();
+    });
   }
-  const results = (await Promise.all(jobs)).filter(Boolean);
+  if (path) {
+    // adsb.fi first; when it rests after a refusal or fails, adsb.lol takes the round.
+    let d = await request('fi', FI + path);
+    if (d) results.push(['adsb.fi', d]);
+    else if ((d = await request('lol', LOL + path))) { results.push(['adsb.lol', d]); lastLol = Date.now(); }
+  }
   const now = Date.now();
   if (results.length) {
     for (const [src, data] of results) merge(data, src);
@@ -115,18 +177,29 @@ async function tick() {
     status.failures = 0;
     status.src = results[0][0];
     status.latency = now - started;
-  } else if (jobs.length) status.failures += 1;
+  } else if (path) status.failures += 1;
   for (const [hex, r] of store) if (now - r.msgAt > KEEP_MS) store.delete(hex);
   if (onUpdate) { try { onUpdate(snapshot()); } catch { /* window gone */ } }
-  timer = setTimeout(tick, Math.max(50, TICK_MS - (Date.now() - started)));
 }
 
-function start(json, update) {
+function start(json, update, logger) {
   fetchJson = json;
   onUpdate = update;
+  if (logger) log = logger;
 }
 
 function records() { return store; }
+
+// Stops the round loop (tests, shutting down); the next watcher starts it again.
+function stop() { clearTimeout(timer); timer = null; looping = false; }
+
+// Why there is no fresh data, in words for the dashboard.
+function reason(now) {
+  const resting = Object.entries(gate).filter(([, g]) => now < g.until).map(([k]) => SOURCES[k].name);
+  if (resting.length === Object.keys(SOURCES).length) return `bronnen beperken het aantal verzoeken (${resting.join(', ')})`;
+  const errs = Object.entries(gate).map(([k, g]) => g.lastError && `${SOURCES[k].name}: ${g.lastError}`).filter(Boolean);
+  return errs.length ? errs.join(' · ') : null;
+}
 
 function snapshot() {
   const now = Date.now();
@@ -140,17 +213,27 @@ function snapshot() {
       group: hexes.get(r.hex) || null,
     });
   }
+  const ok = status.lastOk > 0 && now - status.lastOk < 30000;
   return {
     now,
-    ok: status.lastOk > 0 && now - status.lastOk < 30000,
+    ok,
     lastOk: status.lastOk,
     startedAt: status.startedAt,
     src: status.src,
     latency: status.latency,
+    reason: ok ? null : reason(now),
     area,
     tracked: hexes.size,
     ac,
   };
 }
 
-module.exports = { start, watch, snapshot, records, merge, hexGroups: () => hexes };
+// Whether the feed has covered a point (with a margin, in NM) in the last few seconds: the runways in
+// use are then read from it rather than asked separately.
+function covers(lat, lon, marginNm, now = Date.now()) {
+  if (!area || now - areaAt > WATCH_MS || now - status.lastOk > 5000) return false;
+  const d = Math.hypot((lat - area.lat) * 60, (lon - area.lon) * 60 * Math.cos((lat * Math.PI) / 180));
+  return d + marginNm <= area.nm;
+}
+
+module.exports = { start, stop, watch, snapshot, records, merge, request, covers, hexGroups: () => hexes, gate };

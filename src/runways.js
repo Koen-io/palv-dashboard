@@ -65,7 +65,7 @@ function classify(ac) {
 
 const WINDOW_MS = 15 * 60000;
 const SUPERSEDE_MS = 7 * 60000;
-const SOURCES = ['https://api.adsb.lol/v2/point/52.31/4.76/14', 'https://opendata.adsb.fi/api/v3/lat/52.31/lon/4.76/dist/14'];
+const SOURCES = [['lol', 'https://api.adsb.lol/v2/point/52.31/4.76/14'], ['fi', 'https://opendata.adsb.fi/api/v3/lat/52.31/lon/4.76/dist/14']];
 
 const obs = { landing: new Map(), departure: new Map() }; // rwy -> Map(hex -> lastSeen)
 const status = { lastOk: 0, lastTry: 0, failures: 0, firstOk: 0, startedAt: 0 };
@@ -95,33 +95,46 @@ function summarize(mode, now) {
   return active.map((r, i) => ({ rwy: r.rwy, role: i === 0 ? 'main' : 'secondary', count: r.count, last: r.last }));
 }
 
-async function poll(fetchJson) {
+// Fed from the live traffic feed when that covers the field: every round, without asking the sources
+// anything extra. Only when the feed does not cover Schiphol are the sources asked here, through the
+// same regulator as the feed (traffic.request), so the two never crowd each other out.
+let fedAt = 0;
+function ingest(records, now = Date.now()) {
+  for (const r of records.values()) {
+    if (r.lat == null || now - r.posAt > 15000) continue;
+    const hit = classify({ lat: r.lat, lon: r.lon, alt_baro: r.alt, track: r.track, gs: r.gs, baro_rate: r.vs, category: r.cat });
+    if (hit) record(hit.mode, hit.rwy, r.hex, now);
+  }
+  status.lastOk = now;
+  status.firstOk = status.firstOk || now;
+  status.failures = 0;
+  fedAt = now;
+}
+
+async function poll(request) {
   const now = Date.now();
+  if (now - fedAt < 20000) return; // the live feed is doing it
   status.lastTry = now;
-  for (const url of SOURCES) {
-    try {
-      const data = await fetchJson(url);
-      if (!data || !Array.isArray(data.ac)) throw new Error('bad payload');
-      for (const ac of data.ac) {
-        const hit = classify(ac);
-        if (hit) record(hit.mode, hit.rwy, ac.hex, now);
-      }
-      status.lastOk = now;
-      status.firstOk = status.firstOk || now;
-      status.failures = 0;
-      return;
-    } catch {
-      /* try the next source */
+  for (const [src, url] of SOURCES) {
+    const data = await request(src, url);
+    if (!data || !Array.isArray(data.ac)) continue;
+    for (const ac of data.ac) {
+      const hit = classify(ac);
+      if (hit) record(hit.mode, hit.rwy, ac.hex, now);
     }
+    status.lastOk = now;
+    status.firstOk = status.firstOk || now;
+    status.failures = 0;
+    return;
   }
   status.failures += 1;
 }
 
-function start(fetchJson, intervalMs = 12000) {
+function start(request, intervalMs = 12000) {
   if (timer) return;
   status.startedAt = Date.now();
-  poll(fetchJson);
-  timer = setInterval(() => poll(fetchJson), intervalMs);
+  poll(request);
+  timer = setInterval(() => poll(request), intervalMs);
 }
 
 function snapshot() {
@@ -136,4 +149,4 @@ function snapshot() {
   };
 }
 
-module.exports = { start, snapshot, classify };
+module.exports = { start, snapshot, classify, ingest };

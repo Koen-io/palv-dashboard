@@ -6,6 +6,7 @@
   <title>P-ALV Dashboard</title>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="system.css">
 </head>
 <body>
   <div id="app">
@@ -31,24 +32,47 @@
       <div class="hd-time">
         <div class="hd-clocks" id="clocks"></div>
         <div class="hd-udp" id="udp" aria-label="Uniforme daglichtperiode"></div>
+        <div class="hd-udp hd-moon" id="moon" aria-label="Maan en lichtniveau"></div>
       </div>
       <section class="hd-eham" id="eham" aria-label="Schiphol luchtvaartweer en baangebruik"></section>
     </header>
 
     <nav id="page-bar" aria-label="Pagina's"><div id="page-tabs" role="tablist"></div><div id="health" role="alert" hidden></div></nav>
 
+    <div id="emergency" role="alert" hidden></div>
+
     <main id="canvas"></main>
 
     <div id="edit-bar" hidden></div>
   </div>
+  <div id="oled-veil" aria-hidden="true"></div>
 
   <div id="modal-root"></div>
   <div id="toast-root"></div>
 
   <script src="suntable.js"></script>
+  <script src="model.js"></script>
+  <script src="astro.js"></script>
   <script src="wx.js"></script>
+  <script src="core.js"></script>
+  <script src="state.js"></script>
+  <script src="header.js"></script>
+  <script src="feeds.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="radar.js"></script>
+  <script src="widgets/base.js"></script>
+  <script src="widgets/radar.js"></script>
+  <script src="widgets/adsb.js"></script>
+  <script src="widgets/windy.js"></script>
+  <script src="widgets/web.js"></script>
+  <script src="widgets/tile.js"></script>
+  <script src="widgets/metar.js"></script>
+  <script src="widgets/runway.js"></script>
+  <script src="widgets/fleet.js"></script>
+  <script src="widgets/note.js"></script>
+  <script src="layout.js"></script>
+  <script src="settings.js"></script>
+  <script src="system.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

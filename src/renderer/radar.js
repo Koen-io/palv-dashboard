@@ -97,6 +97,8 @@ const VR_SHAPES = {
 for (const s of Object.values(VR_SHAPES)) s.path = new Path2D(s.p);
 const VR_HELI_TYPES = /^(EC\d\d|AS\d\d|AS3B|H1\d\d|H160|H175|H47|H53|H60|H64|H500|A1\d\d|B06|B4\d\d|R22|R44|R66|S61|S76|S92|NH90|LYNX|PUMA|TIGR|EH10|BK17|MI8|MI17|UH1|AW09|MD52|MD60|G2CA|CABR|EXPL)$/i;
 const VR_PROP_TYPES = /^(DH8|AT4|AT7|DO28|D228|D328|B350|BE20|BE9|BE30|C12|F50|JS3|JS4|SF34|SW4|PC12|C208|BN2|L410|P180|C130|A400|E120|AN26|AN32|P3|P8X|PC6|KODI|TBM)/i;
+// In distress: squawk 7500/7600/7700 or an emergency status; "lifeguard" is a medical flight, not an emergency.
+const vrAlert = (a) => (!!a.emergency && a.emergency !== 'lifeguard') || /^(7500|7600|7700)$/.test(a.squawk || '');
 const vrIsHeli = (a) => a.cat === 'A7' || VR_HELI_TYPES.test(a.type || '');
 function vrShape(a) {
   if (vrIsHeli(a)) return 'heli';
@@ -446,7 +448,8 @@ function vrCreate(body, w) {
     const list = [];
     let sel = null;
     for (const a of snap.ac) {
-      if (a.lat == null || (now - a.posAt) / 1000 > VR_HIDE_S || !vrMatch(a, cats)) continue;
+      // An aircraft in distress and the selected one are always on the map, whatever the categories.
+      if (a.lat == null || (now - a.posAt) / 1000 > VR_HIDE_S || (!vrMatch(a, cats) && a.hex !== selected && !vrAlert(a))) continue;
       const pos = vrNow(a, now);
       const p = P(pos[0], pos[1]);
       if (a.hex === selected) sel = { a, p, pos };
@@ -484,7 +487,7 @@ function vrCreate(body, w) {
     for (const { a, p } of list) {
       const own = !!a.group, isSel = a.hex === selected;
       const age = (now - a.posAt) / 1000;
-      const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
+      const alert = vrAlert(a);
       const shape = vrShape(a);
       const px = base * VR_SHAPES[shape].s * (own ? 1.25 : 1) * (a.alt === 'ground' ? 0.85 : 1);
       const sp = vrSprite(shape, own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt), style, px, own, dpr);
@@ -554,7 +557,7 @@ function vrCreate(body, w) {
     const now = Date.now();
     let level = 'live', label = 'LIVE', detail = [];
     if (!snap) [level, label] = ['warn', 'LADEN'];
-    else if (!snap.ok) [level, label] = ['bad', 'GEEN VERBINDING'];
+    else if (!snap.ok) [level, label] = ['bad', snap.reason && /beperken/.test(snap.reason) ? 'BRONNEN BEPERKT' : 'GEEN VERBINDING'];
     else if (now - snap.lastOk > 5000) [level, label] = ['warn', 'VERTRAAGD'];
     if (snap) {
       const cats = vrCats(w.cfg);
@@ -563,7 +566,7 @@ function vrCreate(body, w) {
       detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? zuluSec(snap.lastOk) : null, snap.src].filter(Boolean);
     }
     status.className = 'vr-status ' + level;
-    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol. Groen: actueel. Oranje: laden of vertraagd. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid; een bericht ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer.';
+    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol. Groen: actueel. Oranje: laden of vertraagd. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid; een bericht ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer.' + (snap && snap.reason ? `\n\nNu: ${snap.reason}` : '');
     status.replaceChildren(h('span', { class: 'wxm-dot' }), h('b', {}, label), ...detail.map((d) => h('span', {}, d)));
   }
   function paintCard() {
@@ -608,6 +611,13 @@ function vrCreate(body, w) {
   return {
     map, el, applyLayers, refreshRain, paintScale,
     setSnap(s) { snap = s; paintStatus(); paintCard(); },
+    // Straight to one aircraft (from the emergency alert): selected, followed, and zoomed in to it.
+    focus(hex, at) {
+      select(hex);
+      follow = true;
+      paintCard();
+      if (at && at.lat != null) map.setView([at.lat, at.lon], Math.max(map.getZoom(), 9.5), { animate: true });
+    },
     draw, paintStatus,
     destroy() { themeWatch.disconnect(); clearTimeout(settle); map.remove(); },
   };

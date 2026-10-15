@@ -3,10 +3,8 @@ const assert = require('assert');
 const dir = require('path').join(__dirname, '..', 'src', 'renderer');
 const window = {};
 new Function('window', fs.readFileSync(dir + '/suntable.js', 'utf8'))(window);
-const src = fs.readFileSync(dir + '/app.js', 'utf8');
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const code = src.slice(src.indexOf('function sunTimes('), src.indexOf('function resolveTheme(')) + src.slice(src.indexOf('const ltFmt ='), src.indexOf('function renderUdp('));
-const udpToday = new Function('window', 'clamp', code + '; return udpToday;')(window, clamp);
+const ASTRO = require(dir + '/astro.js');
+const udpToday = (ms) => ASTRO.udpToday(ms, window.SUN_TABLE);
 const z = (ms) => new Date(ms).toISOString().slice(0, 16);
 const U = (iso) => { const u = udpToday(Date.parse(iso)); return `${z(u.begin)} ${z(u.end)} ${u.day ? 'dag' : 'nacht'} ${u.official ? 'tabel' : 'berekend'}`; };
 assert.equal(U('2026-10-09T12:00Z'), '2026-10-09T05:39 2026-10-09T17:14 dag tabel');   // table 0754 1859 MEZT

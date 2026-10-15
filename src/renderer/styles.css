@@ -155,7 +155,7 @@ body.mac.fullscreen:not(.tb-reveal) #titlebar { transform: translateY(calc(-100%
   display: flex;
   align-items: stretch;
   gap: 1.1rem;
-  height: 10.1rem;
+  height: 12.5rem;
   padding: 0.8rem 1.2rem 0.5rem;
   background: linear-gradient(180deg, var(--hd-from), var(--hd-to));
   color: #e9eff8;
@@ -260,7 +260,7 @@ body.editing .tab-add { color: var(--amber); }
 .clock-label { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.2em; color: var(--owl-300); }
 .clock-date { font-size: 0.9rem; letter-spacing: 0.06em; color: #8ea2bf; text-transform: uppercase; }
 .clock-time {
-  font-family: var(--font-display); font-size: 4.2rem; font-weight: 600; line-height: 1;
+  font-family: var(--font-display); font-size: 4rem; font-weight: 600; line-height: 1;
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: #fff; white-space: nowrap;
 }
 .clock-time .sec { font-size: 0.55em; font-weight: 400; color: var(--owl-300); margin-left: 0.12em; }

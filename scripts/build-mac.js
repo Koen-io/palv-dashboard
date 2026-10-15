@@ -234,7 +234,13 @@ sleep 1
 
 /bin/rm -rf "$APP"
 /usr/bin/tar -xzf "$HERE/app-$ARCH.tar.gz" -C /Applications
-/usr/sbin/chown -R root:admin "$APP"
+# Owned by the user at the screen, so the dashboard can update itself later without a password.
+OWNER="$(/usr/bin/stat -f %Su /dev/console 2>/dev/null)"
+if [ -n "$OWNER" ] && [ "$OWNER" != "root" ] && id "$OWNER" >/dev/null 2>&1; then
+  /usr/sbin/chown -R "$OWNER":admin "$APP"
+else
+  /usr/sbin/chown -R root:admin "$APP"
+fi
 /bin/chmod -R u+rwX,go+rX,go-w "$APP"
 /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
@@ -269,8 +275,9 @@ async function main() {
     const tgz = tarball(entries);
     scripts.push({ name: `app-${arch}.tar.gz`, mode: 0o644, data: tgz });
     console.log(`${arch}: Electron ${electronVersion}, macOS ${minimumSystem}+, ${entries.length} entries, ${(tgz.length / 1e6).toFixed(1)} MB`);
-    // Fallback without installer for the Intel Mac: unpack and drag the app to Applications.
-    if (arch === 'x64') fs.writeFileSync(path.join(outDir, `P-ALV-Dashboard-${pkg.version}-mac-intel.tar.gz`), tgz);
+    // The app on its own per processor: what the automatic update installs, and a fallback without
+    // installer (unpack and drag the app to Applications).
+    fs.writeFileSync(path.join(outDir, `P-ALV-Dashboard-${pkg.version}-mac-${arch}.tar.gz`), tgz);
   }
 
   const out = path.join(outDir, `P-ALV-Dashboard-${pkg.version}-mac.pkg`);

@@ -1,51 +1,56 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu, screen, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
-const runways = require('./runways');
-const fleet = require('./fleet');
-const traffic = require('./traffic');
+const os = require('os');
+const log = require('./main/log');
+const config = require('./main/config');
+const watchdog = require('./main/watchdog');
+const updater = require('./main/updater');
+const screens = require('./main/screens');
+const data = require('./main/data');
+require('./main/tiles');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
 const WEB_PARTITION = 'persist:palv-web';
 const isMac = process.platform === 'darwin';
+const pkg = require('../package.json');
 
 // The Mac build is not signed with a developer certificate; without this macOS asks for the login
 // keychain password every time the app has been replaced by a newer version.
 if (isMac) app.commandLine.appendSwitch('use-mock-keychain');
 
 let win = null;
-const configPath = () => path.join(app.getPath('userData'), 'config.json');
 
 // Dev helper: `electron . --shot=out.png [--shot-delay=8000] [--shot-js="..."] [--shot-size=1920x1080] [--shot-resize=1100x640]`
 // renders a screenshot and quits; --shot-resize changes the window size halfway, to check that the layout follows.
+// --user-data=<map> runs on a separate configuration, so a test never touches the real one.
 const argValue = (name) => {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
   return hit ? hit.slice(name.length + 3) : null;
 };
 const shotPath = argValue('shot');
 const shotSize = (name, fallback) => { const m = /^(\d+)x(\d+)$/.exec(argValue(name) || ''); return m ? [+m[1], +m[2]] : fallback; };
+if (argValue('user-data')) app.setPath('userData', path.resolve(argValue('user-data')));
 
 if (!shotPath && !app.requestSingleInstanceLock()) {
   app.quit();
 }
 
-function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-  } catch {
-    return null;
-  }
-}
+log.init(path.join(app.getPath('userData'), 'logs'));
+config.init(app.getPath('userData'));
+log.info('app', `P-ALV Dashboard ${app.getVersion()} start (${process.platform} ${process.arch}, Electron ${process.versions.electron})`);
+process.on('uncaughtException', (err) => log.error('app', 'onverwachte fout in het hoofdproces', err));
+process.on('unhandledRejection', (err) => log.error('app', 'onafgehandelde fout in het hoofdproces', err));
 
-function writeConfig(cfg) {
-  const file = configPath();
-  const tmp = file + '.tmp';
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-}
+// A new app version: the configuration as it was is kept once, before the new version touches it.
+try {
+  const marker = path.join(app.getPath('userData'), 'last-version.txt');
+  const last = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : null;
+  if (last !== app.getVersion()) {
+    if (last) { config.backup('update'); log.info('app', `bijgewerkt van ${last} naar ${app.getVersion()}`); }
+    fs.writeFileSync(marker, app.getVersion(), 'utf8');
+  } else config.backup('start');
+} catch (err) { log.warn('app', 'versiecontrole mislukt', err.message); }
 
 function sendWinState(known = {}) {
   if (!win || win.isDestroyed()) return;
@@ -89,7 +94,7 @@ function buildMenu() {
 }
 
 function createWindow() {
-  const cfg = readConfig();
+  const cfg = config.read();
   // Fullscreen is the standard; configs from the first release are migrated to it by the renderer.
   const startFullscreen = !cfg || (cfg.version || 1) < 2 || !!(cfg.settings && cfg.settings.startFullscreen);
 
@@ -110,6 +115,8 @@ function createWindow() {
       nodeIntegration: false,
       webviewTag: true,
       spellcheck: false,
+      // An unattended screen behind another window must keep its live feeds and timers running.
+      backgroundThrottling: false,
     },
   });
 
@@ -188,6 +195,7 @@ function createWindow() {
   }
 }
 
+
 // Embedded sites (webviews) are sandboxed guests: no node, no popups, no device permissions.
 app.on('web-contents-created', (_e, contents) => {
   contents.on('will-attach-webview', (_ev, webPreferences, params) => {
@@ -198,6 +206,7 @@ app.on('web-contents-created', (_e, contents) => {
   });
   if (contents.getType() === 'webview') {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    watchdog.guardWebview(contents);
   }
 });
 
@@ -218,10 +227,19 @@ app.whenReady().then(() => {
     cb({ requestHeaders: details.requestHeaders });
   });
 
+  watchdog.start();
   createWindow();
+  watchdog.attach(win);
+  data.start(() => win);
+  if (shotPath) return;
+  updater.start({ repository: pkg.palv && pkg.palv.updateRepo, onStatus: (s) => send('update:status', s) });
+  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list) });
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => log.info('app', 'afgesloten'));
+
+const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 
 /* ---------- window controls ---------- */
 ipcMain.on('win:minimize', () => win && win.minimize());
@@ -239,15 +257,23 @@ ipcMain.handle('win:getState', () => ({
 }));
 
 /* ---------- config ---------- */
-ipcMain.handle('config:load', () => readConfig());
+ipcMain.handle('config:load', () => {
+  const cfg = config.read();
+  const restored = config.takeRestored();
+  return cfg && restored ? { ...cfg, __restoredFrom: restored } : cfg;
+});
 ipcMain.handle('config:save', (_e, cfg) => {
-  writeConfig(cfg);
+  config.write(cfg);
   return true;
 });
 // Last write on the way out: the renderer's debounced save would not get there in time.
 ipcMain.on('config:saveSync', (e, cfg) => {
-  try { writeConfig(cfg); e.returnValue = true; } catch { e.returnValue = false; }
+  try { config.write(cfg); e.returnValue = true; } catch (err) { log.error('config', 'opslaan bij afsluiten mislukt', err); e.returnValue = false; }
 });
+ipcMain.handle('config:backup', (_e, reason) => config.backup(['import', 'reset', 'restore'].includes(reason) ? reason : 'import'));
+ipcMain.handle('config:backups', () => config.list());
+ipcMain.handle('config:loadBackup', (_e, name) => config.load(String(name)));
+ipcMain.handle('config:openBackups', () => shell.openPath(config.backupDir()));
 ipcMain.handle('config:export', async (_e, cfg) => {
   const res = await dialog.showSaveDialog(win, {
     title: 'Dashboard-indeling exporteren',
@@ -266,236 +292,70 @@ ipcMain.handle('config:import', async () => {
   });
   if (res.canceled || !res.filePaths[0]) return null;
   try {
-    return JSON.parse(fs.readFileSync(res.filePaths[0], 'utf8'));
+    return config.parse(fs.readFileSync(res.filePaths[0], 'utf8'));
   } catch {
-    return { error: 'Dit bestand kon niet worden gelezen.' };
+    return { error: 'Dit bestand is geen leesbare dashboard-indeling.' };
   }
 });
+
+/* ---------- app ---------- */
 ipcMain.handle('app:setAutoStart', (_e, on) => {
   app.setLoginItemSettings({ openAtLogin: !!on });
   return app.getLoginItemSettings().openAtLogin;
 });
 ipcMain.handle('app:version', () => app.getVersion());
-
-/* ---------- app tiles ---------- */
-async function fileIcon(file) {
+ipcMain.handle('app:keepAwake', (_e, on) => watchdog.keepAwake(!!on && !shotPath));
+ipcMain.handle('app:health', () => ({ ...watchdog.stats, awake: watchdog.awake() }));
+ipcMain.handle('app:openLogs', () => shell.openPath(log.dir()));
+// Only the status pages of other dashboards: http on a private or Tailscale address.
+ipcMain.handle('app:openExternal', (_e, url) => {
   try {
-    if (isMac) {
-      // Quick Look hands out the full-size icon of an app bundle; getFileIcon stops at 32 pixels on macOS.
-      try {
-        const thumb = await nativeImage.createThumbnailFromPath(file, { width: 128, height: 128 });
-        if (!thumb.isEmpty()) return thumb.toDataURL();
-      } catch { /* fall through to the small icon */ }
-    }
-    const img = await app.getFileIcon(file, { size: isMac ? 'normal' : 'large' });
-    return img.isEmpty() ? null : img.toDataURL();
-  } catch {
-    return null;
-  }
-}
-
-// Bare program names: on Windows a command in the system folders, on macOS an app by its name.
-const macAppDirs = () => ['/Applications', '/Applications/Utilities', '/System/Applications', '/System/Applications/Utilities', path.join(app.getPath('home'), 'Applications')];
-const expandHome = (file) => (isMac && /^~(?=\/|$)/.test(file) ? path.join(app.getPath('home'), file.slice(1)) : file);
-function resolveBare(name) {
-  if (isMac) {
-    const bundle = /\.app$/i.test(name) ? name : name + '.app';
-    return macAppDirs().map((dir) => path.join(dir, bundle)).find((p) => fs.existsSync(p)) || name;
-  }
-  const winDir = process.env.WINDIR || 'C:\\Windows';
-  return [path.join(winDir, 'System32', name), path.join(winDir, name)].find((p) => fs.existsSync(p)) || name;
-}
-
-// Runs a shell command and reports how it ended; `open` returns as soon as the app has been handed over.
-function runShell(cmd) {
-  return new Promise((resolve) => {
-    let err = '';
-    const child = spawn(cmd, { shell: true, stdio: ['ignore', 'ignore', 'pipe'] });
-    child.stderr.on('data', (d) => { err += d; });
-    child.on('error', (e) => resolve({ ok: false, error: String(e.message || e) }));
-    child.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: err.trim() || `Foutcode ${code}` }));
-  });
-}
-
-ipcMain.handle('tile:pickFile', async () => {
-  const res = await dialog.showOpenDialog(win, isMac ? {
-    title: 'Kies een programma of bestand',
-    defaultPath: '/Applications',
-    properties: ['openFile'],
-  } : {
-    title: 'Kies een programma of bestand',
-    properties: ['openFile'],
-    filters: [
-      { name: 'Programma\'s en snelkoppelingen', extensions: ['exe', 'lnk', 'bat', 'cmd', 'url'] },
-      { name: 'Alle bestanden', extensions: ['*'] },
-    ],
-  });
-  if (res.canceled || !res.filePaths[0]) return null;
-  const file = res.filePaths[0];
-  return { path: file, name: path.basename(file, path.extname(file)), icon: await fileIcon(file) };
+    const u = new URL(String(url));
+    if (u.protocol === 'http:' && screens.isPrivate(u.hostname)) return shell.openExternal(u.toString());
+  } catch { /* not a url */ }
+  return false;
+});
+ipcMain.on('log', (_e, level, msg, detail) => {
+  const fn = { info: log.info, warn: log.warn, error: log.error }[level] || log.info;
+  fn('dashboard', String(msg).slice(0, 500), detail == null ? undefined : String(detail).slice(0, 2000));
 });
 
-// Icon for a tile: the program's own icon, or the site's favicon for web tiles.
-ipcMain.handle('tile:icon', async (_e, tile) => {
-  if (!tile || !tile.target) return null;
-  try {
-    if (tile.kind === 'url') {
-      const url = new URL(/^[a-z]+:\/\//i.test(tile.target) ? tile.target : 'https://' + tile.target);
-      if (!['http:', 'https:'].includes(url.protocol)) return null;
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 8000);
-      try {
-        const res = await fetch(url.origin + '/favicon.ico', { headers: { 'User-Agent': UA }, signal: ctl.signal });
-        const type = (res.headers.get('content-type') || '').split(';')[0];
-        if (!res.ok || !/^image\//.test(type)) return null;
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (!buf.length || buf.length > 300000) return null;
-        return `data:${type};base64,${buf.toString('base64')}`;
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-    let file = expandHome(tile.target.trim());
-    if (!/[\\/]/.test(file)) file = resolveBare(file);
-    return fs.existsSync(file) ? await fileIcon(file) : null;
-  } catch {
-    return null;
-  }
-});
+/* ---------- updates ---------- */
+ipcMain.handle('update:status', () => updater.status());
+ipcMain.handle('update:check', () => updater.check(true));
+ipcMain.handle('update:install', () => updater.install());
+ipcMain.handle('update:justUpdated', () => updater.justUpdated());
 
-ipcMain.handle('tile:launch', async (_e, tile) => {
-  if (!tile || !tile.target) return { ok: false, error: 'Geen doel ingesteld.' };
-  if (tile.kind === 'url') {
-    let url;
-    try {
-      url = new URL(/^[a-z]+:\/\//i.test(tile.target) ? tile.target : 'https://' + tile.target);
-    } catch {
-      return { ok: false, error: 'Ongeldig webadres.' };
-    }
-    if (!['http:', 'https:'].includes(url.protocol)) return { ok: false, error: 'Alleen http(s)-adressen zijn toegestaan.' };
-    await shell.openExternal(url.toString());
-    return { ok: true };
-  }
-  const target = expandHome(tile.target.trim());
-  if (isMac) {
-    const args = (tile.args || '').trim();
-    const quoted = `"${target.replace(/(["\\$`])/g, '\\$1')}"`;
-    // Apps (by name or as a bundle) go through `open`, which also passes the parameters on.
-    if (/\.app\/?$/i.test(target) || !target.includes('/')) return runShell(`open -a ${quoted}` + (args ? ` --args ${args}` : ''));
-    if (!args) {
-      const err = await shell.openPath(target);
-      return err ? { ok: false, error: err } : { ok: true };
-    }
-    try {
-      const child = spawn(`${quoted} ${args}`, { shell: true, detached: true, stdio: 'ignore' });
-      child.on('error', () => {});
-      child.unref();
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  }
-  if (tile.args && tile.args.trim()) {
-    try {
-      const child = spawn(`"${target}" ${tile.args}`, { shell: true, detached: true, stdio: 'ignore', windowsHide: false });
-      child.on('error', () => {});
-      child.unref();
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, error: String(err.message || err) };
-    }
-  }
-  // Bare command names (calc.exe, explorer.exe) resolve through PATH; full paths open with their default handler.
-  if (!/[\\/]/.test(target)) {
-    const child = spawn(target, { shell: true, detached: true, stdio: 'ignore' });
-    child.on('error', () => {});
-    child.unref();
-    return { ok: true };
-  }
-  const err = await shell.openPath(target);
-  return err ? { ok: false, error: err } : { ok: true };
-});
+/* ---------- status for the screens overview ---------- */
+let rendererInfo = {};
+ipcMain.on('status:heartbeat', () => watchdog.heartbeat());
+ipcMain.on('status:report', (_e, info) => { rendererInfo = info && typeof info === 'object' ? info : {}; });
 
-/* ---------- aviation data ---------- */
-async function fetchText(url, timeoutMs = 20000, ua = UA, extra = {}) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': ua, 'Cache-Control': 'no-cache', ...extra }, signal: ctl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-ipcMain.handle('data:metar', async (_e, icao) => {
-  const id = String(icao || 'EHAM').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
-  try {
-    const text = await fetchText(`https://aviationweather.gov/api/data/metar?ids=${id}&format=json&taf=true`);
-    const list = text.trim() ? JSON.parse(text) : [];
-    if (!list.length) return { ok: false, error: `Geen METAR beschikbaar voor ${id}` };
-    const m = list[0];
-    return {
-      ok: true,
-      icao: m.icaoId,
-      name: m.name,
-      raw: m.rawOb,
-      taf: m.rawTaf || null,
-      obsTime: m.obsTime ? m.obsTime * 1000 : null,
-      fltCat: m.fltCat || null,
-      fetchedAt: Date.now(),
-    };
-  } catch (err) {
-    return { ok: false, error: String(err.message || err) };
-  }
-});
-
-// Every METAR and TAF in and around the Netherlands in one go, for the station layer on the weather
-// radar. The source refreshes once a minute; all widgets share one answer in between.
-const WX_BBOX = '50.6,3.0,53.8,7.4';
-let wxCache = null, wxPending = null;
-async function loadWxMap() {
-  const list = async (path) => { const text = await fetchText(`https://aviationweather.gov/api/data/${path}&bbox=${WX_BBOX}&format=json`); return text.trim() ? JSON.parse(text) : []; };
-  const [metars, tafs] = await Promise.all([list('metar?hours=2'), list('taf?').catch(() => null)]);
-  if (!metars.length) throw new Error('Geen METAR-gegevens ontvangen');
+function screenStatus() {
+  const st = watchdog.stats;
+  const displays = screen.getAllDisplays();
+  const u = updater.status();
   return {
-    ok: true,
-    metars: metars.filter((m) => m.rawOb && m.obsTime && m.lat != null).map((m) => ({ icao: m.icaoId, name: m.name, lat: m.lat, lon: m.lon, raw: m.rawOb, obsTime: m.obsTime * 1000 })),
-    tafs: (tafs || []).filter((t) => t.rawTAF).map((t) => ({ icao: t.icaoId, raw: t.rawTAF })),
-    tafOk: !!tafs,
-    fetchedAt: Date.now(),
+    version: app.getVersion(),
+    hostname: os.hostname(),
+    platform: isMac ? `macOS ${process.getSystemVersion()}` : `Windows ${process.getSystemVersion()}`,
+    arch: process.arch,
+    now: Date.now(),
+    startedAt: st.startedAt,
+    window: win && !win.isDestroyed() ? { visible: win.isVisible(), minimized: win.isMinimized(), fullscreen: win.isFullScreen(), focused: win.isFocused() } : null,
+    displays: displays.length,
+    displayList: displays.map((d) => `${d.size.width}×${d.size.height}${d.internal ? ' intern' : ''}`),
+    renderer: { heartbeat: st.heartbeat, alive: !!st.heartbeat && Date.now() - st.heartbeat < 20000, reloads: st.reloads, crashes: st.crashes, webviewCrashes: st.webviewCrashes },
+    awake: watchdog.awake(),
+    locked: st.locked,
+    idleSeconds: powerMonitor.getSystemIdleTime(),
+    page: rendererInfo.page || null,
+    health: Array.isArray(rendererInfo.health) ? rendererInfo.health.slice(0, 10) : [],
+    emergencies: Array.isArray(rendererInfo.emergencies) ? rendererInfo.emergencies.slice(0, 5) : [],
+    update: { state: u.state, latest: u.latest },
   };
 }
-ipcMain.handle('data:wxmap', async () => {
-  if (wxCache && Date.now() - wxCache.fetchedAt < 45000) return wxCache;
-  if (!wxPending) {
-    wxPending = loadWxMap()
-      .then((res) => (wxCache = res))
-      .catch((err) => ({ ok: false, error: String(err.message || err) }))
-      .finally(() => { wxPending = null; });
-  }
-  return wxPending;
-});
-
-// Live traffic for the Vluchtradar and the own aircraft for "In de lucht": one feed, pushed to the
-// dashboard after every round. The renderer renews what it watches every few seconds; without that the
-// feed goes quiet by itself.
-traffic.start(
-  async (url, timeoutMs) => JSON.parse(await fetchText(url, timeoutMs, APP_UA)),
-  (snap) => {
-    const groups = traffic.hexGroups();
-    fleet.ingest(traffic.records(), groups, snap.now);
-    snap.fleet = { ok: snap.ok, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, aircraft: fleet.snapshot(groups, snap.now) };
-    if (win && !win.isDestroyed()) win.webContents.send('traffic:update', snap);
-  }
-);
-fleet.start(async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' })));
-ipcMain.handle('traffic:watch', (_e, req) => { traffic.watch(req); return true; });
-ipcMain.handle('traffic:route', (_e, hex) => fleet.route(hex).catch(() => []));
-
-// Runways actually in use, observed from live ADS-B traffic around the field.
-ipcMain.handle('data:runways', () => {
-  runways.start(async (url) => JSON.parse(await fetchText(url, 8000, APP_UA)));
-  return runways.snapshot();
-});
+ipcMain.handle('screens:info', () => ({ name: screens.name(), port: screens.port(), addresses: screens.addresses(), list: screens.list() }));
+ipcMain.handle('screens:add', (_e, address) => screens.add(address));
+ipcMain.handle('screens:remove', (_e, id) => screens.remove(String(id)));
+ipcMain.handle('screens:rename', (_e, name) => screens.rename(name));

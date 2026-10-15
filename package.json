@@ -1,20 +1,36 @@
 {
   "name": "p-alv-dashboard",
   "productName": "P-ALV Dashboard",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Aanpasbaar operationeel dashboard voor de Police Air Support Unit",
   "author": "P-ALV",
   "license": "UNLICENSED",
   "private": true,
   "main": "src/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Koen-io/palv-dashboard.git"
+  },
+  "palv": {
+    "updateRepo": "Koen-io/palv-dashboard"
+  },
   "scripts": {
     "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "lint": "eslint src test scripts",
+    "check": "npm run lint && npm test",
+    "predist": "npm run check",
     "dist": "electron-builder --win nsis",
-    "dist:mac": "node scripts/build-mac.js"
+    "predist:mac": "npm run check",
+    "dist:mac": "node scripts/build-mac.js",
+    "release": "node scripts/release.js"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "electron": "^38.0.0",
     "electron-builder": "^26.0.0",
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "leaflet": "^1.9.4"
   },
   "build": {
@@ -33,7 +49,9 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "P-ALV Dashboard",
