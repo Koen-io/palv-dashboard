@@ -12,6 +12,9 @@
 const VR_EXTRAP_S = 4;          // carry an aircraft forward along its track at most this long
 const VR_FADE_S = 20;           // position older than this: drawn faded
 const VR_HIDE_S = 60;           // position older than this: not drawn
+// From the OpenSky reserve positions come every 5 to 30 s: carried forward and drawn in full for longer.
+const VR_EXTRAP_RESERVE_S = 20, VR_FADE_RESERVE_S = 35;
+const vrFade = (a) => (a.src === 'OpenSky' ? VR_FADE_RESERVE_S : VR_FADE_S);
 // Redraw interval while on screen. Over the whole country an airliner moves less than a pixel a second,
 // so then once a second (with every new round) is enough; zoomed in on a helicopter up to ten times.
 const vrFrameMs = (zoom) => clamp(Math.round(250 * 2 ** (11 - zoom)), 100, 1000);
@@ -178,7 +181,7 @@ const vrProj = (lat, lon, zoom) => {
 // Where an aircraft is now: its last position, carried forward along its track for at most a few seconds.
 function vrNow(a, now) {
   if (a.lat == null) return null;
-  const dt = Math.min(VR_EXTRAP_S, (now - a.posAt) / 1000);
+  const dt = Math.min(a.src === 'OpenSky' ? VR_EXTRAP_RESERVE_S : VR_EXTRAP_S, (now - a.posAt) / 1000);
   if (a.alt === 'ground' || !(a.gs > 3) || a.track == null || dt <= 0) return [a.lat, a.lon];
   const nm = (a.gs * dt) / 3600, tr = (a.track * Math.PI) / 180;
   return [a.lat + (nm * Math.cos(tr)) / 60, a.lon + (nm * Math.sin(tr)) / (60 * Math.cos((a.lat * Math.PI) / 180))];
@@ -491,7 +494,7 @@ function vrCreate(body, w) {
       const shape = vrShape(a);
       const px = base * VR_SHAPES[shape].s * (own ? 1.25 : 1) * (a.alt === 'ground' ? 0.85 : 1);
       const sp = vrSprite(shape, own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt), style, px, own, dpr);
-      ctx.globalAlpha = age > VR_FADE_S ? 0.45 : 1;
+      ctx.globalAlpha = age > vrFade(a) ? 0.45 : 1;
       if (isSel || alert) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], px * 0.62, 0, Math.PI * 2);
@@ -534,7 +537,7 @@ function vrCreate(body, w) {
         const box = [x - 2, y - 2, x + bw + 2, y + bh + 2];
         if (!own && a.hex !== selected && boxes.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1])) continue;
         boxes.push(box);
-        ctx.globalAlpha = (now - a.posAt) / 1000 > VR_FADE_S ? 0.5 : 1;
+        ctx.globalAlpha = (now - a.posAt) / 1000 > vrFade(a) ? 0.5 : 1;
         ctx.fillStyle = 'rgba(7,13,24,0.86)';
         ctx.beginPath();
         ctx.roundRect(x, y, bw, bh, 3);
@@ -558,6 +561,7 @@ function vrCreate(body, w) {
     let level = 'live', label = 'LIVE', detail = [];
     if (!snap) [level, label] = ['warn', 'LADEN'];
     else if (!snap.ok) [level, label] = ['bad', snap.reason && /beperken/.test(snap.reason) ? 'BRONNEN BEPERKT' : 'GEEN VERBINDING'];
+    else if (snap.reserve) [level, label] = ['warn', 'RESERVE'];
     else if (now - snap.lastOk > 5000) [level, label] = ['warn', 'VERTRAAGD'];
     if (snap) {
       const cats = vrCats(w.cfg);
@@ -566,7 +570,7 @@ function vrCreate(body, w) {
       detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? zuluSec(snap.lastOk) : null, snap.src].filter(Boolean);
     }
     status.className = 'vr-status ' + level;
-    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol. Groen: actueel. Oranje: laden of vertraagd. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid; een bericht ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer.' + (snap && snap.reason ? `\n\nNu: ${snap.reason}` : '');
+    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol; leveren die allebei niets, dan springt OpenSky bij (RESERVE, elke 5 tot 30 seconden). Groen: actueel. Oranje: laden, vertraagd of reserve. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid (bij OpenSky 20 seconden); een bericht ouder dan 20 seconden (bij OpenSky 35) wordt vervaagd getoond, ouder dan 60 seconden niet meer.' + (snap && snap.reason ? `\n\nNu: ${snap.reason}` : '');
     status.replaceChildren(h('span', { class: 'wxm-dot' }), h('b', {}, label), ...detail.map((d) => h('span', {}, d)));
   }
   function paintCard() {

@@ -8,25 +8,37 @@
 // several dashboards share one internet connection. Every request therefore goes through one regulator
 // per source: a minimum time between requests, and after a refusal a pause that grows each time
 // (2, 4, 8 ... up to 60 s, or what the source asks for itself) and is reset by the first success. While
-// one source pauses the other one takes over, so the feed keeps running.
+// one source pauses the other one takes over, so the feed keeps running. When adsb.fi blocks the
+// address outright (403) it is only tried again after minutes, up to once every 30 minutes, because
+// asking again and again only keeps a block in place.
+//
+// When neither brings anything fresh for a few seconds, OpenSky (opensky.js) steps in as a reserve,
+// within its own strict daily budget.
+
+const opensky = require('./opensky');
 
 const FI = 'https://opendata.adsb.fi/api/v2';
 const LOL = 'https://api.adsb.lol/v2';
-const TICK_MS = 1000;      // one round a second
-const LOL_GAP_MS = 6000;   // adsb.lol as a supplement, now and then
+const TICK_MS = 1100;      // one round as often as adsb.fi may be asked
+const LOL_GAP_MS = 10000;  // adsb.lol as a supplement, now and then
+const STALE_MS = 5000;     // nothing fresh from adsb.fi or adsb.lol for this long: OpenSky steps in
 const KEEP_MS = 90000;     // an aircraft is forgotten this long after its last message
 const WATCH_MS = 20000;    // a watcher that has not renewed for this long has gone
 const MAX_NM = 250;        // largest area the sources answer for
 
 // The regulator: minimum spacing between two requests to a source, and the pause after a refusal.
 const SOURCES = {
-  fi: { name: 'adsb.fi', gap: 1000, timeout: 4000 },
-  lol: { name: 'adsb.lol', gap: 3000, timeout: 5000 },
+  // adsb.fi allows one request a second per address: a little room under that.
+  fi: { name: 'adsb.fi', gap: 1100, timeout: 4000 },
+  // adsb.lol refuses quickly when asked every few seconds; also when it has to stand in for adsb.fi.
+  lol: { name: 'adsb.lol', gap: 5000, timeout: 6000 },
 };
 const gate = Object.fromEntries(Object.keys(SOURCES).map((k) => [k, { last: 0, until: 0, refusals: 0, busy: false, ok: 0, fail: 0, lastError: null }]));
 
 const store = new Map(); // hex -> record
-const status = { lastOk: 0, failures: 0, startedAt: 0, src: null, latency: null };
+// lastOk: newest answer from any source; lastAdsb: newest from adsb.fi or adsb.lol, which decides
+// whether OpenSky is needed. loopAt: start of the current round loop, so OpenSky is not asked at start-up.
+const status = { lastOk: 0, lastAdsb: 0, loopAt: 0, failures: 0, startedAt: 0, src: null, latency: null };
 let area = null, areaAt = 0, watchedAt = 0;
 let hexes = new Map(); // hex -> group of the own aircraft
 let fetchJson = null, onUpdate = null, timer = null, round = 0, lastLol = 0;
@@ -53,6 +65,7 @@ function watch(req) {
   if (!looping) {
     looping = true;
     status.startedAt = status.startedAt || now;
+    status.loopAt = now;
     timer = setTimeout(tick, 0);
   }
   return snapshot();
@@ -84,11 +97,13 @@ async function request(src, url) {
     if (m) {
       // Refused: rest, longer each time, or as long as the source asks. "Too many" (429) is over within
       // a minute; "forbidden" (403) means the address is blocked for a while, and asking again and
-      // again only keeps the block in place, so that rests up to 10 minutes.
+      // again only keeps the block in place, so that rests 2, 4, 8, 16 and then 30 minutes.
       g.refusals += 1;
       const blocked = m[1] === '403';
       const asked = err && err.retryAfter ? err.retryAfter * 1000 : 0;
-      const pause = Math.min(blocked ? 600000 : 60000, Math.max(asked, 2000 * 2 ** (g.refusals - 1)));
+      const pause = blocked
+        ? Math.min(1800000, Math.max(asked, 120000 * 2 ** (g.refusals - 1)))
+        : Math.min(60000, Math.max(asked, 2000 * 2 ** (g.refusals - 1)));
       g.until = Date.now() + pause;
       g.blocked = blocked;
       if (g.refusals <= 2 || g.refusals % 5 === 0) log.warn('verkeer', `${SOURCES[src].name} ${blocked ? 'blokkeert dit adres' : 'weigert'} (HTTP ${m[1]}), pauze ${Math.round(pause / 1000)} s`);
@@ -116,7 +131,7 @@ function merge(data, src) {
       r.reg = ac.r || r.reg || null;
       r.type = ac.t || r.type || null;
       r.desc = ac.desc || r.desc || null;
-      r.cat = ac.category || null;
+      r.cat = ac.category || r.cat || null; // OpenSky often has no category: keep what was heard before
       r.alt = ac.alt_baro === 'ground' ? 'ground' : num(ac.alt_baro);
       r.altGeom = num(ac.alt_geom);
       r.gs = num(ac.gs);
@@ -124,7 +139,7 @@ function merge(data, src) {
       r.vs = num(ac.baro_rate) ?? num(ac.geom_rate);
       r.squawk = ac.squawk || null;
       r.emergency = ac.emergency && ac.emergency !== 'none' ? ac.emergency : null;
-      r.mil = !!((ac.dbFlags | 0) & 1);
+      r.mil = ac.dbFlags == null ? !!r.mil : !!((ac.dbFlags | 0) & 1);
       r.mlat = Array.isArray(ac.mlat) && ac.mlat.includes('lat');
     }
     if (num(ac.lat) != null && num(ac.lon) != null) {
@@ -145,9 +160,9 @@ async function tick() {
   } catch (err) {
     log.warn('verkeer', 'ronde mislukt: ' + ((err && err.message) || err));
   }
-  // The next round as soon as a second has passed and adsb.fi may be asked again.
+  // The next round as soon as adsb.fi may be asked again (while it rests, after the usual tick).
   const g = gate.fi, end = Date.now();
-  const fiDue = Math.max(g.last + SOURCES.fi.gap, end < g.until ? end : 0) - end;
+  const fiDue = end < g.until ? 0 : g.last + SOURCES.fi.gap - end;
   timer = setTimeout(tick, Math.max(50, TICK_MS - (end - started), Math.min(fiDue, TICK_MS)));
 }
 
@@ -166,7 +181,17 @@ async function runRound(started) {
     request('lol', `${LOL}/lat/${area.lat}/lon/${area.lon}/dist/${area.nm}`).then((d) => {
       if (!d) return;
       merge(d, 'adsb.lol');
+      status.lastOk = status.lastAdsb = Date.now();
+      if (status.src === 'OpenSky') status.src = 'adsb.lol';
+    });
+  }
+  // The reserve: OpenSky over the area (or the Netherlands) when the others have gone quiet.
+  if (started - Math.max(status.lastAdsb, status.loopAt) > STALE_MS && opensky.ready(started)) {
+    opensky.fetchArea(wantArea ? area : null, started).then((d) => {
+      if (!d || !d.ac.length) return;
+      merge(d, 'OpenSky');
       status.lastOk = Date.now();
+      if (Date.now() - status.lastAdsb > STALE_MS) status.src = 'OpenSky';
     });
   }
   if (path) {
@@ -178,7 +203,7 @@ async function runRound(started) {
   const now = Date.now();
   if (results.length) {
     for (const [src, data] of results) merge(data, src);
-    status.lastOk = now;
+    status.lastOk = status.lastAdsb = now;
     status.failures = 0;
     status.src = results[0][0];
     status.latency = now - started;
@@ -200,6 +225,11 @@ function stop() { clearTimeout(timer); timer = null; looping = false; }
 
 // Why there is no fresh data, in words for the dashboard.
 function reason(now) {
+  const os = opensky.status(now);
+  const reserve = os.configured ? `reserve OpenSky: ${os.lastError || (os.budget ? `nog ${os.budget} verzoeken vandaag` : 'dagbudget op')}` : '';
+  return [sourcesReason(now), reserve].filter(Boolean).join(' · ') || null;
+}
+function sourcesReason(now) {
   const resting = Object.entries(gate).filter(([, g]) => now < g.until).map(([k]) => SOURCES[k].name);
   if (resting.length === Object.keys(SOURCES).length) return `bronnen beperken het aantal verzoeken (${resting.join(', ')})`;
   const errs = Object.entries(gate).map(([k, g]) => g.lastError && `${SOURCES[k].name}: ${g.lastError}`).filter(Boolean);
@@ -226,7 +256,8 @@ function snapshot() {
     startedAt: status.startedAt,
     src: status.src,
     latency: status.latency,
-    reason: ok ? null : reason(now),
+    reason: ok && status.src !== 'OpenSky' ? null : reason(now),
+    reserve: ok && status.src === 'OpenSky', // the newest data came from the reserve
     area,
     tracked: hexes.size,
     ac,
@@ -236,7 +267,7 @@ function snapshot() {
 // Whether the feed has covered a point (with a margin, in NM) in the last few seconds: the runways in
 // use are then read from it rather than asked separately.
 function covers(lat, lon, marginNm, now = Date.now()) {
-  if (!area || now - areaAt > WATCH_MS || now - status.lastOk > 5000) return false;
+  if (!area || now - areaAt > WATCH_MS || now - status.lastAdsb > 5000) return false;
   const d = Math.hypot((lat - area.lat) * 60, (lon - area.lon) * 60 * Math.cos((lat * Math.PI) / 180));
   return d + marginNm <= area.nm;
 }

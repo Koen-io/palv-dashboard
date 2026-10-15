@@ -65,4 +65,8 @@ contextBridge.exposeInMainWorld('palv', {
     onUpdate: (cb) => on('traffic:update', cb),
     route: (hex) => ipcRenderer.invoke('traffic:route', hex),
   },
+  opensky: {
+    status: () => ipcRenderer.invoke('opensky:status'),
+    setKey: (id, secret) => ipcRenderer.invoke('opensky:setKey', id, secret),
+  },
 });

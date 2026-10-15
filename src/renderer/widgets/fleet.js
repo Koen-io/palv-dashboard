@@ -40,7 +40,7 @@ function renderFleet(root, w) {
     });
     root.replaceChildren(
       h('div', { class: 'fl-list' }, rows.length ? rows : h('div', { class: 'fl-empty' }, icon('shield'), h('span', {}, d ? 'Geen eigen toestellen in de lucht' : 'Gegevens worden opgehaald…'))),
-      h('div', { class: 'fl-src', title: 'Eigen eenheden uit de lijsten onder Instellingen › Eigen eenheden; kies met het tandwiel welke deze widget toont. Dezelfde live gegevens als de Vluchtradar: adsb.fi elke seconde, aangevuld met adsb.lol. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' }, h('span', { class: 'dot' }), h('span', { class: 'fl-src-text' }), h('span', { class: 'fl-count' }))
+      h('div', { class: 'fl-src', title: 'Eigen eenheden uit de lijsten onder Instellingen › Eigen eenheden; kies met het tandwiel welke deze widget toont. Dezelfde live gegevens als de Vluchtradar: adsb.fi elke seconde, aangevuld met adsb.lol, met OpenSky als reserve. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' }, h('span', { class: 'dot' }), h('span', { class: 'fl-src-text' }), h('span', { class: 'fl-count' }))
     );
   }
   // Every second: the age of each row's message, and whether the feed itself is live.
@@ -57,7 +57,7 @@ function renderFleet(root, w) {
   const followed = Object.keys(FLEET_GROUPS).filter((g) => fleetGroupsOf(w.cfg).includes(g)).flatMap((g) => hexList(g)).filter((x) => !(w.cfg.hide || []).includes(x)).length;
   if (!d) { dot.className = 'dot warn'; text.textContent = 'Laden…'; }
   else if (!d.ok) { dot.className = 'dot bad'; text.textContent = d.lastOk ? `Geen verbinding · laatst ${zulu(d.lastOk)}` : 'Geen verbinding met live-bron'; }
-  else { dot.className = 'dot' + (now - d.lastOk > 5000 ? ' warn' : ''); text.textContent = `Live · ${zuluSec(d.lastOk)} · ${followed} eenheden gevolgd`; }
+  else { dot.className = 'dot' + (d.reserve || now - d.lastOk > 5000 ? ' warn' : ''); text.textContent = `${d.reserve ? 'Reserve (OpenSky)' : 'Live'} · ${zuluSec(d.lastOk)} · ${followed} eenheden gevolgd`; }
   count.textContent = up ? `${up} in de lucht` : '';
 }
 

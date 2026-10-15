@@ -101,6 +101,52 @@ function openSettings(startTab) {
         ];
       },
     },
+    verkeer: {
+      label: 'Live verkeer', icon: 'plane',
+      build: () => {
+        const id = h('input', { class: 'input', type: 'text', autocomplete: 'off', spellcheck: false, placeholder: 'client id' });
+        const secret = h('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: 'client secret' });
+        const info = h('div', { class: 'sys-ver' }, h('div', {}, h('span', {}, 'Laden…')));
+        const paint = (st) => {
+          id.value = st.clientId || '';
+          secret.placeholder = st.configured ? 'opgeslagen — laat leeg om te houden' : 'client secret';
+          const rest = st.remaining == null ? '— (na de eerste aanvraag)' : String(st.remaining);
+          info.replaceChildren(...[
+            h('div', {}, h('span', {}, 'Sleutel'), h('b', {}, st.configured ? 'Ingesteld' : 'Niet ingesteld')),
+            h('div', {}, h('span', {}, 'Vandaag gebruikt (dit scherm)'), h('b', {}, `${st.usedToday} van max. ${3600}`)),
+            h('div', {}, h('span', {}, 'Over op het account'), h('b', {}, rest)),
+            h('div', {}, h('span', {}, 'Tempo bij inzet'), h('b', {}, st.gapS == null ? 'Gestopt tot morgen (UTC)' : `elke ${st.gapS} s`)),
+            h('div', {}, h('span', {}, 'Laatst geleverd'), h('b', {}, st.lastOkAt ? when(st.lastOkAt) : '—')),
+            st.lastError ? h('div', {}, h('span', {}, 'Laatste melding'), h('b', {}, st.lastError)) : null].filter(Boolean));
+        };
+        const reload = () => window.palv.opensky.status().then(paint).catch(() => {});
+        reload();
+        const saveKey = async () => {
+          const cur = await window.palv.opensky.status();
+          const sec = secret.value.trim();
+          if (!id.value.trim() || (!sec && !cur.configured)) { toast('Vul client id en client secret in'); return; }
+          // An empty secret field keeps the stored secret: it is never sent back to the screen.
+          paint(sec ? await window.palv.opensky.setKey(id.value, sec) : cur);
+          secret.value = '';
+          toast('OpenSky-sleutel opgeslagen');
+        };
+        return [
+          h('h3', {}, 'Bronnen'),
+          h('p', {}, 'De Vluchtradar, "In de lucht" en de noodsquawkbewaking halen hun posities elke seconde bij adsb.fi, aangevuld met adsb.lol. Leveren die allebei langer dan 5 seconden niets vers (een storing, of een bron die dit adres blokkeert), dan springt OpenSky bij als reserve. De Vluchtradar toont dan RESERVE en "In de lucht" "Reserve (OpenSky)".'),
+          h('h3', {}, 'OpenSky-sleutel'),
+          h('p', {}, 'Maak op opensky-network.org onder Account een API-client aan en vul hier client id en client secret in. De sleutel blijft alleen op deze computer (in opensky.json bij de gebruikersgegevens) en gaat niet mee in een export, reservekopie of het schermoverzicht.'),
+          h('div', { class: 'row' }, field('Client id', id), field('Client secret', secret)),
+          h('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' },
+            h('button', { class: 'btn primary', onclick: saveKey }, icon('check'), 'Opslaan'),
+            h('button', { class: 'btn danger', onclick: async () => { paint(await window.palv.opensky.setKey('', '')); toast('OpenSky-sleutel verwijderd'); } }, icon('trash'), 'Sleutel verwijderen')),
+          h('hr'),
+          h('h3', {}, 'Dagbudget'),
+          info,
+          h('p', { class: 'hint-p' }, 'Een account heeft 4000 credits per dag, voor alle schermen met dezelfde sleutel samen. Elke aanvraag kost precies 1 credit: het gebied wordt daarvoor begrensd op ongeveer 115 NM rond het midden van de kaart (zonder kaart: Nederland). Het tempo volgt wat OpenSky zelf als resterend opgeeft, verdeeld over de rest van de dag (UTC), nooit vaker dan elke 5 seconden. Bij 300 resterende credits stopt het tot de volgende dag, en elk scherm doet zelf nooit meer dan 3600 per dag, ook na een herstart.'),
+          h('div', {}, h('button', { class: 'btn', onclick: reload }, icon('refresh'), 'Ververs')),
+        ];
+      },
+    },
     meldingen: {
       label: 'Meldingen', icon: 'alert',
       build: () => [
@@ -227,10 +273,10 @@ function openSettings(startTab) {
           h('p', {}, 'UDP: 15 minuten vóór zonsopkomst tot 15 minuten na zonsondergang op 52°N 005°E, volgens de KNMI-tabellen voor 2026 en 2027. Voor latere jaren wordt gerekend (hooguit één minuut verschil met de tabel) en staat er "BEREKEND" in de balk, tot de tabel van dat jaar is toegevoegd. Het profiel op de weerradar schakelt op deze tijden automatisch tussen het laatst gebruikte dag- en nachtprofiel.'),
           h('p', {}, 'Maan: fase, verlicht percentage, maanop en maanonder voor 52°N 005°E, berekend met de hoofdtermen uit Meeus (Astronomical Algorithms); tijden op een minuut of twee nauwkeurig. Lichtniveau: geschatte verlichtingssterkte op de grond van zon, schemering en maan samen, voor een onbewolkte hemel zonder lichtvervuiling — in lux, onder 1 lux in millilux (mlx). Volle maan hoog aan de hemel geeft zo’n 0,1 tot 0,3 lux; een maanloze sterrenhemel ongeveer 0,6 mlx. Bewolking en stadslicht veranderen de werkelijke waarde sterk.'),
           h('p', {}, 'Actueel baangebruik: live waargenomen uit het vliegverkeer rond Schiphol (ADS-B-gegevens van adsb.lol, reserve adsb.fi), elke 12 seconden bijgewerkt. Een baan wordt getoond wanneer er in het laatste kwartier toestellen op eindnadering of net na de start zijn gezien.'),
-          h('p', {}, 'Vluchtradar en In de lucht: één gezamenlijke live-bron. Posities van adsb.fi, elke seconde opgehaald en direct doorgegeven, aangevuld met adsb.lol; per toestel wint steeds het nieuwste bericht. Op de kaart schuift een toestel tussen twee berichten hooguit 4 seconden door langs zijn koers met zijn grondsnelheid; een positie ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
+          h('p', {}, 'Vluchtradar en In de lucht: één gezamenlijke live-bron. Posities van adsb.fi, elke seconde opgehaald en direct doorgegeven, aangevuld met adsb.lol; per toestel wint steeds het nieuwste bericht. Leveren die allebei niets, dan springt OpenSky Network bij als reserve (zie Instellingen › Live verkeer). Op de kaart schuift een toestel tussen twee berichten hooguit 4 seconden door langs zijn koers met zijn grondsnelheid; een positie ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
           h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap (overdag licht, in de avond vloeiend donker), satelliet Sentinel-2 cloudless van EOX (Copernicus) met de luchtfoto van PDOK boven Nederland, en de topografische kaart van PDOK (Kadaster). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
           h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
-          h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, routes van ADS-B Exchange. Weerradar: Windy.com.'),
+          h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, reserve OpenSky Network, routes van ADS-B Exchange. Weerradar: Windy.com.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),
         ];
       },

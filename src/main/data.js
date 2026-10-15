@@ -1,9 +1,10 @@
 // Aviation data for the dashboard: METAR/TAF of one airfield, all stations around the Netherlands for
 // the weather radar, live traffic for the Vluchtradar and "In de lucht", and the runways in use.
-const { ipcMain } = require('electron');
+const { app, ipcMain } = require('electron');
 const runways = require('../runways');
 const fleet = require('../fleet');
 const traffic = require('../traffic');
+const opensky = require('../opensky');
 const log = require('./log');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -80,12 +81,13 @@ ipcMain.handle('data:wxmap', async () => {
 // dashboard after every round. The renderer renews what it watches every few seconds; without that the
 // feed goes quiet by itself.
 function start(getWin) {
+  opensky.start({ dir: app.getPath('userData'), logger: { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) } });
   traffic.start(
     async (url, timeoutMs) => JSON.parse(await fetchText(url, timeoutMs, APP_UA)),
     (snap) => {
       const groups = traffic.hexGroups();
       fleet.ingest(traffic.records(), groups, snap.now);
-      snap.fleet = { ok: snap.ok, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, aircraft: fleet.snapshot(groups, snap.now) };
+      snap.fleet = { ok: snap.ok, reserve: snap.reserve, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, aircraft: fleet.snapshot(groups, snap.now) };
       const win = getWin();
       // The runways in use, read from the same feed while it covers Schiphol.
       if (traffic.covers(52.31, 4.76, 14, snap.now)) runways.ingest(traffic.records(), snap.now);
@@ -96,6 +98,8 @@ function start(getWin) {
   fleet.start(async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' })));
 }
 ipcMain.handle('traffic:watch', (_e, req) => { traffic.watch(req); return true; });
+ipcMain.handle('opensky:status', () => opensky.status());
+ipcMain.handle('opensky:setKey', (_e, id, secret) => opensky.setKey(id, secret));
 ipcMain.handle('traffic:route', (_e, hex) => fleet.route(hex).catch(() => []));
 
 // Runways actually in use, observed from live ADS-B traffic around the field.
