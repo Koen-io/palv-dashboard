@@ -14,6 +14,8 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const WEB_PARTITION = 'persist:palv-web';
 const isMac = process.platform === 'darwin';
 const pkg = require('../package.json');
+// Where the updates come from; also when a build left it out of its package.json.
+const UPDATE_REPO = (pkg.palv && pkg.palv.updateRepo) || 'Koen-io/palv-dashboard';
 
 // The Mac build is not signed with a developer certificate; without this macOS asks for the login
 // keychain password every time the app has been replaced by a newer version.
@@ -233,7 +235,7 @@ app.whenReady().then(() => {
   data.start(() => win);
   // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
   if (shotPath && !process.argv.includes('--shot-full')) return;
-  if (!shotPath) updater.start({ repository: pkg.palv && pkg.palv.updateRepo, onStatus: (s) => send('update:status', s) });
+  if (!shotPath) updater.start({ repository: UPDATE_REPO, onStatus: (s) => send('update:status', s) });
   screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath });
 });
 

@@ -100,7 +100,8 @@ async function bundleEntries(arch, icns) {
   entries.push({ name: `${res}/icon.icns`, type: 'file', mode: 0o644, data: icns });
 
   const appDir = `${res}/app`;
-  const manifest = { name: pkg.name, productName: pkg.productName, version: pkg.version, description: pkg.description, author: pkg.author, main: pkg.main };
+  // Everything the app reads from its package.json at run time, the update source included.
+  const manifest = { name: pkg.name, productName: pkg.productName, version: pkg.version, description: pkg.description, author: pkg.author, main: pkg.main, repository: pkg.repository, palv: pkg.palv };
   entries.push(
     { name: appDir, type: 'dir', mode: 0o755 },
     { name: `${appDir}/package.json`, type: 'file', mode: 0o644, data: Buffer.from(JSON.stringify(manifest, null, 2)) },

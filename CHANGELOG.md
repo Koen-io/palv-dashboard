@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.14.2
+
+### Opgelost
+- Mac: automatische updates stonden uit, omdat de Mac-build de GitHub-koppeling niet meenam
+
 ## 1.14.1
 
 ### Verbeterd
