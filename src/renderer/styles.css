@@ -565,3 +565,65 @@ select.input option { background: var(--surface); color: var(--text); }
 
 ::-webkit-scrollbar { width: 0.6rem; height: 0.6rem; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+
+/* ---------- In de lucht: settings ---------- */
+.fl-row.stale { opacity: 0.55; }
+.fl-cats { display: flex; flex-direction: column; gap: 0.7rem; }
+.fl-cat { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.55rem 0.75rem; background: var(--surface-2); }
+.fl-cat-head { font-weight: 700; position: relative; }
+.fl-cat-head .fl-bar { position: static; display: inline-block; width: 0.28rem; height: 1rem; border-radius: 2px; background: var(--owl-500); }
+.fl-cat.hems .fl-cat-head .fl-bar { background: #e5484d; }
+.fl-cat.coastguard .fl-cat-head .fl-bar { background: var(--amber); }
+.fl-cat-head small { margin-left: auto; color: var(--muted); font-weight: 500; }
+.fl-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.35rem 1rem; margin: 0.5rem 0 0 1.65rem; }
+.fl-units.off { opacity: 0.45; }
+.fl-unit b { font-family: var(--font-display); letter-spacing: 0.03em; }
+.fl-unit span { color: var(--muted); font-size: 0.78rem; }
+
+/* ---------- Vluchtradar ---------- */
+.vr-map { position: absolute; inset: 0; background: #0e1726; font-family: var(--font-ui); }
+html[data-theme="light"] .vr-map { background: #dfe6ee; }
+.vr-map.pointing, .vr-map.pointing .leaflet-interactive { cursor: pointer; }
+.vr-map .leaflet-container, .vr-map.leaflet-container { background: inherit; font: inherit; }
+.vr-map.dim .leaflet-vrBase-pane, .vr-map.dim .leaflet-vrUnder-pane { filter: brightness(0.5) contrast(1.1) saturate(0.55); }
+.vr-map .leaflet-control-attribution { background: rgba(7, 13, 24, 0.7); color: #a9bad3; font-size: 0.62rem; padding: 0.05rem 0.4rem; border-top-left-radius: 4px; }
+.vr-map .leaflet-control-attribution a { color: #c6d4e8; }
+.vr-map .leaflet-bar { border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+.vr-map .leaflet-bar a { width: 1.9rem; height: 1.9rem; line-height: 1.9rem; font-size: 1.1rem; background: rgba(7, 13, 24, 0.88); color: #e9eff8; border-bottom-color: rgba(255, 255, 255, 0.14); }
+.vr-map .leaflet-bar a:hover { background: #1f3050; color: #fff; }
+.vr-map .leaflet-bottom.leaflet-right .leaflet-bar { margin-bottom: 1.6rem; }
+
+.vr-status { position: absolute; left: 0.5rem; top: 0.5rem; z-index: 1000; display: flex; align-items: center; gap: 0.6rem; padding: 0.32rem 0.7rem; border-radius: 99px; background: rgba(7, 13, 24, 0.88); border: 1px solid rgba(255, 255, 255, 0.16); color: #c6d4e8; font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); pointer-events: auto; }
+.vr-status b { color: #fff; letter-spacing: 0.08em; }
+.vr-status .wxm-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #ffb020; flex: none; }
+.vr-status.bad .wxm-dot { background: #ff5148; }
+.vr-status.live .wxm-dot { background: #3ecf6e; animation: wxm-pulse 1.6s ease-out infinite; }
+
+.vr-corner { position: absolute; left: 0.5rem; bottom: 0.5rem; z-index: 1000; display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; pointer-events: none; }
+.vr-scale { display: flex; align-items: flex-end; gap: 0.4rem; color: #fff; font-size: 0.68rem; font-weight: 700; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+.vr-scale i { display: block; height: 0.45rem; border: 2px solid #fff; border-top: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+.vr-legend { width: 15rem; max-width: 60vw; padding: 0.3rem 0.45rem 0.25rem; border-radius: 4px; background: rgba(7, 13, 24, 0.82); border: 1px solid rgba(255, 255, 255, 0.14); pointer-events: auto; }
+.vr-legend[hidden] { display: none; }
+.vr-legend-bar { height: 0.42rem; border-radius: 2px; }
+.vr-legend-ticks { display: flex; justify-content: space-between; margin-top: 0.15rem; font-size: 0.6rem; color: #c6d4e8; font-variant-numeric: tabular-nums; }
+
+.vr-card { position: absolute; right: 0.5rem; top: 0.5rem; z-index: 1000; width: 17rem; max-width: calc(100% - 1rem); padding: 0.6rem 0.75rem 0.7rem; border-radius: 6px; background: rgba(9, 16, 28, 0.94); border: 1px solid #2b3d5c; border-left: 4px solid var(--vr-c, #8fb7e6); color: #e9eff8; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.vr-card[hidden] { display: none; }
+.vr-card-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.vr-card-head b { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: 0.04em; }
+.vr-card-head span { flex: 1; color: #a9bad3; font-size: 0.78rem; }
+.vr-card-head .w-tool { color: #a9bad3; margin: -0.3rem -0.4rem 0 0; }
+.vr-card-desc { color: #8ea2bf; font-size: 0.72rem; margin-top: 0.1rem; }
+.vr-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem 0.8rem; margin-top: 0.55rem; }
+.vr-card-grid span { display: block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; color: #8ea2bf; }
+.vr-card-grid b { font-size: 0.86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.vr-pop { position: absolute; right: 0.5rem; top: 0.5rem; z-index: 1100; width: 16rem; padding: 0.4rem 0.9rem 0.7rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); color: var(--text); display: flex; flex-direction: column; gap: 0.45rem; }
+.vr-pop[hidden] { display: none; }
+.vr-pop h4 { margin: 0.5rem 0 0.1rem; font-size: 0.68rem; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+.vr-pop p { margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--muted); }
+.vr-pop .check { font-size: 0.84rem; }
+.vr-pop input[type="radio"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+
+.w-head .chips button { gap: 0.3rem; }
+@container (max-width: 60rem) { .w-head .chips button svg { display: none; } }

@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('palv', {
     metar: (icao) => ipcRenderer.invoke('data:metar', icao),
     wxmap: () => ipcRenderer.invoke('data:wxmap'),
     runways: () => ipcRenderer.invoke('data:runways'),
-    fleet: (groups) => ipcRenderer.invoke('data:fleet', groups),
+  },
+  traffic: {
+    watch: (req) => ipcRenderer.invoke('traffic:watch', req),
+    onUpdate: (cb) => ipcRenderer.on('traffic:update', (_e, snap) => cb(snap)),
+    route: (hex) => ipcRenderer.invoke('traffic:route', hex),
   },
 });

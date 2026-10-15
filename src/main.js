@@ -4,6 +4,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const runways = require('./runways');
 const fleet = require('./fleet');
+const traffic = require('./traffic');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
@@ -210,6 +211,12 @@ app.whenReady().then(() => {
   const webSession = session.fromPartition(WEB_PARTITION);
   webSession.setUserAgent(UA);
   webSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'fullscreen'));
+
+  // OpenStreetMap asks every application that uses its tiles to identify itself.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://tile.openstreetmap.org/*'] }, (details, cb) => {
+    details.requestHeaders['User-Agent'] = `P-ALV-Dashboard/${app.getVersion()} (Electron desktop dashboard)`;
+    cb({ requestHeaders: details.requestHeaders });
+  });
 
   createWindow();
 });
@@ -471,17 +478,23 @@ ipcMain.handle('data:wxmap', async () => {
   return wxPending;
 });
 
-// Runways actually in use, observed from live ADS-B traffic around the field.
-// Own aircraft in the air; the renderer hands over the Mode-S codes from the settings with every call.
-ipcMain.handle('data:fleet', (_e, groups) => {
-  fleet.setHexes(groups);
-  fleet.start(
-    async (url) => JSON.parse(await fetchText(url, 8000, APP_UA)),
-    async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' }))
-  );
-  return fleet.snapshot();
-});
+// Live traffic for the Vluchtradar and the own aircraft for "In de lucht": one feed, pushed to the
+// dashboard after every round. The renderer renews what it watches every few seconds; without that the
+// feed goes quiet by itself.
+traffic.start(
+  async (url, timeoutMs) => JSON.parse(await fetchText(url, timeoutMs, APP_UA)),
+  (snap) => {
+    const groups = traffic.hexGroups();
+    fleet.ingest(traffic.records(), groups, snap.now);
+    snap.fleet = { ok: snap.ok, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, aircraft: fleet.snapshot(groups, snap.now) };
+    if (win && !win.isDestroyed()) win.webContents.send('traffic:update', snap);
+  }
+);
+fleet.start(async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' })));
+ipcMain.handle('traffic:watch', (_e, req) => { traffic.watch(req); return true; });
+ipcMain.handle('traffic:route', (_e, hex) => fleet.route(hex).catch(() => []));
 
+// Runways actually in use, observed from live ADS-B traffic around the field.
 ipcMain.handle('data:runways', () => {
   runways.start(async (url) => JSON.parse(await fetchText(url, 8000, APP_UA)));
   return runways.snapshot();

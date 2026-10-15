@@ -72,22 +72,37 @@ const ICONS = {
   route: '<circle cx="6" cy="18.5" r="2.2"/><circle cx="18" cy="5.5" r="2.2"/><path d="M8.2 18.5H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.8"/>',
   wind: '<path d="M3 9h10a3 3 0 1 0-3-3M3 14h15a3 3 0 1 1-3 3M3 19h6"/>',
   target: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2v4.5M12 17.5V22M2 12h4.5M17.5 12H22"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>',
 };
 const icon = (name, cls) =>
   h('span', { class: cls || '', style: 'display:contents', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${cls || ''}">${ICONS[name] || ''}</svg>` }).firstChild;
 
 /* ---------- defaults ---------- */
-// Mode-S hex codes; editable under Instellingen > ADS-B filter.
+// Mode-S hex codes; editable under Instellingen > Eigen eenheden.
 const DEFAULT_HEX = {
   police: '484A91, 484A92, 484A93, 484A94, 484A95, 484A96, 484AC0, 484AC1, 485B2F',
   hems: '4843BB, 4843BE, 4844C2, 484B58, 4853E2, 4853F6, 4857B3, 485E49, 48605B, 48605C',
   coastguard: '485694, 4856F3, 486449, 48644A, 48644B, 485F8F',
 };
+// Registration and type of the standard units, for the unit lists; units heard on the air add their own.
+const UNIT_INFO = {
+  '484a91': ['PH-PXA', 'EC135'], '484a92': ['PH-PXB', 'EC135'], '484a93': ['PH-PXC', 'EC135'], '484a94': ['PH-PXD', 'EC135'],
+  '484a95': ['PH-PXE', 'EC135'], '484a96': ['PH-PXF', 'EC135'], '484ac0': ['PH-PXZ', 'AW139'], '484ac1': ['PH-PXY', 'AW139'], '485b2f': ['PH-PXX', 'AW139'],
+  '4844c2': ['PH-MAA', 'EC135'], '484b58': ['PH-HVB', 'EC135'], '4853e2': ['PH-OOP', 'H145'], '4853f6': ['PH-HOW', 'H145'], '4857b3': ['PH-TTR', 'EC135'],
+  '485e49': ['PH-DOC', 'EC135'], '48605b': ['PH-LLN', 'EC135'], '48605c': ['PH-UMC', 'EC135'],
+  '485694': ['PH-CGA', 'Dash 8'], '4856f3': ['PH-CGB', 'Dash 8'], '486449': ['PH-SAR', 'AW189'], '48644b': ['PH-NCG', 'AW189'],
+};
+const UNIT_NAMES = (hex) => {
+  const learned = state && state.settings.unitInfo && state.settings.unitInfo[hex];
+  if (learned) return learned;
+  const k = UNIT_INFO[hex];
+  return k ? { reg: k[0], type: k[1] } : null;
+};
 
 function defaultState() {
   const tile = (x, y, title, kind, target) => ({ id: uid(), type: 'tile', x, y, w: 12, h: 9, z: 1, title, cfg: { kind, target, args: '', icon: null } });
   return {
-    version: 5,
+    version: 6,
     settings: {
       theme: 'auto',
       autoMode: 'sun',
@@ -107,6 +122,7 @@ function defaultState() {
         { label: 'UTC', tz: 'UTC', suffix: 'Z' },
       ],
       hex: { ...DEFAULT_HEX },
+      unitInfo: {},
     },
     activePage: 0,
     pages: [
@@ -114,7 +130,7 @@ function defaultState() {
         id: uid(),
         name: 'Operationeel',
         widgets: [
-          { id: uid(), type: 'adsb', x: 0, y: 0, w: 36, h: 54, z: 1, title: WIDGETS.adsb.name, cfg: { ...WIDGETS.adsb.defaults, mode: 'police', labels: true } },
+          { id: uid(), type: 'radar', x: 0, y: 0, w: 36, h: 54, z: 1, title: WIDGETS.radar.name, cfg: { ...WIDGETS.radar.defaults, cats: ['police', 'hems', 'coastguard'], labels: true } },
           { id: uid(), type: 'windy', x: 36, y: 0, w: 36, h: 54, z: 2, title: 'Weerradar', cfg: { ...WIDGETS.windy.defaults } },
           tile(72, 0, 'LVNL Baangebruik', 'url', 'https://www.lvnl.nl/omgeving/actueel-baangebruik-schiphol'),
           tile(84, 0, 'KNMI Luchtvaart', 'url', 'https://www.knmi.nl/nederland-nu/luchtvaart'),
@@ -163,8 +179,9 @@ function normalize(loaded) {
   const fromV1 = from < 2;
   loaded.settings = { ...def.settings, ...(loaded.settings || {}) };
   if (fromV1) loaded.settings.startFullscreen = true;
-  loaded.version = 5;
+  loaded.version = 6;
   loaded.settings.hex = { ...def.settings.hex, ...(loaded.settings.hex || {}) };
+  if (!loaded.settings.unitInfo || typeof loaded.settings.unitInfo !== 'object') loaded.settings.unitInfo = {};
   if (!Array.isArray(loaded.settings.clocks) || loaded.settings.clocks.length !== 2) loaded.settings.clocks = def.settings.clocks;
   for (const p of loaded.pages) {
     p.id = p.id || uid();
@@ -183,6 +200,7 @@ function normalize(loaded) {
   if (from < 3) migrateV3(loaded);
   if (from < 4) migrateV4(loaded);
   if (from < 5) migrateV5(loaded);
+  if (from < 6) migrateV6(loaded);
   loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
   return loaded;
 }
@@ -253,6 +271,19 @@ function migrateV5(st) {
   page.widgets.push({ id: uid(), type: 'fleet', ...spot, z: Math.max(0, ...page.widgets.map((o) => o.z || 1)) + 1, title: WIDGETS.fleet.name, cfg: {} });
 }
 
+// 1.12: the ADS-B Exchange page makes way for the dashboard's own Vluchtradar, in the same place, with
+// the same view, filter, labels and routes. The old page stays available under Toevoegen.
+function migrateV6(st) {
+  const CATS = { all: ['all'], mil: ['mil'], police: ['police', 'hems', 'coastguard'] };
+  for (const w of st.pages.flatMap((p) => p.widgets)) {
+    if (w.type !== 'adsb') continue;
+    const c = w.cfg;
+    w.type = 'radar';
+    if (['ADS-B', 'ADS-B Exchange', 'ADS-B Exchange (website)'].includes(w.title)) w.title = WIDGETS.radar.name;
+    w.cfg = { ...WIDGETS.radar.defaults, cats: CATS[c.mode] || ['all'], labels: !!c.labels, routes: c.trails !== false, lat: c.lat, lon: c.lon, zoom: c.zoom, refH: c.refH };
+  }
+}
+
 /* ---------- toasts & modals ---------- */
 function toast(msg, isError) {
   const el = h('div', { class: 'toast' + (isError ? ' error' : '') }, msg);
@@ -306,6 +337,27 @@ function segmented(options, value, onChange) {
   }
   paint(value);
   el.setValue = paint;
+  return el;
+}
+
+// Like segmented, but several can be on together; 'all' stands on its own and is what remains when nothing is.
+function chips(options, values, onChange) {
+  const el = h('div', { class: 'seg chips' });
+  let cur = new Set(values && values.length ? values : ['all']);
+  const paint = () => [...el.children].forEach((b) => b.classList.toggle('on', cur.has(b.dataset.v)));
+  for (const o of options) {
+    el.append(h('button', { 'data-v': o.value, title: o.title || null, onclick: () => {
+      if (o.value === 'all') cur = new Set(['all']);
+      else {
+        cur.delete('all');
+        if (cur.has(o.value)) cur.delete(o.value); else cur.add(o.value);
+        if (!cur.size) cur.add('all');
+      }
+      paint();
+      onChange(options.map((x) => x.value).filter((v) => cur.has(v)));
+    } }, o.icon ? icon(o.icon) : null, h('span', {}, o.label)));
+  }
+  paint();
   return el;
 }
 
@@ -755,57 +807,115 @@ function paintHealth() {
   );
 }
 
-/* ---------- own aircraft in the air ---------- */
+/* ---------- live traffic: one feed for the Vluchtradar and "In de lucht" ---------- */
+// The main process pushes a new round every second while someone watches. Each watcher may name an area
+// (a radar on screen); the feed covers all of them, and always the own aircraft by their codes.
 const FLEET_GROUPS = { police: 'Politie', hems: 'Trauma', coastguard: 'Kustwacht' };
-const fleetFeed = { data: null, views: new Set(), timer: null };
-async function refreshFleet() {
+const trafficFeed = { snap: null, subs: new Map(), timer: null };
+
+function trafficWatch() {
+  if (!trafficFeed.subs.size) return;
+  const areas = [...trafficFeed.subs.values()].map((f) => f && f()).filter(Boolean);
+  let area = null;
+  if (areas.length) {
+    const lat = areas.reduce((n, a) => n + a.lat, 0) / areas.length, lon = areas.reduce((n, a) => n + a.lon, 0) / areas.length;
+    const nm = Math.max(...areas.map((a) => Math.hypot((a.lat - lat) * 60, (a.lon - lon) * 60 * Math.cos((lat * Math.PI) / 180)) + a.nm));
+    area = { lat, lon, nm };
+  }
   const groups = Object.fromEntries(Object.keys(FLEET_GROUPS).map((k) => [k, hexList(k)]));
-  const res = await window.palv.data.fleet(groups).catch(() => null);
-  fleetFeed.data = res || (fleetFeed.data && { ...fleetFeed.data, ok: false });
-  for (const paint of fleetFeed.views) paint();
-  const d = fleetFeed.data;
-  report('fleet', 'In de lucht', !!(d && d.ok), d && d.lastOk ? `laatst ${zulu(d.lastOk)}` : 'geen verbinding', 3 * 60000);
+  window.palv.traffic.watch({ area, groups }).catch(() => {});
 }
-function watchFleet(paint) {
-  fleetFeed.views.add(paint);
-  if (!fleetFeed.timer) { fleetFeed.timer = setInterval(refreshFleet, 10000); refreshFleet(); }
+function watchTraffic(fn, areaFn) {
+  trafficFeed.subs.set(fn, areaFn || null);
+  if (!trafficFeed.timer) trafficFeed.timer = setInterval(trafficWatch, 4000);
+  trafficWatch();
+  if (trafficFeed.snap) fn(trafficFeed.snap);
   return () => {
-    fleetFeed.views.delete(paint);
-    if (!fleetFeed.views.size) { clearInterval(fleetFeed.timer); fleetFeed.timer = null; report('fleet'); }
+    trafficFeed.subs.delete(fn);
+    if (trafficFeed.subs.size) trafficWatch();
+    else { clearInterval(trafficFeed.timer); trafficFeed.timer = null; }
   };
+}
+// Registration and type of the own units as heard on the air, for the unit lists in the settings.
+function learnUnits(fleet) {
+  let changed = false;
+  for (const a of fleet.aircraft) {
+    if (!a.reg) continue;
+    const cur = state.settings.unitInfo[a.hex];
+    if (cur && cur.reg === a.reg && cur.type === (a.type || cur.type)) continue;
+    state.settings.unitInfo[a.hex] = { reg: a.reg, type: a.type || (cur && cur.type) || null };
+    changed = true;
+  }
+  if (changed) save();
+}
+window.palv.traffic.onUpdate((snap) => {
+  if (!state) return; // a round from before a reload, while the dashboard is still starting
+  trafficFeed.snap = snap;
+  vrRecord(snap);
+  if (snap.fleet) learnUnits(snap.fleet);
+  for (const fn of trafficFeed.subs.keys()) fn(snap);
+});
+
+/* ---------- own aircraft in the air ---------- */
+const fleetViews = new Set();
+function fleetHealth() {
+  if (!fleetViews.size) return report('fleet');
+  const d = trafficFeed.snap && trafficFeed.snap.fleet;
+  report('fleet', 'In de lucht', !!(d && d.ok), d && d.lastOk ? `laatst ${zulu(d.lastOk)}` : 'geen verbinding', 2 * 60000);
 }
 
 const flightTime = (ms) => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 60)}:${pad2(m % 60)}`; };
+const zuluSec = (ms) => { const d = new Date(ms); return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}Z`; };
+// Which own units a widget shows: per category, and per unit within it.
+const fleetGroupsOf = (cfg) => (Array.isArray(cfg.groups) ? cfg.groups : Object.keys(FLEET_GROUPS));
+const fleetShows = (cfg, a) => fleetGroupsOf(cfg).includes(a.group) && !(cfg.hide || []).includes(a.hex) && (cfg.ground !== false || !a.onGround);
 
-function renderFleet(root) {
-  const d = fleetFeed.data, now = Date.now();
-  const list = d ? d.aircraft : [];
-  const rows = list.map((a) => {
-    const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
-    const climb = a.vs == null || Math.abs(a.vs) < 300 ? '' : a.vs > 0 ? ' ▲' : ' ▼';
-    const time = a.onGround
-      ? h('div', { class: 'fl-time' }, h('span', { class: 'fl-ground' }, 'GROND'))
-      : h('div', { class: 'fl-time', title: a.approx ? (a.atLeast ? 'Was al in de lucht toen het dashboard startte; vliegt minstens zo lang.' : 'Starttijd niet uit de route te halen; geteld vanaf de eerste waarneming.') : `Gestart om ${zulu(a.takeoff)}` },
-        h('b', {}, (a.atLeast ? '≥ ' : a.approx ? '≈ ' : '') + flightTime(now - a.takeoff)),
-        h('small', {}, a.atLeast ? 'vliegtijd' : `start ${zulu(a.takeoff)}`));
-    return h('div', { class: 'fl-row ' + a.group + (a.onGround ? ' ground' : '') + (alert ? ' alert' : ''), title: `${a.reg || a.hex.toUpperCase()}${a.type ? ' · ' + a.type : ''} · ${FLEET_GROUPS[a.group] || ''}${a.squawk ? ' · squawk ' + a.squawk : ''} · ${a.ageS} s geleden` },
-      h('i', { class: 'fl-bar' }),
-      h('div', { class: 'fl-id' }, h('b', {}, a.flight || a.reg || a.hex.toUpperCase()), h('small', {}, [a.flight && a.reg ? a.reg : null, a.type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · '))),
-      alert ? h('span', { class: 'fl-sq' }, a.emergency ? a.emergency.toUpperCase() : a.squawk) : null,
-      h('div', { class: 'fl-num' }, h('b', {}, a.alt == null ? '—' : a.alt.toLocaleString('nl-NL')), h('small', {}, 'ft' + climb)),
-      h('div', { class: 'fl-num fl-gs' }, h('b', {}, a.gs == null ? '—' : a.gs), h('small', {}, 'kt')),
-      time);
-  });
+function renderFleet(root, w) {
+  const d = trafficFeed.snap && trafficFeed.snap.fleet, now = Date.now();
+  const list = d ? d.aircraft.filter((a) => fleetShows(w.cfg, a)) : [];
+  // The rows are only rebuilt when something in them changes; the line below them follows every second.
+  const sig = JSON.stringify([!!d, list.map((a) => [a.hex, a.flight, a.alt, a.gs, a.vs != null && Math.abs(a.vs) >= 300 ? Math.sign(a.vs) : 0, a.onGround, a.squawk, a.emergency, a.takeoff, a.approx, a.atLeast]), Math.floor(now / 60000)]);
+  if (root.dataset.sig !== sig || !root.firstChild) {
+    root.dataset.sig = sig;
+    const rows = list.map((a) => {
+      const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
+      const climb = a.vs == null || Math.abs(a.vs) < 300 ? '' : a.vs > 0 ? ' ▲' : ' ▼';
+      const unit = UNIT_NAMES(a.hex);
+      const reg = a.reg || (unit && unit.reg), type = a.type || (unit && unit.type);
+      const time = a.onGround
+        ? h('div', { class: 'fl-time' }, h('span', { class: 'fl-ground' }, 'GROND'))
+        : h('div', { class: 'fl-time', title: a.approx ? (a.atLeast ? 'Was al in de lucht toen het dashboard startte; vliegt minstens zo lang.' : 'Starttijd niet uit de route te halen; geteld vanaf de eerste waarneming.') : `Gestart om ${zulu(a.takeoff)}` },
+          h('b', {}, (a.atLeast ? '≥ ' : a.approx ? '≈ ' : '') + flightTime(now - a.takeoff)),
+          h('small', {}, a.atLeast ? 'vliegtijd' : `start ${zulu(a.takeoff)}`));
+      return h('div', { class: 'fl-row ' + a.group + (a.onGround ? ' ground' : '') + (alert ? ' alert' : ''), 'data-hex': a.hex },
+        h('i', { class: 'fl-bar' }),
+        h('div', { class: 'fl-id' }, h('b', {}, a.flight || reg || a.hex.toUpperCase()), h('small', {}, [a.flight && reg ? reg : null, type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · '))),
+        alert ? h('span', { class: 'fl-sq' }, a.emergency ? a.emergency.toUpperCase() : a.squawk) : null,
+        h('div', { class: 'fl-num' }, h('b', {}, a.alt == null ? '—' : a.alt.toLocaleString('nl-NL')), h('small', {}, 'ft' + climb)),
+        h('div', { class: 'fl-num fl-gs' }, h('b', {}, a.gs == null ? '—' : a.gs), h('small', {}, 'kt')),
+        time);
+    });
+    root.replaceChildren(
+      h('div', { class: 'fl-list' }, rows.length ? rows : h('div', { class: 'fl-empty' }, icon('shield'), h('span', {}, d ? 'Geen eigen toestellen in de lucht' : 'Gegevens worden opgehaald…'))),
+      h('div', { class: 'fl-src', title: 'Eigen eenheden uit de lijsten onder Instellingen › Eigen eenheden; kies met het tandwiel welke deze widget toont. Dezelfde live gegevens als de Vluchtradar: adsb.fi elke seconde, aangevuld met adsb.lol. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' }, h('span', { class: 'dot' }), h('span', { class: 'fl-src-text' }), h('span', { class: 'fl-count' }))
+    );
+  }
+  // Every second: the age of each row's message, and whether the feed itself is live.
+  for (const row of root.querySelectorAll('.fl-row')) {
+    const a = list.find((x) => x.hex === row.dataset.hex);
+    if (!a) continue;
+    const unit = UNIT_NAMES(a.hex);
+    row.title = `${a.reg || (unit && unit.reg) || a.hex.toUpperCase()}${a.type ? ' · ' + a.type : ''} · ${FLEET_GROUPS[a.group] || ''}${a.squawk ? ' · squawk ' + a.squawk : ''} · laatste bericht ${Math.max(0, (now - a.msgAt) / 1000).toFixed(1).replace('.', ',')} s geleden via ${a.src || '—'}`;
+    row.classList.toggle('stale', now - a.msgAt > 20000);
+  }
+  const dot = root.querySelector('.fl-src .dot'), text = root.querySelector('.fl-src-text'), count = root.querySelector('.fl-count');
+  if (!dot) return;
   const up = list.filter((a) => !a.onGround).length;
-  let dot = '', src;
-  if (!d) { dot = 'warn'; src = 'Laden…'; }
-  else if (!d.ok) { dot = 'bad'; src = d.lastOk ? `Geen verbinding · laatst ${zulu(d.lastOk)}` : 'Geen verbinding met live-bron'; }
-  else src = `Live · ${zulu(d.lastOk)} · ${d.tracked} toestellen gevolgd`;
-  root.replaceChildren(
-    h('div', { class: 'fl-list' }, rows.length ? rows : h('div', { class: 'fl-empty' }, icon('shield'), h('span', {}, d ? 'Geen eigen toestellen in de lucht' : 'Gegevens worden opgehaald…'))),
-    h('div', { class: 'fl-src', title: 'Politie-, trauma- en kustwachttoestellen uit de lijsten onder Instellingen › ADS-B filter. Posities van adsb.lol (reserve adsb.fi), elke 10 seconden. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' },
-      h('span', { class: 'dot ' + dot }), src, up ? h('span', { class: 'fl-count' }, `${up} in de lucht`) : null)
-  );
+  const followed = Object.keys(FLEET_GROUPS).filter((g) => fleetGroupsOf(w.cfg).includes(g)).flatMap((g) => hexList(g)).filter((x) => !(w.cfg.hide || []).includes(x)).length;
+  if (!d) { dot.className = 'dot warn'; text.textContent = 'Laden…'; }
+  else if (!d.ok) { dot.className = 'dot bad'; text.textContent = d.lastOk ? `Geen verbinding · laatst ${zulu(d.lastOk)}` : 'Geen verbinding met live-bron'; }
+  else { dot.className = 'dot' + (now - d.lastOk > 5000 ? ' warn' : ''); text.textContent = `Live · ${zuluSec(d.lastOk)} · ${followed} eenheden gevolgd`; }
+  count.textContent = up ? `${up} in de lucht` : '';
 }
 
 /* ============================================================
@@ -1101,9 +1211,118 @@ function switchTool(label, title, isOn, onToggle) {
 }
 
 const WIDGETS = {
+  radar: {
+    name: 'Vluchtradar',
+    desc: 'Eigen live vliegradar zonder reclame: al het ADS-B-verkeer op OpenStreetMap, filters per categorie, labels, routes en kaartlagen.',
+    icon: 'plane',
+    size: [54, 54],
+    defaults: { cats: ['all'], lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, labels: false, routes: true, base: 'osm', overlays: ['legend'] },
+    mount(w, body, tools) {
+      const vr = vrCreate(body, w);
+      // The view: the standard one from the settings, until the map is moved by hand; that view then holds,
+      // through every change in size, until the button with the target puts the standard one back.
+      let user = null, placing = false, refit = null;
+      const fit = () => {
+        if (body.clientWidth < 50 || body.clientHeight < 50) return;
+        const at = user || w.cfg;
+        placing = true;
+        vr.map.invalidateSize(false);
+        vr.map.setView([+at.lat, +at.lon], at.refH ? +at.zoom + fitDelta(body, at.refH) : +at.zoom, { animate: false });
+        placing = false;
+        vr.paintScale();
+      };
+      vr.map.on('moveend', () => {
+        if (placing) return;
+        const c = vr.map.getCenter();
+        user = { lat: c.lat, lon: c.lng, zoom: vr.map.getZoom() - fitDelta(body, REF_H), refH: REF_H };
+        trafficWatch();
+      });
+      const ro = new ResizeObserver(() => { clearTimeout(refit); refit = setTimeout(fit, 120); });
+      ro.observe(body);
+      requestAnimationFrame(fit);
+      vr.applyLayers();
+
+      // The feed covers what this map shows, while it is on screen.
+      const area = () => {
+        if (!onScreen(body) || body.clientWidth < 50) return null;
+        const b = vr.map.getBounds(), c = b.getCenter();
+        return { lat: c.lat, lon: c.lng, nm: (vr.map.distance(c, b.getNorthEast()) / 1852) * 1.15 + 5 };
+      };
+      const hkey = 'vluchtradar:' + w.id;
+      const checkHealth = () => {
+        const snap = trafficFeed.snap;
+        if (!onScreen(body)) return report(hkey);
+        report(hkey, 'Vluchtradar', !!snap && snap.ok && Date.now() - snap.lastOk < 30000, snap && snap.lastOk ? `geen verkeersdata sinds ${zulu(snap.lastOk)}` : 'geen verbinding', 60000);
+      };
+      // Drawn with every new round, and in between as often as the zoom level makes movement visible.
+      let shown = false, lastDraw = 0;
+      const redraw = () => { lastDraw = Date.now(); vr.draw(); };
+      const unwatch = watchTraffic((snap) => { vr.setSnap(snap); vr.paintDim(); if (onScreen(body)) redraw(); }, area);
+      const frame = setInterval(() => {
+        const on = onScreen(body);
+        if (on && !shown) { trafficWatch(); redraw(); } // just came into view: the feed should cover it at once
+        shown = on;
+        if (on && Date.now() - lastDraw >= vrFrameMs(vr.map.getZoom()) - 20) redraw();
+      }, 100);
+      const slow = setInterval(() => { checkHealth(); vr.paintStatus(); vr.paintDim(); }, 1000);
+      const rain = setInterval(() => vr.refreshRain(), 60000);
+
+      // Title bar: labels, routes, categories, map layers, back to the standard view.
+      const labels = switchTool('LABELS', 'Labels bij de toestellen tonen of verbergen: callsign, hoogte en snelheid', () => w.cfg.labels, () => { w.cfg.labels = !w.cfg.labels; save(); vr.draw(); });
+      const routes = switchTool('ROUTES', 'Gevlogen routes tonen of verbergen. Bij Alles alleen van de eigen eenheden en het geselecteerde toestel.', () => w.cfg.routes, () => { w.cfg.routes = !w.cfg.routes; save(); vr.draw(); });
+      const cats = chips(VR_CATS, w.cfg.cats, (v) => {
+        w.cfg.cats = v;
+        // Labels go with the filter: off among all traffic, where they would bury the map, on for the filtered views.
+        w.cfg.labels = !v.includes('all');
+        labels.paint();
+        save();
+        vr.setSnap(trafficFeed.snap);
+        vr.draw();
+      });
+      const pop = h('div', { class: 'vr-pop', hidden: true });
+      const paintPop = () => pop.replaceChildren(
+        h('h4', {}, 'Kaart'),
+        ...Object.entries(VR_BASES).map(([k, d]) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'vrb-' + w.id, checked: (w.cfg.base || 'osm') === k, onchange: () => { w.cfg.base = k; save(); vr.applyLayers(); } }), d.name)),
+        h('h4', {}, 'Lagen'),
+        ...Object.entries(VR_OVERLAYS).map(([k, d]) => h('label', { class: 'check', title: d.hint }, h('input', { type: 'checkbox', checked: (w.cfg.overlays || []).includes(k), onchange: (e) => {
+          const set = new Set(w.cfg.overlays || []);
+          if (e.target.checked) set.add(k); else set.delete(k);
+          w.cfg.overlays = [...set];
+          save();
+          vr.applyLayers();
+          vr.draw();
+        } }), d.name)),
+        h('p', {}, 'In het donkere thema wordt de kaart gedimd, zoals op ADS-B Exchange.'));
+      const layersBtn = h('button', { class: 'w-tool', title: 'Kaart en kaartlagen kiezen', onclick: () => { paintPop(); pop.hidden = !pop.hidden; } }, icon('layers'));
+      const closePop = (e) => { if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target)) pop.hidden = true; };
+      document.addEventListener('pointerdown', closePop, true);
+      body.append(pop);
+      tools.append(labels, routes, cats, layersBtn,
+        h('button', { class: 'w-tool', title: 'Kaart terugzetten naar de standaardpositie en het standaard zoomniveau', onclick: () => { user = null; fit(); trafficWatch(); } }, icon('target')));
+      return {
+        destroy() {
+          unwatch(); ro.disconnect(); clearTimeout(refit); clearInterval(frame); clearInterval(slow); clearInterval(rain);
+          document.removeEventListener('pointerdown', closePop, true);
+          vr.destroy();
+          report(hkey);
+        },
+      };
+    },
+    form(cfg) {
+      const lat = textInput(cfg.lat), lon = textInput(cfg.lon), zoom = textInput(cfg.zoom), def = WIDGETS.radar.defaults;
+      return {
+        el: [
+          h('div', { class: 'row' }, field('Breedtegraad', lat), field('Lengtegraad', lon), field('Zoom', zoom)),
+          h('div', { class: 'hint field' }, h('div', { class: 'hint' }, `Dit is de standaardweergave waar de knop met de schietschijf naar terugkeert. Standaard is de kaart gecentreerd op Nederland (${def.lat}, ${def.lon}, zoom ${def.zoom}) en schaalt de zoom mee met de grootte van de widget. Een hoger zoomgetal zoomt verder in; een zelf ingevuld zoomgetal wordt exact aangehouden. Kaart en kaartlagen kies je met de knop met de lagen in de titelbalk.`)),
+        ],
+        read: () => { const z = parseFloat(zoom.value) || def.zoom; return { lat: parseFloat(lat.value) || def.lat, lon: parseFloat(lon.value) || def.lon, zoom: z, refH: z === cfg.zoom ? cfg.refH : null }; },
+      };
+    },
+  },
+
   adsb: {
-    name: 'ADS-B',
-    desc: 'Live vliegverkeer van ADS-B Exchange met snelfilters: alles, militair of politie & hulpdiensten.',
+    name: 'ADS-B Exchange (website)',
+    desc: 'De website van ADS-B Exchange met snelfilters. Vervangen door de Vluchtradar; blijft beschikbaar als reserve.',
     icon: 'plane',
     size: [54, 54],
     defaults: { mode: 'all', lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, sidebar: false, trails: true, labels: false },
@@ -1447,17 +1666,56 @@ const WIDGETS = {
 
   fleet: {
     name: 'In de lucht',
-    desc: 'Politie-, trauma- en kustwachttoestellen die nu vliegen, met hoogte, snelheid en vliegtijd.',
+    desc: 'Eigen eenheden die nu vliegen (politie, trauma, kustwacht), met hoogte, snelheid en vliegtijd — live, elke seconde.',
     icon: 'shield',
     size: [24, 18],
-    mount(w, body) {
+    defaults: { groups: ['police', 'hems', 'coastguard'], hide: [], ground: true },
+    mount(w, body, tools) {
       const root = h('div', { class: 'fl-widget' });
       body.append(root);
-      const paint = () => renderFleet(root);
+      const paint = () => { renderFleet(root, w); fleetHealth(); };
+      fleetViews.add(paint);
       paint();
-      const unwatch = watchFleet(paint);
-      const tick = setInterval(paint, 20000); // flight times run on between updates
-      return { destroy() { unwatch(); clearInterval(tick); } };
+      const unwatch = watchTraffic(paint);
+      const tick = setInterval(paint, 1000); // ages and flight times run on between rounds
+      tools.append(h('button', { class: 'w-tool', title: 'Instellingen: kies welke eigen eenheden deze widget toont', onclick: () => openWidgetConfig(w) }, icon('gear')));
+      return { destroy() { unwatch(); clearInterval(tick); fleetViews.delete(paint); fleetHealth(); } };
+    },
+    // Categories with their units: a category switched off hides all of its units, a unit switched off
+    // only itself. The lists themselves are kept under Instellingen > Eigen eenheden.
+    form(cfg) {
+      const groups = new Set(fleetGroupsOf(cfg)), hide = new Set(cfg.hide || []);
+      let ground = cfg.ground !== false;
+      const sections = Object.entries(FLEET_GROUPS).map(([key, label]) => {
+        const units = hexList(key);
+        const boxes = units.map((hex) => {
+          const n = UNIT_NAMES(hex);
+          const box = h('input', { type: 'checkbox', checked: !hide.has(hex), onchange: (e) => { e.target.checked ? hide.delete(hex) : hide.add(hex); paint(); } });
+          return { hex, box, el: h('label', { class: 'check fl-unit' }, box, h('b', {}, n ? n.reg : hex.toUpperCase()), h('span', {}, n ? [n.type, hex.toUpperCase()].filter(Boolean).join(' · ') : 'registratie nog onbekend')) };
+        });
+        const all = h('input', { type: 'checkbox', onchange: (e) => {
+          if (e.target.checked) { groups.add(key); units.forEach((x) => hide.delete(x)); } else groups.delete(key);
+          paint();
+        } });
+        const list = h('div', { class: 'fl-units' }, boxes.length ? boxes.map((b) => b.el) : h('span', { class: 'hint' }, 'Geen eenheden in deze lijst.'));
+        const paint = () => {
+          const on = groups.has(key), shown = units.filter((x) => !hide.has(x)).length;
+          all.checked = on && shown > 0;
+          all.indeterminate = on && shown > 0 && shown < units.length;
+          list.classList.toggle('off', !on);
+          boxes.forEach((b) => { b.box.checked = !hide.has(b.hex); b.box.disabled = !on; });
+        };
+        paint();
+        return h('div', { class: 'fl-cat ' + key }, h('label', { class: 'check fl-cat-head' }, all, h('i', { class: 'fl-bar' }), label, h('small', {}, `${units.length} eenheden`)), list);
+      });
+      return {
+        el: [
+          h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Eenheden in deze widget'), h('div', { class: 'fl-cats' }, sections),
+            h('div', { class: 'hint' }, 'Vink een categorie of losse eenheden aan of uit. De lijsten met Mode-S-codes zelf beheer je onder Instellingen › Eigen eenheden.')),
+          checkbox('Ook eenheden op de grond tonen (nog gezien na de landing)', ground, (v) => (ground = v)),
+        ],
+        read: () => ({ groups: Object.keys(FLEET_GROUPS).filter((k) => groups.has(k)), hide: [...hide], ground }),
+      };
     },
   },
 
@@ -1759,16 +2017,17 @@ function openSettings(startTab) {
       ],
     },
     adsb: {
-      label: 'ADS-B filter', icon: 'shield',
+      label: 'Eigen eenheden', icon: 'shield',
       build: () => {
-        const area = (key, label) => field(label, h('textarea', { class: 'input', value: s.hex[key], onchange: changed((e) => { s.hex[key] = e.target.value; remountType('adsb'); }) }));
+        const refresh = () => { remountType('adsb'); remountType('fleet'); trafficWatch(); };
+        const area = (key, label) => field(label, h('textarea', { class: 'input', value: s.hex[key], onchange: changed((e) => { s.hex[key] = e.target.value; refresh(); }) }));
         return [
-          h('h3', {}, 'Filter "Politie & hulpdiensten"'),
-          h('p', {}, 'De knop toont alleen de toestellen met onderstaande Mode-S hexcodes (ICAO 24-bit adres), gescheiden door komma\'s. Pas de lijsten aan wanneer de vloot wijzigt.'),
+          h('h3', {}, 'Eigen eenheden'),
+          h('p', {}, 'De categorieën Politie, Trauma en Kustwacht op de Vluchtradar en de widget "In de lucht" volgen de toestellen met onderstaande Mode-S hexcodes (ICAO 24-bit adres), gescheiden door komma\'s. Pas de lijsten aan wanneer de vloot wijzigt. Met het tandwiel op "In de lucht" kies je per widget welke eenheden hij toont.'),
           area('police', 'Politie (PH-PXA t/m PXF, PXX, PXY, PXZ)'),
           area('hems', 'Traumahelikopters / ambulancehelikopters'),
           area('coastguard', 'Kustwacht (vliegtuigen en SAR-helikopters)'),
-          h('div', {}, h('button', { class: 'btn', onclick: () => { s.hex = { ...DEFAULT_HEX }; save(); remountType('adsb'); show('adsb'); } }, icon('refresh'), 'Standaardlijsten herstellen')),
+          h('div', {}, h('button', { class: 'btn', onclick: () => { s.hex = { ...DEFAULT_HEX }; save(); refresh(); show('adsb'); } }, icon('refresh'), 'Standaardlijsten herstellen')),
         ];
       },
     },
@@ -1818,9 +2077,10 @@ function openSettings(startTab) {
           h('p', {}, 'Meetstations op de weerradar: getoetst aan de weerminima uit de tabel van het BOM, per gekozen profiel. Groen: binnen limieten. Oranje: binnen limieten maar marginaal (minder marge dan ingesteld onder Weerradar, standaard 200 ft of 1000 m) of volgens de trend binnen 2 uur eronder. Rood: buiten limieten. Grijs: zicht of bewolking niet gemeten, of waarneming ouder dan 90 minuten. Verticaal zicht (VV) telt niet als wolkenbasis. Pijl: trend uit de METAR, anders uit de TAF, anders het waargenomen verloop. Plus: buiten Aided Nacht maar binnen Advanced Operations, alleen AW139.'),
           h('p', {}, 'UDP: 15 minuten vóór zonsopkomst tot 15 minuten na zonsondergang op 52°N 005°E, volgens de KNMI-tabellen voor 2026 en 2027. Voor latere jaren wordt gerekend (hooguit één minuut verschil met de tabel) en staat er "BEREKEND" in de balk, tot de tabel van dat jaar is toegevoegd. Het profiel op de weerradar schakelt op deze tijden automatisch tussen het laatst gebruikte dag- en nachtprofiel.'),
           h('p', {}, 'Actueel baangebruik: live waargenomen uit het vliegverkeer rond Schiphol (ADS-B-gegevens van adsb.lol, reserve adsb.fi), elke 12 seconden bijgewerkt. Te zien in de widget "Baangebruik Schiphol". Een baan wordt getoond wanneer er in het laatste kwartier toestellen op eindnadering of net na de start zijn gezien. Groene stip: actueel. Oranje: nog geen of geen verkeer. Rood: bron niet bereikbaar.'),
-          h('p', {}, 'In de lucht: de toestellen uit de lijsten onder ADS-B filter, met posities van adsb.lol (reserve adsb.fi), elke 10 seconden bijgewerkt. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
+          h('p', {}, 'Vluchtradar en In de lucht: één gezamenlijke live-bron. Posities van adsb.fi, elke seconde opgehaald en direct doorgegeven, aangevuld met adsb.lol; per toestel wint steeds het nieuwste bericht. Op de kaart schuift een toestel tussen twee berichten hooguit 4 seconden door langs zijn koers met zijn grondsnelheid; een positie ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
+          h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap, CARTO en PDOK (Kadaster, Beeldmateriaal Nederland). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
           h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
-          h('p', {}, 'Vliegverkeer: ADS-B Exchange. Weerradar: Windy.com.'),
+          h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, routes van ADS-B Exchange. Weerradar: Windy.com.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),
         ];
       },
