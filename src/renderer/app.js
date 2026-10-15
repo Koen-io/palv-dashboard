@@ -340,27 +340,6 @@ function segmented(options, value, onChange) {
   return el;
 }
 
-// Like segmented, but several can be on together; 'all' stands on its own and is what remains when nothing is.
-function chips(options, values, onChange) {
-  const el = h('div', { class: 'seg chips' });
-  let cur = new Set(values && values.length ? values : ['all']);
-  const paint = () => [...el.children].forEach((b) => b.classList.toggle('on', cur.has(b.dataset.v)));
-  for (const o of options) {
-    el.append(h('button', { 'data-v': o.value, title: o.title || null, onclick: () => {
-      if (o.value === 'all') cur = new Set(['all']);
-      else {
-        cur.delete('all');
-        if (cur.has(o.value)) cur.delete(o.value); else cur.add(o.value);
-        if (!cur.size) cur.add('all');
-      }
-      paint();
-      onChange(options.map((x) => x.value).filter((v) => cur.has(v)));
-    } }, o.icon ? icon(o.icon) : null, h('span', {}, o.label)));
-  }
-  paint();
-  return el;
-}
-
 /* ============================================================
    Theme (licht / donker / automatisch)
    ============================================================ */
@@ -1213,10 +1192,10 @@ function switchTool(label, title, isOn, onToggle) {
 const WIDGETS = {
   radar: {
     name: 'Vluchtradar',
-    desc: 'Eigen live vliegradar zonder reclame: al het ADS-B-verkeer op OpenStreetMap, filters per categorie, labels, routes en kaartlagen.',
+    desc: 'Eigen live vliegradar zonder reclame: al het ADS-B-verkeer op OpenStreetMap of satelliet, categorieën, labels, routes, kaartlagen en dag/nacht-kaart.',
     icon: 'plane',
     size: [54, 54],
-    defaults: { cats: ['all'], lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, labels: false, routes: true, base: 'osm', overlays: ['legend'] },
+    defaults: { cats: ['all'], lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, labels: false, routes: true, base: 'osm', overlays: ['legend'], sym: 'silhouet', symSize: 1 },
     mount(w, body, tools) {
       const vr = vrCreate(body, w);
       // The view: the standard one from the settings, until the map is moved by hand; that view then holds,
@@ -1257,32 +1236,61 @@ const WIDGETS = {
       // Drawn with every new round, and in between as often as the zoom level makes movement visible.
       let shown = false, lastDraw = 0;
       const redraw = () => { lastDraw = Date.now(); vr.draw(); };
-      const unwatch = watchTraffic((snap) => { vr.setSnap(snap); vr.paintDim(); if (onScreen(body)) redraw(); }, area);
+      const unwatch = watchTraffic((snap) => { vr.setSnap(snap); if (onScreen(body)) redraw(); }, area);
       const frame = setInterval(() => {
         const on = onScreen(body);
         if (on && !shown) { trafficWatch(); redraw(); } // just came into view: the feed should cover it at once
         shown = on;
         if (on && Date.now() - lastDraw >= vrFrameMs(vr.map.getZoom()) - 20) redraw();
       }, 100);
-      const slow = setInterval(() => { checkHealth(); vr.paintStatus(); vr.paintDim(); }, 1000);
+      const slow = setInterval(() => { checkHealth(); vr.paintStatus(); }, 1000);
       const rain = setInterval(() => vr.refreshRain(), 60000);
 
-      // Title bar: labels, routes, categories, map layers, back to the standard view.
+      // Title bar: categories, labels, routes, map and display, standard view, reload.
       const labels = switchTool('LABELS', 'Labels bij de toestellen tonen of verbergen: callsign, hoogte en snelheid', () => w.cfg.labels, () => { w.cfg.labels = !w.cfg.labels; save(); vr.draw(); });
       const routes = switchTool('ROUTES', 'Gevlogen routes tonen of verbergen. Bij Alles alleen van de eigen eenheden en het geselecteerde toestel.', () => w.cfg.routes, () => { w.cfg.routes = !w.cfg.routes; save(); vr.draw(); });
-      const cats = chips(VR_CATS, w.cfg.cats, (v) => {
-        w.cfg.cats = v;
+
+      // Categories: a drop-down with a tick per category. Alles stands on its own; ticking another category
+      // takes Alles away, and with nothing ticked Alles returns.
+      const catText = h('span');
+      const paintCatBtn = () => {
+        const c = vrCats(w.cfg);
+        catText.textContent = c.includes('all') ? 'Alles' : VR_CATS.filter((x) => c.includes(x.value)).map((x) => x.label).join(' · ');
+      };
+      const setCats = (next) => {
+        w.cfg.cats = next.length ? next : ['all'];
         // Labels go with the filter: off among all traffic, where they would bury the map, on for the filtered views.
-        w.cfg.labels = !v.includes('all');
+        w.cfg.labels = !w.cfg.cats.includes('all');
         labels.paint();
         save();
+        paintCatBtn();
         vr.setSnap(trafficFeed.snap);
         vr.draw();
-      });
+      };
+      const catPop = h('div', { class: 'vr-pop left', hidden: true });
+      const paintCatPop = () => {
+        const c = vrCats(w.cfg);
+        catPop.replaceChildren(h('h4', {}, 'Tonen op de kaart'), ...VR_CATS.map((o) => h('label', { class: 'check', title: o.title },
+          h('input', { type: 'checkbox', checked: c.includes(o.value), onchange: (e) => {
+            let next = vrCats(w.cfg).filter((v) => v !== 'all' && v !== o.value);
+            if (o.value === 'all') next = e.target.checked ? ['all'] : [];
+            else if (e.target.checked) next.push(o.value);
+            setCats(VR_CATS.map((x) => x.value).filter((v) => next.includes(v)));
+            paintCatPop();
+          } }),
+          o.label, VR_GROUP_COLOR[o.value] ? h('i', { class: 'vr-dot', style: 'background:' + VR_GROUP_COLOR[o.value] }) : null)),
+          h('p', {}, 'Politie, Trauma en Kustwacht volgen de lijsten onder Instellingen › Eigen eenheden.'));
+      };
+      const catBtn = h('button', { class: 'vr-drop', title: 'Kies welke categorieën de kaart toont', onclick: () => { paintCatPop(); catPop.hidden = !catPop.hidden; pop.hidden = true; } },
+        icon('shield'), catText, h('b', { style: 'display:contents', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' }));
+      paintCatBtn();
+
+      // Map, layers and how the aircraft are drawn.
       const pop = h('div', { class: 'vr-pop', hidden: true });
+      const radio = (group, value, cur, label, hint, set) => h('label', { class: 'check', title: hint || null }, h('input', { type: 'radio', name: group + w.id, checked: cur === value, onchange: set }), label);
       const paintPop = () => pop.replaceChildren(
         h('h4', {}, 'Kaart'),
-        ...Object.entries(VR_BASES).map(([k, d]) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'vrb-' + w.id, checked: (w.cfg.base || 'osm') === k, onchange: () => { w.cfg.base = k; save(); vr.applyLayers(); } }), d.name)),
+        ...Object.entries(VR_BASES).map(([k, d]) => radio('vrb-', k, VR_BASE_ALIAS[w.cfg.base] || w.cfg.base || 'osm', d.name, null, () => { w.cfg.base = k; save(); vr.applyLayers(); })),
         h('h4', {}, 'Lagen'),
         ...Object.entries(VR_OVERLAYS).map(([k, d]) => h('label', { class: 'check', title: d.hint }, h('input', { type: 'checkbox', checked: (w.cfg.overlays || []).includes(k), onchange: (e) => {
           const set = new Set(w.cfg.overlays || []);
@@ -1292,14 +1300,20 @@ const WIDGETS = {
           vr.applyLayers();
           vr.draw();
         } }), d.name)),
-        h('p', {}, 'In het donkere thema wordt de kaart gedimd, zoals op ADS-B Exchange.'));
-      const layersBtn = h('button', { class: 'w-tool', title: 'Kaart en kaartlagen kiezen', onclick: () => { paintPop(); pop.hidden = !pop.hidden; } }, icon('layers'));
-      const closePop = (e) => { if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target)) pop.hidden = true; };
+        h('h4', {}, 'Toestellen'),
+        ...Object.entries(VR_SYMBOLS).map(([k, d]) => radio('vrs-', k, VR_SYMBOLS[w.cfg.sym] ? w.cfg.sym : 'silhouet', d.name, d.hint, () => { w.cfg.sym = k; save(); vr.draw(); })),
+        h('div', { class: 'row2' }, segmented(VR_SIZES.map((x) => ({ value: String(x.v), label: x.name })), String(+w.cfg.symSize || 1), (v) => { w.cfg.symSize = +v; save(); vr.draw(); })),
+        h('p', {}, 'Kaarten die het thema volgen worden \'s avonds in een paar seconden vloeiend donker, tegelijk met de rest van het dashboard, en \'s ochtends weer licht.'));
+      const layersBtn = h('button', { class: 'w-tool', title: 'Kaart, kaartlagen en weergave van de toestellen', onclick: () => { paintPop(); pop.hidden = !pop.hidden; catPop.hidden = true; } }, icon('layers'));
+      const closePop = (e) => {
+        if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target)) pop.hidden = true;
+        if (!catPop.hidden && !catPop.contains(e.target) && !catBtn.contains(e.target)) catPop.hidden = true;
+      };
       document.addEventListener('pointerdown', closePop, true);
-      body.append(pop);
-      vr.top.prepend(cats);
-      tools.append(labels, routes, layersBtn,
-        h('button', { class: 'w-tool', title: 'Kaart terugzetten naar de standaardpositie en het standaard zoomniveau', onclick: () => { user = null; fit(); trafficWatch(); } }, icon('target')));
+      body.append(pop, catPop);
+      tools.append(catBtn, labels, routes, layersBtn,
+        h('button', { class: 'w-tool', title: 'Kaart terugzetten naar de standaardpositie en het standaard zoomniveau', onclick: () => { user = null; fit(); trafficWatch(); } }, icon('target')),
+        h('button', { class: 'w-tool', title: 'Vluchtradar opnieuw laden: kaart, lagen en verkeer', onclick: () => { vrRain.at = 0; mountWidget(state.pages.find((p) => p.widgets.includes(w)), w); } }, icon('refresh')));
       return {
         destroy() {
           unwatch(); ro.disconnect(); clearTimeout(refit); clearInterval(frame); clearInterval(slow); clearInterval(rain);
@@ -2079,7 +2093,7 @@ function openSettings(startTab) {
           h('p', {}, 'UDP: 15 minuten vóór zonsopkomst tot 15 minuten na zonsondergang op 52°N 005°E, volgens de KNMI-tabellen voor 2026 en 2027. Voor latere jaren wordt gerekend (hooguit één minuut verschil met de tabel) en staat er "BEREKEND" in de balk, tot de tabel van dat jaar is toegevoegd. Het profiel op de weerradar schakelt op deze tijden automatisch tussen het laatst gebruikte dag- en nachtprofiel.'),
           h('p', {}, 'Actueel baangebruik: live waargenomen uit het vliegverkeer rond Schiphol (ADS-B-gegevens van adsb.lol, reserve adsb.fi), elke 12 seconden bijgewerkt. Te zien in de widget "Baangebruik Schiphol". Een baan wordt getoond wanneer er in het laatste kwartier toestellen op eindnadering of net na de start zijn gezien. Groene stip: actueel. Oranje: nog geen of geen verkeer. Rood: bron niet bereikbaar.'),
           h('p', {}, 'Vluchtradar en In de lucht: één gezamenlijke live-bron. Posities van adsb.fi, elke seconde opgehaald en direct doorgegeven, aangevuld met adsb.lol; per toestel wint steeds het nieuwste bericht. Op de kaart schuift een toestel tussen twee berichten hooguit 4 seconden door langs zijn koers met zijn grondsnelheid; een positie ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer. De vliegtijd telt vanaf de start in de gevlogen route bij ADS-B Exchange; met ≈ vanaf de eerste waarneming, met ≥ als het toestel al vloog toen het dashboard startte.'),
-          h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap, CARTO en PDOK (Kadaster, Beeldmateriaal Nederland). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
+          h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap (overdag licht, in de avond vloeiend donker), satelliet Sentinel-2 cloudless van EOX (Copernicus) met de luchtfoto van PDOK boven Nederland, en de topografische kaart van PDOK (Kadaster). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
           h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
           h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, routes van ADS-B Exchange. Weerradar: Windy.com.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),

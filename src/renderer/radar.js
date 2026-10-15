@@ -3,10 +3,10 @@
 /* ============================================================
    Vluchtradar — the dashboard's own map of the live traffic
    ============================================================ */
-// Map tiles through Leaflet; the aircraft, their labels and routes are drawn on one canvas over it,
-// several times a second, from the feed the main process pushes every second (traffic.js). Between two
-// messages an aircraft is carried forward along its track at its ground speed, for at most a few
-// seconds, so it stands where it is now rather than where it was when the message went out.
+// Map tiles through Leaflet; the aircraft, their labels and routes are drawn on one canvas over it
+// from the feed the main process pushes every second (traffic.js). Between two messages an aircraft is
+// carried forward along its track at its ground speed, for at most a few seconds, so it stands where it
+// is now rather than where it was when the message went out.
 // Uses the helpers of app.js (h, icon, clamp, ...) at run time; this file only defines.
 
 const VR_EXTRAP_S = 4;          // carry an aircraft forward along its track at most this long
@@ -17,29 +17,48 @@ const VR_HIDE_S = 60;           // position older than this: not drawn
 const vrFrameMs = (zoom) => clamp(Math.round(250 * 2 ** (11 - zoom)), 100, 1000);
 const VR_TRAIL_MIN = 15;        // minutes of route kept for other traffic
 const VR_SCHIPHOL = [52.3086, 4.7639];
+const VR_NL = [[50.6, 3.0], [53.7, 7.4]];
 
-// Base maps. `dim`: darkened while the dashboard is in its dark theme, as ADS-B Exchange does.
-// `under`: drawn beneath, for the parts of the world a Dutch layer does not cover.
-const VR_BASES = {
-  osm: { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19, dim: true, attr: '© <b>OpenStreetMap</b>-bijdragers' },
-  cartoDark: { name: 'CARTO donker', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', sub: 'abcd', max: 20, attr: '© OpenStreetMap · © CARTO' },
-  cartoLight: { name: 'CARTO licht', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', sub: 'abcd', max: 20, dim: true, attr: '© OpenStreetMap · © CARTO' },
-  brt: { name: 'Topografisch NL (PDOK)', url: 'https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png', max: 19, dim: true, under: 'cartoLight', attr: '© Kadaster / PDOK' },
-  foto: { name: 'Luchtfoto NL (PDOK)', url: 'https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg', max: 19, under: 'cartoDark', attr: '© Beeldmateriaal Nederland / PDOK' },
+/* ---------- maps ---------- */
+// Every base map has a day and a night face. `mode` auto follows the dashboard's theme: when that turns
+// dark, the night face fades in over the day face (or the day face dims) in a few seconds, at the same
+// moment as the rest of the screen. OpenStreetMap's night face is the same tiles inverted into a dark
+// map, so the switch costs no extra downloads.
+const T = {
+  osm: { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19, attr: '© <b>OpenStreetMap</b>-bijdragers' },
+  s2: { url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg', max: 15, attr: 'Sentinel-2 cloudless 2023 © EOX (Copernicus)' },
+  // PDOK delivers plain white tiles over sea; those are made see-through so the satellite image shows.
+  foto: { url: 'https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg', max: 19, bounds: VR_NL, minZoom: 8, keyWhite: true, attr: '© Beeldmateriaal Nederland / PDOK' },
+  brt: { url: 'https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png', max: 19, bounds: VR_NL, attr: '© Kadaster / PDOK' },
 };
+const VR_BASES = {
+  osm: { name: 'OpenStreetMap · volgt thema (dag/nacht)', under: null, day: T.osm, night: T.osm, invert: true, mode: 'auto' },
+  osmLight: { name: 'OpenStreetMap licht', day: T.osm, mode: 'day' },
+  osmDark: { name: 'OpenStreetMap donker', night: T.osm, invert: true, mode: 'night' },
+  sat: { name: 'Satelliet + luchtfoto NL', under: T.s2, day: T.foto, dim: true, mode: 'auto', dark: true },
+  brt: { name: 'Topografisch NL (PDOK)', under: T.osm, day: T.brt, dim: true, mode: 'auto' },
+};
+const VR_BASE_ALIAS = { cartoDark: 'osmDark', cartoLight: 'osmLight', carto: 'osm', foto: 'sat' }; // choices of 1.12
+const vrBase = (key) => VR_BASES[VR_BASE_ALIAS[key] || key] || VR_BASES.osm;
 const VR_OVERLAYS = {
-  aero: { name: 'Luchtruim (VFR-kaart)', hint: 'CTR\'s, TMA\'s, verboden en beperkte gebieden van openFlightMaps', attr: 'openFlightMaps' },
-  wx: { name: 'Neerslagradar', hint: 'RainViewer, elke 10 minuten een nieuw beeld', attr: 'RainViewer' },
+  aero: { name: 'Luchtruim (VFR-kaart)', hint: 'CTR\'s, TMA\'s, verboden en beperkte gebieden van openFlightMaps' },
+  wx: { name: 'Neerslagradar', hint: 'RainViewer, elke 10 minuten een nieuw beeld' },
   rings: { name: 'Afstandsringen Schiphol', hint: 'Elke 10 NM rond Schiphol' },
   legend: { name: 'Hoogtelegenda', hint: 'Kleur van de toestellen naar hoogte' },
 };
+const VR_SYMBOLS = {
+  silhouet: { name: 'Silhouet per type', hint: 'Zoals ADS-B Exchange: vorm per toesteltype, kleur naar hoogte, donkere rand' },
+  contrast: { name: 'Hoog contrast', hint: 'Witte rand en schaduw: het best zichtbaar op satelliet en donkere kaarten' },
+  stip: { name: 'Radarstip met koerslijn', hint: 'Compact, zoals een radarscherm; rustig bij veel verkeer' },
+};
+const VR_SIZES = [{ v: 0.85, name: 'Klein' }, { v: 1, name: 'Normaal' }, { v: 1.2, name: 'Groot' }];
 
 const VR_CATS = [
-  { value: 'all', label: 'ALLES', icon: 'plane', title: 'Al het vliegverkeer' },
-  { value: 'mil', label: 'MILITAIR', icon: 'star', title: 'Militair vliegverkeer' },
-  { value: 'police', label: 'POLITIE', icon: 'shield', title: 'Politiehelikopters (lijst onder Instellingen › Eigen eenheden)' },
-  { value: 'hems', label: 'TRAUMA', icon: 'plus', title: 'Trauma- en ambulancehelikopters (lijst onder Instellingen › Eigen eenheden)' },
-  { value: 'coastguard', label: 'KUSTWACHT', icon: 'wind', title: 'Kustwacht: vliegtuigen en SAR-helikopters (lijst onder Instellingen › Eigen eenheden)' },
+  { value: 'all', label: 'Alles', title: 'Al het vliegverkeer' },
+  { value: 'mil', label: 'Militair', title: 'Militair vliegverkeer' },
+  { value: 'police', label: 'Politie', title: 'Politiehelikopters (lijst onder Instellingen › Eigen eenheden)' },
+  { value: 'hems', label: 'Trauma', title: 'Trauma- en ambulancehelikopters (lijst onder Instellingen › Eigen eenheden)' },
+  { value: 'coastguard', label: 'Kustwacht', title: 'Kustwacht: vliegtuigen en SAR-helikopters (lijst onder Instellingen › Eigen eenheden)' },
 ];
 const VR_GROUP_COLOR = { police: '#3d9bff', hems: '#ff4b55', coastguard: '#ffa21f' };
 
@@ -54,17 +73,99 @@ const vrLerp = (table, v) => {
   }
   return table[table.length - 1][1];
 };
+// Rounded to steps no eye can tell apart, so symbols of the same colour share one drawing.
 const vrAltColor = (alt) => {
   if (alt === 'ground') return '#8a8f98';
   if (typeof alt !== 'number') return '#a7b0bd';
-  const hue = vrLerp(VR_HUE, Math.max(0, alt));
+  const a = Math.max(0, alt < 2000 ? Math.round(alt / 100) * 100 : Math.round(alt / 250) * 250);
+  const hue = vrLerp(VR_HUE, a);
   return `hsl(${hue.toFixed(0)},88%,${vrLerp(VR_LIGHT, hue).toFixed(0)}%)`;
 };
 
 /* ---------- symbols ---------- */
-const VR_PLANE = new Path2D('M0-11c1.1 0 1.6 1 1.6 2.2v5.2l8.4 5.1v2.3l-8.4-2.6v5.9l2.6 2v1.8L0 19.9l-4.2 1.1v-1.8l2.6-2v-5.9l-8.4 2.6v-2.3l8.4-5.1v-5.2C-1.6-10-1.1-11 0-11Z');
-const VR_HELI = new Path2D('M0-8.5c2.3 0 3.8 1.9 3.8 4.6v4.4c0 2.1-1.1 3.6-2.6 4.1v8.6h3.2v1.9h-8.8v-1.9h3.2V4.6c-1.5-.5-2.6-2-2.6-4.1v-4.4C-3.8-6.6-2.3-8.5 0-8.5Z');
-const vrIsHeli = (a) => a.cat === 'A7' || /^(EC|H1|H6|A1[0-9]|A169|A189|AS|B06|B4|R22|R44|R66|S76|S92|NH90|LYNX|PUMA|CH|UH|AH|MI|KA|EH10|BK17)/i.test(a.type || '');
+// Top views, nose up, about 30 units across for an airliner. Each class keeps its own outline, so a
+// helicopter, a light aircraft and a jet can be told apart at a glance.
+const VR_SHAPES = {
+  airliner: { s: 1, p: 'M0-15C1.4-15 2-13.5 2-11.5V-4L14 3V5.5L2 2V9.5L6 12.5V14.5L0 13-6 14.5V12.5L-2 9.5V2L-14 5.5V3L-2-4V-11.5C-2-13.5-1.4-15 0-15ZM5.3-1.6H7.6V2.6H5.3ZM-7.6-1.6H-5.3V2.6H-7.6Z' },
+  heavy: { s: 1.2, p: 'M0-15C1.6-15 2.3-13.5 2.3-11V-4.5L14.5 3.5V5.8L2.3 2.3V9.5L6.5 12.6V14.6L0 13.2-6.5 14.6V12.6L-2.3 9.5V2.3L-14.5 5.8V3.5L-2.3-4.5V-11C-2.3-13.5-1.6-15 0-15ZM5-1.9H7.4V2.5H5ZM-7.4-1.9H-5V2.5H-7.4ZM9.3 0.6H11.4V4.6H9.3ZM-11.4 0.6H-9.3V4.6H-11.4Z' },
+  bizjet: { s: 0.85, p: 'M0-14C1-14 1.6-12.5 1.6-10V-2L10 4V5.5L1.6 3V8H2.9V11H1.6L5 13.5V15L0 14-5 15V13.5L-1.6 11H-2.9V8H-1.6V3L-10 5.5V4L-1.6-2V-10C-1.6-12.5-1-14 0-14Z' },
+  turboprop: { s: 0.9, p: 'M0-13C1.3-13 1.7-11.5 1.7-9V-4.5H15V-1.6L1.7-1V8L6 8.6V11L0.8 11.3 0 12.5-0.8 11.3-6 11V8.6L-1.7 8V-1L-15-1.6V-4.5H-1.7V-9C-1.7-11.5-1.3-13 0-13ZM4.2-8H6.6V0.5H4.2ZM-6.6-8H-4.2V0.5H-6.6Z' },
+  light: { s: 0.78, p: 'M0-13C1.2-13 1.5-11.5 1.5-9V-6H13V-3H1.5L1 7 5.5 7.5V10H0.6L0 11-0.6 10H-5.5V7.5L-1 7-1.5-3H-13V-6H-1.5V-9C-1.5-11.5-1.2-13 0-13Z' },
+  fastjet: { s: 0.85, p: 'M0-15C0.9-15 1.4-12 1.6-9L2-3 11 8V10L2.5 9 3 12.5 6 14.5V15.5L0 14.5-6 15.5V14.5L-3 12.5-2.5 9-11 10V8L-2-3-1.6-9C-1.4-12-0.9-15 0-15Z' },
+  heli: { s: 0.95, p: 'M0-9C2.8-9 4-6.5 4-3 4 0.5 2.8 3 1.3 4L0.9 12.6H4.2V14.6H-4.2V12.6H-0.9L-1.3 4C-2.8 3-4 0.5-4-3-4-6.5-2.8-9 0-9ZM-11.3-10.3-10.3-11.3 11.3 10.3 10.3 11.3ZM10.3-11.3 11.3-10.3-10.3 11.3-11.3 10.3Z' },
+};
+for (const s of Object.values(VR_SHAPES)) s.path = new Path2D(s.p);
+const VR_HELI_TYPES = /^(EC\d\d|AS\d\d|AS3B|H1\d\d|H160|H175|H47|H53|H60|H64|H500|A1\d\d|B06|B4\d\d|R22|R44|R66|S61|S76|S92|NH90|LYNX|PUMA|TIGR|EH10|BK17|MI8|MI17|UH1|AW09|MD52|MD60|G2CA|CABR|EXPL)$/i;
+const VR_PROP_TYPES = /^(DH8|AT4|AT7|DO28|D228|D328|B350|BE20|BE9|BE30|C12|F50|JS3|JS4|SF34|SW4|PC12|C208|BN2|L410|P180|C130|A400|E120|AN26|AN32|P3|P8X|PC6|KODI|TBM)/i;
+const vrIsHeli = (a) => a.cat === 'A7' || VR_HELI_TYPES.test(a.type || '');
+function vrShape(a) {
+  if (vrIsHeli(a)) return 'heli';
+  if (a.cat === 'A6') return 'fastjet';
+  if (VR_PROP_TYPES.test(a.type || '')) return 'turboprop';
+  if (a.cat === 'A5') return 'heavy';
+  if (a.cat === 'A1' || a.cat === 'B1' || a.cat === 'B4') return 'light';
+  if (a.cat === 'A2') return 'bizjet';
+  return 'airliner';
+}
+
+// Every symbol is drawn once into a small image (per shape, colour, style and size) and then only placed
+// and turned: far less work per frame than drawing each outline anew, and it allows a soft shadow.
+const vrSprites = new Map();
+function vrSprite(shape, fill, style, px, own, dpr) {
+  const key = `${shape}|${fill}|${style}|${px.toFixed(1)}|${own ? 1 : 0}|${dpr}`;
+  let sp = vrSprites.get(key);
+  if (sp) return sp;
+  if (vrSprites.size > 2500) vrSprites.clear();
+  const def = VR_SHAPES[shape];
+  const k = px / 30; // css pixels per shape unit
+  const size = Math.ceil(36 * k + 10);
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.ceil(size * dpr);
+  const g = c.getContext('2d');
+  g.scale(dpr, dpr);
+  g.translate(size / 2, size / 2);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  if (style === 'stip') {
+    const r = own ? 5.6 : 4.4;
+    g.lineWidth = 2;
+    g.strokeStyle = 'rgba(5,8,14,0.95)';
+    g.beginPath(); g.moveTo(0, -r); g.lineTo(0, -r - 9); g.stroke();
+    g.lineWidth = 1.4;
+    g.strokeStyle = own ? '#ffffff' : fill;
+    g.beginPath(); g.moveTo(0, -r); g.lineTo(0, -r - 8.5); g.stroke();
+    g.beginPath();
+    if (shape === 'heli') g.rect(-r, -r, r * 2, r * 2); else g.arc(0, 0, r, 0, Math.PI * 2);
+    g.fillStyle = fill;
+    g.fill();
+    g.lineWidth = own ? 2 : 1.4;
+    g.strokeStyle = own ? '#ffffff' : 'rgba(5,8,14,0.95)';
+    g.stroke();
+  } else {
+    g.scale(k, k);
+    const px1 = 1 / k; // one css pixel in shape units
+    if (style === 'contrast' || own) {
+      g.shadowColor = 'rgba(0,0,0,0.75)';
+      g.shadowBlur = 4 * dpr;
+    }
+    // The outline goes under the fill, so it widens the shape instead of eating into it.
+    if (own) {
+      g.lineWidth = 5 * px1; g.strokeStyle = 'rgba(5,8,14,0.9)'; g.stroke(def.path);
+      g.shadowBlur = 0;
+      g.lineWidth = 2.8 * px1; g.strokeStyle = '#ffffff'; g.stroke(def.path);
+    } else if (style === 'contrast') {
+      g.lineWidth = 3 * px1; g.strokeStyle = '#ffffff'; g.stroke(def.path);
+      g.shadowBlur = 0;
+    } else {
+      g.lineWidth = 2.6 * px1; g.strokeStyle = 'rgba(5,8,14,0.92)'; g.stroke(def.path);
+    }
+    g.fillStyle = fill;
+    g.fill(def.path);
+  }
+  sp = { c, size };
+  vrSprites.set(key, sp);
+  return sp;
+}
 
 /* ---------- projection (Web Mercator, as Leaflet's EPSG:3857 at 256 px tiles) ---------- */
 const vrProj = (lat, lon, zoom) => {
@@ -81,6 +182,7 @@ function vrNow(a, now) {
   return [a.lat + (nm * Math.cos(tr)) / 60, a.lon + (nm * Math.sin(tr)) / (60 * Math.cos((a.lat * Math.PI) / 180))];
 }
 
+const vrCats = (cfg) => (cfg.cats && cfg.cats.length ? cfg.cats : ['all']);
 const vrMatch = (a, cats) => cats.includes('all') || cats.includes(a.group) || (cats.includes('mil') && a.mil);
 const vrAltText = (a) => (a.alt === 'ground' ? 'GND' : typeof a.alt === 'number' ? `${a.alt.toLocaleString('nl-NL')} ft` : '— ft');
 const vrClimb = (vs) => (vs == null || Math.abs(vs) < 300 ? '' : vs > 0 ? '▲' : '▼');
@@ -145,10 +247,40 @@ async function vrRainUrl() {
   return vrRain.url;
 }
 
+/* ---------- tiles with their white made see-through ---------- */
+// Each tile is drawn into a canvas and its (near) white pixels are cleared; the layer underneath shows there.
+let VrKeyed = null;
+function vrKeyedTiles(url, opts) {
+  if (!VrKeyed) {
+    VrKeyed = L.TileLayer.extend({
+      createTile(coords, done) {
+        const c = document.createElement('canvas');
+        c.width = c.height = 256;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const g = c.getContext('2d', { willReadFrequently: true });
+            g.drawImage(img, 0, 0, 256, 256);
+            const d = g.getImageData(0, 0, 256, 256), px = d.data;
+            let cleared = 0;
+            for (let i = 0; i < px.length; i += 4) { const lo = Math.min(px[i], px[i + 1], px[i + 2]); if (lo > 232 && Math.max(px[i], px[i + 1], px[i + 2]) - lo < 14) { px[i + 3] = 0; cleared += 1; } }
+            if (cleared) g.putImageData(d, 0, 0);
+          } catch { /* not readable: shown as it is */ }
+          done(null, c);
+        };
+        img.onerror = (e) => done(e, c);
+        img.src = this.getTileUrl(coords);
+        return c;
+      },
+    });
+  }
+  return new VrKeyed(url, opts);
+}
+
 /* ---------- the map ---------- */
-// opts: { cfg, onView(view), getCats(), labels(), routes(), onSelect(), font() }
 function vrCreate(body, w) {
-  const el = h('div', { class: 'vr-map' });
+  const el = h('div', { class: 'vr-map no-fade' });
   body.append(el);
   const map = L.map(el, {
     zoomControl: false, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
@@ -156,23 +288,51 @@ function vrCreate(body, w) {
   });
   map.attributionControl.setPrefix(false);
   L.control.zoom({ position: 'bottomright', zoomInTitle: 'Inzoomen', zoomOutTitle: 'Uitzoomen' }).addTo(map);
-  for (const [name, z] of [['vrUnder', 190], ['vrBase', 200], ['vrAero', 350], ['vrWx', 360]]) { map.createPane(name).style.zIndex = z; map.getPane(name).style.pointerEvents = 'none'; }
+  for (const [name, z] of [['vrUnder', 190], ['vrBase', 200], ['vrNight', 210], ['vrAero', 350], ['vrWx', 360]]) {
+    map.createPane(name).style.zIndex = z;
+    map.getPane(name).style.pointerEvents = 'none';
+  }
 
-  const layers = { base: null, under: null, aero: null, wx: null };
-  const tile = (def, pane, extra = {}) => L.tileLayer(def.url, { subdomains: def.sub || 'abc', maxNativeZoom: def.max, maxZoom: 17, pane, attribution: def.attr, crossOrigin: false, updateWhenIdle: false, keepBuffer: 3, ...extra });
+  /* layers */
+  const layers = { under: null, day: null, night: null, aero: null, wx: null };
+  let baseKey = null, settle = null;
+  const tile = (def, pane, extra = {}) => (def.keyWhite ? vrKeyedTiles : L.tileLayer)(def.url, {
+    subdomains: def.sub || 'abc', maxNativeZoom: def.max, minZoom: def.minZoom || 0, maxZoom: 17, bounds: def.bounds, pane,
+    attribution: def.attr, updateWhenIdle: false, keepBuffer: 3, ...extra,
+  });
+  const drop = (k) => { if (layers[k]) { layers[k].remove(); layers[k] = null; } };
+  const isDark = () => document.documentElement.dataset.theme === 'dark';
+  // Day or night face of the current map; the panes fade between them (styles.css).
+  function paintNight() {
+    const b = vrBase(w.cfg.base);
+    const night = b.mode === 'night' || (b.mode === 'auto' && isDark());
+    el.classList.toggle('night', night);
+    el.classList.toggle('night-invert', !!b.invert);
+    el.classList.toggle('night-dim', !!b.dim);
+    el.classList.toggle('base-dark', !!b.dark || night);
+    // Once the night face covers the map, the day face underneath rests: no light tiles flashing up while
+    // the dark ones load during a pan.
+    clearTimeout(settle);
+    if (!night || !b.night) el.classList.remove('settled');
+    else settle = setTimeout(() => el.classList.add('settled'), el.classList.contains('no-fade') ? 0 : 4200);
+  }
   function applyLayers() {
-    const base = VR_BASES[w.cfg.base] || VR_BASES.osm;
-    if (layers.base) layers.base.remove();
-    if (layers.under) layers.under.remove();
-    layers.base = tile(base, 'vrBase', { bounds: base.under ? [[50.6, 3.0], [53.7, 7.4]] : undefined }).addTo(map);
-    layers.under = base.under ? tile(VR_BASES[base.under], 'vrUnder', { attribution: '' }).addTo(map) : null;
+    const key = VR_BASE_ALIAS[w.cfg.base] || w.cfg.base || 'osm';
+    if (key !== baseKey) {
+      baseKey = key;
+      const b = vrBase(key);
+      for (const k of ['under', 'day', 'night']) drop(k);
+      if (b.under) layers.under = tile(b.under, 'vrUnder').addTo(map);
+      if (b.day) layers.day = tile(b.day, 'vrBase').addTo(map);
+      if (b.night) layers.night = tile(b.night, 'vrNight', b.day && b.night.url === b.day.url ? { attribution: '' } : {}).addTo(map);
+    }
     const on = (k) => (w.cfg.overlays || []).includes(k);
     if (on('aero') && !layers.aero) layers.aero = L.tileLayer('https://nwy-tiles-api.prod.newaydata.com/tiles/{z}/{x}/{y}.png?path=latest/aero/latest', { pane: 'vrAero', maxNativeZoom: 12, maxZoom: 17, opacity: 0.8, attribution: '© openFlightMaps' }).addTo(map);
-    if (!on('aero') && layers.aero) { layers.aero.remove(); layers.aero = null; }
-    if (!on('wx') && layers.wx) { layers.wx.remove(); layers.wx = null; }
-    if (on('wx')) refreshRain();
-    paintDim();
+    if (!on('aero')) drop('aero');
+    if (!on('wx')) drop('wx');
+    else refreshRain();
     legend.hidden = !on('legend');
+    paintNight();
   }
   async function refreshRain() {
     const url = await vrRainUrl();
@@ -182,35 +342,73 @@ function vrCreate(body, w) {
     if (layers.wx) { const old = layers.wx; next.once('load', () => old.remove()); setTimeout(() => old.remove(), 8000); }
     layers.wx = next;
   }
-  const paintDim = () => el.classList.toggle('dim', document.documentElement.dataset.theme === 'dark' && !!(VR_BASES[w.cfg.base] || VR_BASES.osm).dim);
+  // The theme turns: start the fade at that very moment rather than at the next round.
+  const themeWatch = new MutationObserver(() => { paintNight(); metrics(); });
+  themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  // The first look is set without a fade; from then on every change fades.
+  setTimeout(() => el.classList.remove('no-fade'), 1500);
 
-  // Scale bar in nautical miles and the altitude legend, bottom left.
+  /* scale bar in nautical miles, altitude legend, status, card of the selected aircraft */
   const scale = h('div', { class: 'vr-scale' }, h('i'), h('span'));
   const legend = h('div', { class: 'vr-legend', title: 'Kleur van de toestellen naar barometrische hoogte, zoals op ADS-B Exchange. Eigen eenheden hebben hun eigen kleur.' },
     h('div', { class: 'vr-legend-bar', style: `background:linear-gradient(90deg,${[0, 500, 1000, 2000, 4000, 6000, 8000, 10000, 20000, 30000, 40000].map((a, i, all) => `${vrAltColor(a)} ${((i / (all.length - 1)) * 100).toFixed(0)}%`).join(',')})` }),
     h('div', { class: 'vr-legend-ticks' }, ['0', '1k', '4k', '8k', '20k', '40k ft'].map((t) => h('span', {}, t))));
   const status = h('div', { class: 'vr-status' });
   const card = h('div', { class: 'vr-card', hidden: true });
-  const top = h('div', { class: 'vr-top' }, status);
-  el.append(h('div', { class: 'vr-corner' }, scale, legend), top, card);
+  el.append(h('div', { class: 'vr-corner' }, scale, legend), h('div', { class: 'vr-top' }, status), card);
   const paintScale = () => {
     const y = map.getSize().y / 2;
     const nmPer100 = map.distance(map.containerPointToLatLng([0, y]), map.containerPointToLatLng([100, y])) / 1852;
     if (!(nmPer100 > 0)) return;
-    const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((v) => v / nmPer100 * 100 >= 60) || 500;
+    const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find((v) => (v / nmPer100) * 100 >= 60) || 500;
     scale.firstChild.style.width = ((nice / nmPer100) * 100).toFixed(0) + 'px';
     scale.lastChild.textContent = `${String(nice).replace('.', ',')} NM`;
   };
   map.on('zoomend moveend resize', paintScale);
 
+  // Font size and family, read once and again when they can have changed rather than every frame.
+  let rem = 16, family = 'sans-serif';
+  const metrics = () => {
+    rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    family = getComputedStyle(document.body).fontFamily;
+  };
+  metrics();
+  map.on('resize', metrics);
+
   /* aircraft canvas: a Leaflet canvas renderer, so it follows pans and zoom animations with the map */
   const renderer = L.canvas({ padding: 0.1, pane: 'overlayPane' });
   map.addLayer(renderer);
   let drawn = []; // screen spots of the aircraft drawn last, for clicks
-  let selected = null;
+  let selected = null, follow = false;
   let snap = null;
   const widths = new Map(); // label text -> width at the font size in use
   let widthFont = '';
+
+  function trail(ctx, P, t, p, a, widthPx) {
+    // A dark casing first, then the line in the colours of the altitudes flown: readable on any map.
+    ctx.lineWidth = widthPx + 2.6;
+    ctx.strokeStyle = 'rgba(5,8,14,0.55)';
+    ctx.beginPath();
+    let q = P(t[0][1], t[0][2]);
+    ctx.moveTo(q[0], q[1]);
+    for (let i = 1; i < t.length; i += 1) { q = P(t[i][1], t[i][2]); ctx.lineTo(q[0], q[1]); }
+    ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+    ctx.lineWidth = widthPx;
+    let prev = P(t[0][1], t[0][2]), color = null;
+    ctx.beginPath();
+    ctx.moveTo(prev[0], prev[1]);
+    for (let i = 1; i <= t.length; i += 1) {
+      const n = i < t.length ? P(t[i][1], t[i][2]) : p;
+      const col = vrAltColor(i < t.length ? t[i][3] : a.alt);
+      if (col !== color && color) { ctx.stroke(); ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); }
+      color = col;
+      ctx.strokeStyle = col;
+      ctx.lineTo(n[0], n[1]);
+      prev = n;
+    }
+    ctx.stroke();
+  }
 
   function draw() {
     const ctx = renderer._ctx, b = renderer._bounds;
@@ -222,19 +420,19 @@ function vrCreate(body, w) {
     const zoom = map.getZoom(), org = map.getPixelOrigin();
     const P = (lat, lon) => { const p = vrProj(lat, lon, zoom); return [p[0] - org.x, p[1] - org.y]; };
     const inView = (p, m) => p[0] > b.min.x - m && p[0] < b.max.x + m && p[1] > b.min.y - m && p[1] < b.max.y + m;
-    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const dpr = L.Browser.retina ? 2 : 1;
 
     if ((w.cfg.overlays || []).includes('rings')) {
       const c = P(...VR_SCHIPHOL);
-      const pxPerNm = vrProj(VR_SCHIPHOL[0] + 1 / 60, VR_SCHIPHOL[1], zoom)[1] - vrProj(VR_SCHIPHOL[0], VR_SCHIPHOL[1], zoom)[1];
+      const pxPerNm = Math.abs(vrProj(VR_SCHIPHOL[0] + 1 / 60, VR_SCHIPHOL[1], zoom)[1] - vrProj(VR_SCHIPHOL[0], VR_SCHIPHOL[1], zoom)[1]);
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,185,65,0.55)';
-      ctx.fillStyle = 'rgba(255,185,65,0.85)';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(255,185,65,0.6)';
+      ctx.fillStyle = 'rgba(255,185,65,0.9)';
+      ctx.lineWidth = 1.3;
       ctx.setLineDash([6, 5]);
-      ctx.font = `600 ${(0.68 * rem).toFixed(1)}px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.font = `600 ${(0.68 * rem).toFixed(1)}px ${family}`;
       for (let nm = 10; nm <= 100; nm += 10) {
-        const r = Math.abs(pxPerNm) * nm;
+        const r = pxPerNm * nm;
         ctx.beginPath();
         ctx.arc(c[0], c[1], r, 0, Math.PI * 2);
         ctx.stroke();
@@ -244,14 +442,22 @@ function vrCreate(body, w) {
     }
     if (!snap) return;
 
-    const cats = w.cfg.cats && w.cfg.cats.length ? w.cfg.cats : ['all'];
+    const cats = vrCats(w.cfg);
     const list = [];
+    let sel = null;
     for (const a of snap.ac) {
       if (a.lat == null || (now - a.posAt) / 1000 > VR_HIDE_S || !vrMatch(a, cats)) continue;
       const pos = vrNow(a, now);
       const p = P(pos[0], pos[1]);
+      if (a.hex === selected) sel = { a, p, pos };
       if (!inView(p, 60) && a.hex !== selected) continue;
       list.push({ a, p, pos });
+    }
+    // Following the selected aircraft: the map keeps it in the middle.
+    if (follow && sel) {
+      const c = map.latLngToLayerPoint(map.getCenter());
+      const panning = map._panAnim && map._panAnim._inProgress;
+      if (!panning && Math.hypot(c.x - sel.p[0], c.y - sel.p[1]) > 24) map.panTo(sel.pos, { animate: true, duration: 0.6 });
     }
     // Low-flying and own aircraft on top, as they matter most here.
     list.sort((x, y) => (!!x.a.group - !!y.a.group) || ((typeof y.a.alt === 'number' ? y.a.alt : 0) - (typeof x.a.alt === 'number' ? x.a.alt : 0)));
@@ -263,71 +469,48 @@ function vrCreate(body, w) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const { a, p } of list) {
-      const own = !!a.group;
-      if (a.hex !== selected && !(routes && (own || !cats.includes('all')))) continue;
+      const own = !!a.group, isSel = a.hex === selected;
+      if (!isSel && !(routes && (own || !cats.includes('all')))) continue;
       const t = vrTrails.get(a.hex);
       if (!t || !t.length) continue;
-      ctx.lineWidth = own || a.hex === selected ? 2.4 : 1.6;
-      ctx.globalAlpha = own || a.hex === selected ? 0.95 : 0.7;
-      let prev = P(t[0][1], t[0][2]), color = null;
-      ctx.beginPath();
-      ctx.moveTo(prev[0], prev[1]);
-      for (let i = 1; i <= t.length; i += 1) {
-        const q = i < t.length ? P(t[i][1], t[i][2]) : p;
-        const col = vrAltColor(i < t.length ? t[i][3] : a.alt);
-        if (col !== color && color) { ctx.stroke(); ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); }
-        color = col;
-        ctx.strokeStyle = col;
-        ctx.lineTo(q[0], q[1]);
-        prev = q;
-      }
-      ctx.stroke();
+      ctx.globalAlpha = own || isSel ? 1 : 0.85;
+      trail(ctx, P, t, p, a, own || isSel ? 3.6 : 2.6);
     }
     ctx.restore();
 
     // Aircraft.
-    const unit = 0.075 * rem; // symbol scale: about 1.7 rem across
+    const style = VR_SYMBOLS[w.cfg.sym] ? w.cfg.sym : 'silhouet';
+    const base = 1.45 * rem * (+w.cfg.symSize || 1); // an airliner, in css pixels
     for (const { a, p } of list) {
-      const own = !!a.group, sel = a.hex === selected;
+      const own = !!a.group, isSel = a.hex === selected;
       const age = (now - a.posAt) / 1000;
       const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
-      const s = unit * (own ? 1.3 : 1) * (vrIsHeli(a) ? 1.15 : 1);
-      ctx.save();
+      const shape = vrShape(a);
+      const px = base * VR_SHAPES[shape].s * (own ? 1.25 : 1) * (a.alt === 'ground' ? 0.85 : 1);
+      const sp = vrSprite(shape, own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt), style, px, own, dpr);
       ctx.globalAlpha = age > VR_FADE_S ? 0.45 : 1;
-      ctx.translate(p[0], p[1]);
-      if (sel || own || alert) {
+      if (isSel || alert) {
         ctx.beginPath();
-        ctx.arc(0, 0, 15 * s, 0, Math.PI * 2);
-        ctx.fillStyle = alert ? 'rgba(255,60,50,0.35)' : sel ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)';
+        ctx.arc(p[0], p[1], px * 0.62, 0, Math.PI * 2);
+        ctx.fillStyle = alert ? 'rgba(255,60,50,0.3)' : 'rgba(255,255,255,0.18)';
         ctx.fill();
-        ctx.lineWidth = sel || alert ? 2 : 1.2;
-        ctx.strokeStyle = alert ? '#ff3c32' : sel ? '#ffffff' : VR_GROUP_COLOR[a.group];
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = alert ? '#ff3c32' : '#ffffff';
         ctx.stroke();
       }
-      ctx.rotate((((a.track ?? 0) * Math.PI) / 180));
-      ctx.scale(s, s);
-      const sym = vrIsHeli(a) ? VR_HELI : VR_PLANE;
-      ctx.fillStyle = own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt);
-      ctx.strokeStyle = own ? '#ffffff' : 'rgba(8,14,24,0.9)';
-      ctx.lineWidth = (own ? 1.5 : 1.1) / s * unit;
-      ctx.fill(sym);
-      ctx.stroke(sym);
-      if (vrIsHeli(a)) {
-        ctx.strokeStyle = own ? '#ffffff' : 'rgba(8,14,24,0.75)';
-        ctx.lineWidth = 1.2 / s * unit;
-        ctx.beginPath();
-        ctx.moveTo(-9, -9); ctx.lineTo(9, 9); ctx.moveTo(9, -9); ctx.lineTo(-9, 9);
-        ctx.stroke();
-      }
+      ctx.save();
+      ctx.translate(p[0], p[1]);
+      ctx.rotate(((a.track ?? 0) * Math.PI) / 180);
+      ctx.drawImage(sp.c, -sp.size / 2, -sp.size / 2, sp.size, sp.size);
       ctx.restore();
-      drawn.push({ hex: a.hex, x: p[0], y: p[1], r: 14 * s });
+      drawn.push({ hex: a.hex, x: p[0], y: p[1], r: Math.max(px * 0.55, 12) });
     }
+    ctx.globalAlpha = 1;
 
-    // Labels: callsign above speed and altitude. Where they would overlap, the own and selected aircraft
+    // Labels: callsign above altitude and speed. Where they would overlap, the own and selected aircraft
     // keep theirs and the rest give way.
     if (w.cfg.labels) {
       const fs = 0.7 * rem, lh = fs * 1.2, pad = 0.28 * rem;
-      const family = getComputedStyle(document.body).fontFamily;
       const font = (weight) => `${weight} ${fs.toFixed(1)}px ${family}`;
       if (widthFont !== font(500) || widths.size > 5000) { widths.clear(); widthFont = font(500); }
       const measure = (text, weight) => {
@@ -337,13 +520,14 @@ function vrCreate(body, w) {
       };
       const boxes = [];
       const order = [...list].sort((x, y) => (y.a.hex === selected) - (x.a.hex === selected) || (!!y.a.group - !!x.a.group));
+      ctx.textBaseline = 'top';
       for (const { a, p } of order) {
         const own = !!a.group;
         const l1 = a.flight || a.reg || a.hex.toUpperCase();
         const l2 = `${vrAltText(a)}${vrClimb(a.vs)}  ${a.gs == null ? '—' : Math.round(a.gs)} kt`;
         const w1 = measure(l1, 700), w2 = measure(l2, 500);
         const bw = Math.max(w1, w2) + pad * 2 + 3, bh = lh * 2 + pad * 1.4;
-        const x = p[0] + 1.25 * rem, y = p[1] - bh / 2;
+        const x = p[0] + 1.1 * rem, y = p[1] - bh / 2;
         const box = [x - 2, y - 2, x + bw + 2, y + bh + 2];
         if (!own && a.hex !== selected && boxes.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1])) continue;
         boxes.push(box);
@@ -354,7 +538,6 @@ function vrCreate(body, w) {
         ctx.fill();
         ctx.fillStyle = own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt);
         ctx.fillRect(x, y, 3, bh);
-        ctx.textBaseline = 'top';
         ctx.fillStyle = '#ffffff';
         ctx.font = font(700);
         ctx.fillText(l1, x + pad + 3, y + pad * 0.7);
@@ -374,9 +557,10 @@ function vrCreate(body, w) {
     else if (!snap.ok) [level, label] = ['bad', 'GEEN VERBINDING'];
     else if (now - snap.lastOk > 5000) [level, label] = ['warn', 'VERTRAAGD'];
     if (snap) {
-      const cats = w.cfg.cats && w.cfg.cats.length ? w.cfg.cats : ['all'];
-      const n = snap.ac.filter((a) => a.lat != null && (now - a.posAt) / 1000 <= VR_HIDE_S && vrMatch(a, cats)).length;
-      detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? `${zulu(snap.lastOk).slice(0, -1)}:${pad2(new Date(snap.lastOk).getUTCSeconds())}Z` : null, snap.src].filter(Boolean);
+      const cats = vrCats(w.cfg);
+      let n = 0;
+      for (const a of snap.ac) if (a.lat != null && (now - a.posAt) / 1000 <= VR_HIDE_S && vrMatch(a, cats)) n += 1;
+      detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? zuluSec(snap.lastOk) : null, snap.src].filter(Boolean);
     }
     status.className = 'vr-status ' + level;
     status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol. Groen: actueel. Oranje: laden of vertraagd. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid; een bericht ouder dan 20 seconden wordt vervaagd getoond, ouder dan 60 seconden niet meer.';
@@ -384,7 +568,7 @@ function vrCreate(body, w) {
   }
   function paintCard() {
     const a = selected && snap ? snap.ac.find((x) => x.hex === selected) : null;
-    if (!a) { card.hidden = true; return; }
+    if (!a) { card.hidden = true; follow = false; return; }
     const now = Date.now();
     const unitName = UNIT_NAMES(a.hex);
     const row = (k, v) => h('div', {}, h('span', {}, k), h('b', {}, v));
@@ -394,34 +578,37 @@ function vrCreate(body, w) {
       h('div', { class: 'vr-card-head' },
         h('b', {}, a.flight || a.reg || a.hex.toUpperCase()),
         h('span', {}, [a.reg || (unitName && unitName.reg), a.type || (unitName && unitName.type), a.group ? FLEET_GROUPS[a.group] : a.mil ? 'Militair' : null].filter(Boolean).join(' · ')),
-        h('button', { class: 'w-tool', title: 'Sluiten', onclick: () => { selected = null; paintCard(); draw(); } }, icon('close'))),
+        h('button', { class: 'w-tool', title: 'Sluiten', onclick: () => select(null) }, icon('close'))),
       a.desc ? h('div', { class: 'vr-card-desc' }, a.desc) : null,
       h('div', { class: 'vr-card-grid' },
         row('HOOGTE', vrAltText(a) + (a.vs != null && Math.abs(a.vs) >= 100 ? ` ${vrClimb(a.vs) || (a.vs > 0 ? '↗' : '↘')} ${Math.abs(Math.round(a.vs / 50) * 50)} ft/min` : '')),
         row('SNELHEID', a.gs == null ? '—' : `${Math.round(a.gs)} kt`),
-        row('KOERS', a.track == null ? '—' : `${pad2(Math.round(a.track) % 360).padStart(3, '0')}°`),
+        row('KOERS', a.track == null ? '—' : `${String(Math.round(a.track) % 360).padStart(3, '0')}°`),
         row('SQUAWK', a.squawk || '—'),
         row('HEX', a.hex.toUpperCase()),
-        row('POSITIE', `${((now - a.posAt) / 1000).toFixed(1).replace('.', ',')} s oud${a.mlat ? ' · MLAT' : ''}`)));
+        row('POSITIE', `${((now - a.posAt) / 1000).toFixed(1).replace('.', ',')} s oud${a.mlat ? ' · MLAT' : ''}`)),
+      h('button', { class: 'btn vr-follow' + (follow ? ' on' : ''), title: 'De kaart houdt dit toestel in het midden tot je de kaart zelf verschuift of het toestel sluit', onclick: () => { follow = !follow; paintCard(); draw(); } }, icon('target'), follow ? 'Volgen staat aan' : 'Volgen'));
   }
 
-  function select(hex) { selected = hex; paintCard(); draw(); }
+  function select(hex) { selected = hex; follow = false; paintCard(); draw(); }
   map.on('click', (e) => {
     const p = e.layerPoint;
     let best = null;
-    for (const d of drawn) { const dist = Math.hypot(d.x - p.x, d.y - p.y); if (dist <= Math.max(d.r, 16) && (!best || dist < best.dist)) best = { hex: d.hex, dist }; }
+    for (const d of drawn) { const dist = Math.hypot(d.x - p.x, d.y - p.y); if (dist <= d.r && (!best || dist < best.dist)) best = { hex: d.hex, dist }; }
     select(best ? best.hex : null);
   });
   map.on('mousemove', (e) => {
     const p = e.layerPoint;
-    el.classList.toggle('pointing', drawn.some((d) => Math.hypot(d.x - p.x, d.y - p.y) <= Math.max(d.r, 16)));
+    el.classList.toggle('pointing', drawn.some((d) => Math.hypot(d.x - p.x, d.y - p.y) <= d.r));
   });
+  // Moving the map by hand ends following.
+  map.on('dragstart', () => { if (follow) { follow = false; paintCard(); } });
 
   renderer.on('update', draw);
   return {
-    map, el, top, applyLayers, refreshRain, paintDim, paintScale,
+    map, el, applyLayers, refreshRain, paintScale,
     setSnap(s) { snap = s; paintStatus(); paintCard(); },
     draw, paintStatus,
-    destroy() { map.remove(); },
+    destroy() { themeWatch.disconnect(); clearTimeout(settle); map.remove(); },
   };
 }
