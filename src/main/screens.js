@@ -16,6 +16,9 @@ const POLL_MS = 10000;
 const ANNOUNCE_MS = 30000;
 const ONLINE_MS = 35000;   // a screen not heard from for this long is shown as not running
 const FORGET_DAYS = 30;    // a found (not added) screen silent for this long is dropped from the list
+// A found screen that was only seen briefly (a test, a laptop passing by) is dropped sooner.
+const BRIEF_MS = 30 * 60000, BRIEF_GONE_MS = 60 * 60000;
+let ephemeral = false;     // a test run: looks at the others, but never joins their lists
 
 let file = null;
 let self = { id: null, name: os.hostname() };
@@ -88,12 +91,14 @@ async function poll(p) {
     const host = p.address.includes(':') ? `[${p.address}]` : p.address;
     const res = await fetch(`http://${host}:${p.port || PORT}/api/status`, {
       signal: ctl.signal,
-      headers: { 'X-Palv-Screen': JSON.stringify({ id: self.id, name: self.name, port }) },
+      headers: { 'X-Palv-Screen': JSON.stringify({ id: self.id, name: self.name, port, ephemeral }) },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const s = await res.json();
     if (s.id === self.id) { peers.delete(key(p)); save(); return; } // that address is this screen itself
     if (s.id && p.id !== s.id) { peers.delete(key(p)); p.id = s.id; peers.set(key(p), p); }
+    // A test run of the dashboard is not a screen of its own.
+    if (s.ephemeral && !p.manual) { peers.delete(key(p)); save(); return; }
     p.status = s;
     p.name = s.name || p.name;
     p.lastSeen = Date.now();
@@ -116,6 +121,7 @@ async function pollAll() {
   const now = Date.now();
   for (const [k, p] of peers) {
     if (!p.manual && p.lastSeen && now - p.lastSeen > FORGET_DAYS * 864e5) peers.delete(k);
+    else if (!p.manual && p.lastSeen && now - p.lastSeen > BRIEF_GONE_MS && p.lastSeen - (p.firstSeen || p.lastSeen) < BRIEF_MS) peers.delete(k);
   }
   await Promise.all([...peers.values()].map(poll));
   onChange(list());
@@ -157,7 +163,7 @@ function handle(req, res) {
   if (hdr) {
     try {
       const p = JSON.parse(hdr);
-      if (p && typeof p.id === 'string' && p.id.length < 80) {
+      if (p && typeof p.id === 'string' && p.id.length < 80 && !p.ephemeral) {
         const known = peers.get(p.id);
         meet({ id: p.id, name: String(p.name || '').slice(0, 60), address: from, port: +p.port || PORT });
         if (!known) setTimeout(pollAll, 500);
@@ -184,7 +190,7 @@ function listen(p) {
 
 /* ---------- UDP discovery ---------- */
 function announce() {
-  if (!udp) return;
+  if (!udp || ephemeral) return;
   const msg = Buffer.from(JSON.stringify({ palv: 1, id: self.id, name: self.name, port }));
   const targets = new Set(['255.255.255.255']);
   for (const list of Object.values(os.networkInterfaces())) {
@@ -216,9 +222,10 @@ function startUdp() {
   });
 }
 
-async function start({ userData, status, onUpdate }) {
+async function start({ userData, status, onUpdate, test }) {
+  ephemeral = !!test;
   load(userData);
-  selfStatus = () => ({ ...status(), id: self.id, name: self.name, port });
+  selfStatus = () => ({ ...status(), id: self.id, name: self.name, port, ephemeral });
   onChange = onUpdate || (() => {});
 
   for (let p = PORT; p < PORT + 5; p += 1) {

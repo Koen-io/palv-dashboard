@@ -72,6 +72,7 @@ async function request(src, url) {
     if (!data || !(Array.isArray(data.ac) || Array.isArray(data.aircraft))) throw new Error('onbruikbaar antwoord');
     if (g.refusals) log.info('verkeer', `${SOURCES[src].name} levert weer`);
     g.refusals = 0;
+    g.blocked = false;
     g.ok += 1;
     g.lastError = null;
     return data;
@@ -81,12 +82,16 @@ async function request(src, url) {
     g.lastError = msg;
     const m = /\b(429|403|503)\b/.exec(msg);
     if (m) {
-      // Refused: rest, longer each time, or as long as the source asks.
+      // Refused: rest, longer each time, or as long as the source asks. "Too many" (429) is over within
+      // a minute; "forbidden" (403) means the address is blocked for a while, and asking again and
+      // again only keeps the block in place, so that rests up to 10 minutes.
       g.refusals += 1;
+      const blocked = m[1] === '403';
       const asked = err && err.retryAfter ? err.retryAfter * 1000 : 0;
-      const pause = Math.min(60000, Math.max(asked, 2000 * 2 ** (g.refusals - 1)));
+      const pause = Math.min(blocked ? 600000 : 60000, Math.max(asked, 2000 * 2 ** (g.refusals - 1)));
       g.until = Date.now() + pause;
-      if (g.refusals === 1 || g.refusals % 5 === 0) log.warn('verkeer', `${SOURCES[src].name} weigert (HTTP ${m[1]}), pauze ${Math.round(pause / 1000)} s`);
+      g.blocked = blocked;
+      if (g.refusals <= 2 || g.refusals % 5 === 0) log.warn('verkeer', `${SOURCES[src].name} ${blocked ? 'blokkeert dit adres' : 'weigert'} (HTTP ${m[1]}), pauze ${Math.round(pause / 1000)} s`);
     }
     return null;
   } finally {

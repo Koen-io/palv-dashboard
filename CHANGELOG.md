@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 1.14.1
+
+### Verbeterd
+- Vluchtradar: blokkeert een bron het internetadres (HTTP 403), dan wacht het dashboard tot 10 minuten tussen pogingen, zodat de blokkade vanzelf verloopt; de andere bron neemt het intussen over
+- Schermoverzicht: een Mac toont zijn eigen computernaam; testvensters melden zich niet meer aan, en een scherm dat maar kort te zien was verdwijnt na een uur uit de lijst
+- Nettere opmaak van de statuspagina-links in het schermoverzicht
+
 ## 1.14.0
 
 ### Nieuw

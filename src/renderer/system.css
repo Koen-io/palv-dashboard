@@ -203,6 +203,7 @@
 .sc-issues div { display: flex; align-items: center; gap: 0.35rem; }
 .sc-issues svg { width: 0.85rem; height: 0.85rem; flex: none; }
 .sc-remove { position: absolute; top: 0.45rem; right: 0.4rem; }
+.screens-modal .modal-body > .hint { font-size: 0.78rem; line-height: 1.5; color: var(--muted); }
 .modal .hint a { color: var(--link); }
 
 /* ---------- settings: backups, system, import ---------- */

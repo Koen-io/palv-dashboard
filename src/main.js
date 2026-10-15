@@ -231,9 +231,10 @@ app.whenReady().then(() => {
   createWindow();
   watchdog.attach(win);
   data.start(() => win);
-  if (shotPath) return;
-  updater.start({ repository: pkg.palv && pkg.palv.updateRepo, onStatus: (s) => send('update:status', s) });
-  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list) });
+  // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
+  if (shotPath && !process.argv.includes('--shot-full')) return;
+  if (!shotPath) updater.start({ repository: pkg.palv && pkg.palv.updateRepo, onStatus: (s) => send('update:status', s) });
+  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath });
 });
 
 app.on('window-all-closed', () => app.quit());
@@ -331,13 +332,23 @@ let rendererInfo = {};
 ipcMain.on('status:heartbeat', () => watchdog.heartbeat());
 ipcMain.on('status:report', (_e, info) => { rendererInfo = info && typeof info === 'object' ? info : {}; });
 
+// The name the computer goes by: on a Mac its own name (os.hostname() there can be a provider's
+// network name), elsewhere the host name.
+let compName = null;
+function computerName() {
+  if (compName) return compName;
+  compName = os.hostname();
+  if (isMac) { try { compName = require('child_process').execFileSync('/usr/sbin/scutil', ['--get', 'ComputerName'], { encoding: 'utf8', timeout: 3000 }).trim() || compName; } catch { /* keep the host name */ } }
+  return compName;
+}
+
 function screenStatus() {
   const st = watchdog.stats;
   const displays = screen.getAllDisplays();
   const u = updater.status();
   return {
     version: app.getVersion(),
-    hostname: os.hostname(),
+    hostname: computerName(),
     platform: isMac ? `macOS ${process.getSystemVersion()}` : `Windows ${process.getSystemVersion()}`,
     arch: process.arch,
     now: Date.now(),
