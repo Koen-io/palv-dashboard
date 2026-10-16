@@ -230,7 +230,7 @@ function zpCreate(body, w) {
   paintScale();
 
   /* ---------- the parts ---------- */
-  const parts = [zpRoute, zpTools, zpWind, zpAero, zpOffshore, zpFleet, zpExtras, zpSearch, zpPanels];
+  const parts = [zpRoute, zpTools, zpWind, zpAero, zpOffshore, zpFleet, zpExtras, zpSearch, zpPanels, zpItems];
   ctx.parts = {};
   for (const part of parts) {
     try { ctx.parts[part.name] = part(ctx) || {}; } catch (err) { plog('error', `zoek & plan: ${part.name} kon niet starten`, String(err && err.stack || err)); }
@@ -240,7 +240,8 @@ function zpCreate(body, w) {
   // A click goes to the active tool (route, tape, rings); otherwise to the symbol under the pointer, and
   // otherwise it selects that point of the map.
   ctx.mode = 'select';
-  ctx.setMode = (m) => { ctx.mode = ctx.mode === m && m !== 'select' ? 'select' : m; mapEl.dataset.mode = ctx.mode; ctx.emit('mode', ctx.mode); };
+  // One tool at a time; choosing the active one again stops it (unless `force`).
+  ctx.setMode = (m, force) => { const next = !force && ctx.mode === m && m !== 'select' ? 'select' : m; if (next === ctx.mode) return; ctx.mode = next; mapEl.dataset.mode = ctx.mode; ctx.emit('mode', ctx.mode); };
   mapEl.dataset.mode = 'select';
   map.on('click', (e) => {
     const p = e.containerPoint;
@@ -262,9 +263,8 @@ function zpCreate(body, w) {
     if (e.key === 'Escape' && ctx.mode !== 'select') { ctx.setMode('select'); e.stopPropagation(); }
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (k === 'r') ctx.setMode('route');
-    else if (k === 'm') ctx.setMode('measure');
-    else if (k === 'g') ctx.setMode('rings');
+    const byKey = { r: 'route', m: 'measure', g: 'rings', z: 'pattern', o: 'orbit', b: 'reach' };
+    if (byKey[k]) ctx.setMode(byKey[k]);
     else if (k === 'delete' || k === 'backspace') ctx.emit('delete');
     else return;
     e.preventDefault();

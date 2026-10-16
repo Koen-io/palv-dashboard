@@ -327,5 +327,10 @@ test('reverse: PDOK in the Netherlands, Photon elsewhere and when PDOK is far of
   const border = await geocode.reverse(51.3, 3.5);
   assert.strictEqual(border.src, 'PDOK');
   assert.strictEqual(border.label, 'Gentsevaart 74');
-  assert.ok(border.sub.endsWith('48,6 km'), border.sub);
+  assert.ok(Math.abs(border.distance - 48600) < 200, String(border.distance));
+
+  // At sea off the Dutch coast: the nearest Dutch address on land, however far.
+  const sea = await geocode.reverse(52.75, 3.9);
+  assert.strictEqual(sea.src, 'PDOK');
+  assert.ok(sea.distance > 1000);
 });

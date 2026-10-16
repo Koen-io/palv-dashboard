@@ -258,6 +258,23 @@ function openSettings(startTab) {
         ];
       },
     },
+    // Zoek & Plan behind the scenes: sources, keys, offline maps and the unit's profile file.
+    zoekplan: {
+      label: 'Zoek & Plan', icon: 'route',
+      build: () => {
+        const ctx = [...ZP_LIVE][0];
+        if (!ctx) return [h('h3', {}, 'Zoek & Plan'), h('p', {}, 'Open eerst het tabblad Zoek & Plan; dan staan hier de bronnen, de sleutel voor de luchtvaartgegevens, de offline kaarten en het profielbestand.')];
+        return [
+          h('h3', {}, 'Profielbestand van de eenheid'),
+          h('p', { class: 'hint' }, 'De waarden uit vlieghandboek (RFM), SOP, TACSOP en BOM staan in een eigen bestand op dit scherm, nooit in de openbare code. Ze gaan vanzelf mee naar de andere schermen van de eenheid.'),
+          h('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' },
+            h('button', { class: 'btn', onclick: async () => { const r = await window.palv.plan.importProfiles(); if (r && r.ok) { toast(`Profiel ingelezen: ${r.ids.join(', ').toUpperCase()}`); ctx.loadStore(); } else if (r && r.error) toast(r.error, true); } }, icon('download'), 'Profielbestand importeren'),
+            h('button', { class: 'btn', onclick: () => window.palv.plan.exportPrivate() }, icon('download'), 'Eigen gegevens exporteren')),
+          h('hr'),
+          zpSourcesPanel(ctx),
+        ];
+      },
+    },
     over: {
       label: 'Over', icon: 'info',
       build: () => {

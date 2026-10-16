@@ -46,6 +46,16 @@ function distM(aLat, aLon, bLat, bLon) {
   const x = Math.sin(rad(bLat - aLat) / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(rad(bLon - aLon) / 2) ** 2;
   return 12742000 * Math.asin(Math.min(1, Math.sqrt(x)));
 }
+// The North Sea off the Dutch coast (lon, lat): a point there is shown with the nearest Dutch address.
+const NL_SEA = [[2.0, 51.05], [3.35, 51.38], [3.9, 51.75], [4.35, 52.2], [4.55, 52.6], [4.7, 53.0], [5.3, 53.45], [6.2, 53.55], [7.2, 53.7], [7.2, 56.0], [2.0, 56.0]];
+function inPoly(poly, lat, lon) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 function inNL(lat, lon) {
   let inside = false;
   for (let i = 0, j = NL_AREA.length - 1; i < NL_AREA.length; j = i++) {
@@ -651,7 +661,10 @@ async function reverse(lat, lon) {
   const hit = cacheGet('reverse', key);
   if (hit) return hit;
   let near = null;
-  if (inNL(lat, lon)) {
+  // On the Dutch part of the North Sea and along the coast PDOK still gives the nearest Dutch address
+  // on land, however far: that is what a point at sea is shown with.
+  const nearNL = !inNL(lat, lon) && inPoly(NL_SEA, lat, lon);
+  if (inNL(lat, lon) || nearNL) {
     try {
       const data = await fetchJson(`${PDOK}/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&rows=1&fl=id,type,weergavenaam,centroide_ll,afstand`, { headers: { 'User-Agent': UA }, timeoutMs: TIMEOUT });
       const d = data && data.response && data.response.docs && data.response.docs[0];
@@ -659,7 +672,7 @@ async function reverse(lat, lon) {
         const it = pdokItem(d);
         const m = num(d.afstand);
         near = { label: it.label, sub: it.sub, lat: it.lat, lon: it.lon, distance: m == null ? null : Math.round(m), src: 'PDOK' };
-        if (m == null || m <= PDOK_REVERSE_MAX_M) { cacheSet('reverse', key, near); return near; }
+        if (m == null || m <= PDOK_REVERSE_MAX_M || nearNL) { cacheSet('reverse', key, near); return near; }
       }
     } catch (err) { log.warn('geocode', 'PDOK omgekeerd: ' + errText(err)); }
   }
@@ -675,7 +688,7 @@ async function reverse(lat, lon) {
     } catch { /* reported by photonGet */ }
   }
   // Nothing closer: the nearest Dutch address, with how far it is.
-  if (near) return { ...near, sub: sub(near.sub, near.distance != null ? `${(near.distance / 1000).toFixed(1).replace('.', ',')} km` : null) };
+  if (near) return near;
   return null;
 }
 

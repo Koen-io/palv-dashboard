@@ -1,5 +1,18 @@
 # Wijzigingen
 
+## 1.19.0
+
+### Zoek & Plan: eenvoudiger in gebruik
+- Eén gereedschap tegelijk, bovenin en in het paneel Gereedschap gelijk: kies je er bovenin een, dan opent het paneel op hetzelfde gereedschap, en andersom. Zoekpatroon, orbit en actieradius plaats je nu ook met een klik op de kaart
+- Een balk bovenin de kaart zegt wat een klik doet zolang een gereedschap aan staat, met een knop Klaar (of Esc)
+- Lijst "Op de kaart" linksonder: alles wat je hebt gemaakt (route, meetlinten, ringen, zoekpatroon, orbit, actieradius), nieuwste bovenaan met tijd. Klik om het te tonen, de prullenbak om het weg te halen, of alles in één keer
+- Bij elk gemaakt object een prullenbakje op de kaart, en "Ongedaan maken" als je iets per ongeluk weggooit
+- Meerdere meetlinten tegelijk
+- Een klik op de kaart toont de coördinaat, met daaronder het dichtstbijzijnde adres op land en hoe ver en in welke richting dat ligt; ook op zee
+- Profiel: alles onder "Deze vlucht" is ingeklapt, met een zoekveld dat de onderdelen opent waarin staat wat je zoekt (bijvoorbeeld VNE, hoist of wind)
+- "Wie is er het snelst": schakelaar Wind meerekenen, met bij elk toestel ook de tijd zonder wind
+- Bronnen, sleutels, offline kaarten en het profielbestand staan nu onder Instellingen › Zoek & Plan
+
 ## 1.18.0
 
 ### Nieuw in Zoek & Plan

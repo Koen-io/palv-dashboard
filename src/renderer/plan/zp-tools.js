@@ -1,60 +1,96 @@
 'use strict';
 
 /* ============================================================
-   Zoek & Plan — gereedschap: meetlint A→B, afstandsringen, zoekpatronen, orbit, actieradius met wind
-   en "wie is er het snelst" naar een punt.
+   Zoek & Plan — gereedschap: meetlint A→B, afstandsringen, zoekpatroon, orbit en actieradius, en
+   "wie is er het snelst" naar een punt.
    ============================================================ */
+// Every tool is a mode of the map (one at a time, the same buttons above the map and in the panel): with
+// it on, a click on the map places what the tool makes. What has been placed stays until it is thrown
+// away (bin on the map, or in the list "Op de kaart"), and is kept with the dashboard layout.
 const ZP_PATTERNS = {
   ss: { name: 'Uitdijend vierkant (SS)', hint: 'Vanaf het datum, poten van S, S, 2S, 2S, 3S… telkens 90° gedraaid. Voor een klein gebied met een nauwkeurige laatst bekende positie.' },
   vs: { name: 'Sectorzoeken (VS)', hint: 'Drie gelijkzijdige driehoeken door het datum, 120° uit elkaar. Snel en nauwkeurig rond een goed bekend punt.' },
   cs: { name: 'Kruipende lijn (CS)', hint: 'Poten dwars op de lange as, opschuivend langs de as. Voor een langgerekt gebied, bv. langs een route of kustlijn.' },
   ps: { name: 'Parallelle banen (PS)', hint: 'Poten langs de lange as, opschuivend dwars erop. Voor een groot rechthoekig gebied.' },
 };
+// The tools, in the order of the buttons; `click` says what a click on the map does in that mode.
+const ZP_TOOLS = {
+  measure: { name: 'Meetlint', short: 'Meten', icon: 'route', key: 'M', color: '#ffe14d', click: 'Klik punt A en daarna punt B: kortste lijn met maatstreepjes, koers heen en terug en vliegtijd.' },
+  rings: { name: 'Afstandsringen', short: 'Ringen', icon: 'radar', key: 'G', color: '#ffd65a', click: 'Klik waar het middelpunt van de ringen moet komen. Elke klik plaatst een nieuwe set.' },
+  pattern: { name: 'Zoekpatroon', short: 'Zoeken', icon: 'target', key: 'Z', color: '#d18cff', click: 'Klik op het datum (laatst bekende positie): het patroon komt daar te liggen.' },
+  orbit: { name: 'Orbit', short: 'Orbit', icon: 'refresh', key: 'O', color: '#4dd0e1', click: 'Klik op het doel: de orbit komt eromheen.' },
+  reach: { name: 'Actieradius', short: 'Bereik', icon: 'wind', key: 'B', color: '#7bd88f', click: 'Klik op het vertrekpunt: je ziet hoe ver je komt met de brandstof aan boord, met wind.' },
+};
 
 function zpTools(ctx) {
   const { map, cfg } = ctx;
-  const T = { tape: null, rings: cfg.ringSets || [], pattern: null, orbit: null, reach: null, first: null };
-  cfg.ringSets = T.rings;
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  // Placed objects, kept in the widget settings.
+  cfg.tapes = Array.isArray(cfg.tapes) ? cfg.tapes : [];
+  cfg.ringSets = Array.isArray(cfg.ringSets) ? cfg.ringSets : [];
+  for (const r of cfg.ringSets) { r.id = r.id || uid(); r.at = r.at || Date.now(); }
+  cfg.placed = cfg.placed || {}; // pattern / orbit / reach: { id, lat, lon, label, at }
+  const T = { pattern: null, orbit: null, reach: null, first: null };
   const rem = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const fam = () => getComputedStyle(document.body).fontFamily;
+  const changed = () => { ctx.save(); rebuild(); ctx.emit('items'); };
 
-  /* ---------- tape A→B ---------- */
-  let tapeLive = null;
+  /* ---------- placing by clicking ---------- */
+  let tapeLive = null, tapeOpen = null; // the tape whose point B is still to come
   ctx.on('mapclick', ({ latlng, handled }) => {
+    const p = { lat: +latlng.lat.toFixed(6), lon: +latlng.lng.toFixed(6) };
     if (ctx.mode === 'measure') {
       handled.done = true;
-      const p = { lat: latlng.lat, lon: latlng.lng };
-      if (!T.tape || T.tape.b) T.tape = { a: p, b: null };
-      else T.tape.b = p;
-      tapeLive = null;
-      ctx.cv.request();
-      ctx.emit('tools');
-    } else if (ctx.mode === 'rings') {
+      if (!tapeOpen) {
+        if (cfg.tapes.length >= 8) cfg.tapes.shift();
+        tapeOpen = { id: uid(), a: p, b: null, at: Date.now() };
+        cfg.tapes.push(tapeOpen);
+      } else { tapeOpen.b = p; tapeOpen = null; tapeLive = null; }
+      changed();
+    } else if (ctx.mode === 'rings') { handled.done = true; addRings(p); }
+    else if (ctx.mode === 'pattern' || ctx.mode === 'orbit' || ctx.mode === 'reach') {
       handled.done = true;
-      addRings({ lat: latlng.lat, lon: latlng.lng });
+      place(ctx.mode, p);
     }
   });
-  map.on('mousemove', (e) => { if (ctx.mode === 'measure' && T.tape && !T.tape.b) { tapeLive = { lat: e.latlng.lat, lon: e.latlng.lng }; ctx.cv.request(); } });
+  map.on('mousemove', (e) => { if (ctx.mode === 'measure' && tapeOpen) { tapeLive = { lat: e.latlng.lat, lon: e.latlng.lng }; ctx.cv.request(); } });
+  // Leaving the tape mode halfway: the unfinished tape goes.
+  ctx.on('mode', (m) => { if (m !== 'measure' && tapeOpen) { cfg.tapes = cfg.tapes.filter((t) => t !== tapeOpen); tapeOpen = null; tapeLive = null; changed(); } });
 
-  // Tick spacing on the tape for its length in the chosen unit.
+  function place(kind, p) {
+    cfg.placed[kind] = { id: uid(), lat: p.lat, lon: p.lon, label: p.label || null, at: Date.now() };
+    changed();
+    ctx.emit('placed', kind);
+  }
+  function addRings(p) {
+    if (cfg.ringSets.length >= 8) cfg.ringSets.shift();
+    cfg.ringSets.push({ id: uid(), lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), label: p.label || null, at: Date.now() });
+    changed();
+  }
+  const remove = (kind, id) => {
+    if (kind === 'measure') cfg.tapes = cfg.tapes.filter((t) => t.id !== id);
+    else if (kind === 'rings') cfg.ringSets = cfg.ringSets.filter((r) => r.id !== id);
+    else if (cfg.placed[kind] && cfg.placed[kind].id === id) delete cfg.placed[kind];
+    changed();
+  };
+
+  /* ---------- tape A→B ---------- */
   const tickStep = (lenUnits, pxLen) => {
     const want = lenUnits / Math.max(2, pxLen / 55);
     return [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => s >= want) || 1000;
   };
-  function drawTape(c, a, b, live) {
+  function drawTape(c, a, b, live, hot) {
     const { g } = c;
     const du = cfg.units.dist, unitM = PlanUnits.DIST[du].m;
     const len = PlanGeo.dist(a, b), lenU = len / unitM;
     const pa = c.P(a.lat, a.lon), pb = c.P(b.lat, b.lon), pxLen = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
-    // The line itself, as the great circle it is.
     const path = PlanGeo.densify(a, b, Math.max(500, len / 60)).map((p) => c.P(p.lat, p.lon));
     g.lineCap = 'round';
-    g.lineWidth = 6; g.strokeStyle = 'rgba(5,9,16,0.8)';
+    g.lineWidth = hot ? 9 : 6; g.strokeStyle = hot ? 'rgba(255,255,255,0.55)' : 'rgba(5,9,16,0.8)';
     g.beginPath(); path.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
     g.lineWidth = 2.6; g.strokeStyle = '#ffe14d'; g.setLineDash(live ? [8, 6] : []);
     g.beginPath(); path.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
     g.setLineDash([]);
-    // Ticks at round distances, labelled at every other one, square to the line.
     const step = tickStep(lenU, pxLen);
     const font = `700 ${(0.62 * rem()).toFixed(1)}px ${fam()}`;
     for (let k = 1; k * step < lenU; k += 1) {
@@ -70,7 +106,6 @@ function zpTools(ctx) {
       g.beginPath(); g.arc(p[0], p[1], 7, 0, Math.PI * 2); g.fillStyle = '#ffe14d'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#0a0f18'; g.stroke();
       zpText(g, l, p[0], p[1] + 0.5, { font: `800 ${(0.62 * rem()).toFixed(1)}px sans-serif`, color: '#0a0f18', halo: 'rgba(0,0,0,0)', align: 'center' });
     }
-    // The card at B: distance in both units, course both ways, time with and without wind.
     const brg = PlanGeo.bearing(a, b), back = PlanGeo.bearing(b, a), mid = PlanGeo.interp(a, b, 0.5);
     const tas = ctx.tas();
     const tCalm = (len / 1852 / tas) * 60;
@@ -82,45 +117,39 @@ function zpTools(ctx) {
       `${ctx.profile().name} ${Math.round(tas)} KTAS: ${ctx.fmt.dur(tCalm)} windstil`,
       tWind != null && Math.abs(tWind - tCalm) > 0.05 ? { text: `met wind: ${ctx.fmt.dur(tWind)}`, color: '#8fd3ff' } : null,
     ].filter(Boolean);
-    const box = zpTag(g, lines, pb[0] + 14, pb[1] - 4, { font: `600 ${(0.68 * rem()).toFixed(1)}px ${fam()}`, accent: '#ffe14d' });
-    if (!live) c.hit({ x: box.x + box.w - 8, y: box.y + 8, r: 10, kind: 'tape-close', z: 9 });
-    if (!live) { g.font = `700 ${(0.75 * rem()).toFixed(1)}px sans-serif`; g.fillStyle = '#8ea2bf'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('×', box.x + box.w - 8, box.y + 8); }
+    zpTag(g, lines, pb[0] + 16, pb[1] + 26, { font: `600 ${(0.68 * rem()).toFixed(1)}px ${fam()}`, accent: '#ffe14d' });
   }
   ctx.cv.add(70, (c) => {
-    if (T.tape && (T.tape.b || tapeLive)) drawTape(c, T.tape.a, T.tape.b || tapeLive, !T.tape.b);
-    else if (T.tape && T.tape.a) { const p = c.P(T.tape.a.lat, T.tape.a.lon); c.g.beginPath(); c.g.arc(p[0], p[1], 7, 0, Math.PI * 2); c.g.fillStyle = '#ffe14d'; c.g.fill(); }
+    for (const t of cfg.tapes) {
+      if (t.b) drawTape(c, t.a, t.b, false, ctx.hot === t.id);
+      else if (t === tapeOpen && tapeLive) drawTape(c, t.a, tapeLive, true);
+      else { const p = c.P(t.a.lat, t.a.lon); c.g.beginPath(); c.g.arc(p[0], p[1], 7, 0, Math.PI * 2); c.g.fillStyle = '#ffe14d'; c.g.fill(); }
+      const p = c.P(t.a.lat, t.a.lon);
+      c.hit({ x: p[0], y: p[1], r: 9, kind: 'item', item: { kind: 'measure', id: t.id }, z: 4 });
+    }
   });
 
   /* ---------- range rings ---------- */
-  function addRings(p) {
-    if (T.rings.length >= 6) T.rings.shift();
-    T.rings.push({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), label: p.label || null });
-    ctx.save(); ctx.cv.request(); ctx.emit('tools');
-  }
-  const clearRings = () => { T.rings.splice(0); ctx.save(); ctx.cv.request(); ctx.emit('tools'); };
   ctx.cv.add(20, (c) => {
-    if (!T.rings.length || cfg.ringsOff) return;
+    if (!cfg.ringSets.length || cfg.ringsOff) return;
     const { g } = c;
     const du = cfg.units.dist, unitM = PlanUnits.DIST[du].m;
     const step = (cfg.rings.stepNm || 5) * unitM, n = Math.min(40, cfg.rings.count || 5);
     const font = `700 ${(0.64 * rem()).toFixed(1)}px ${fam()}`;
-    T.rings.forEach((r, idx) => {
-      const ctr = c.P(r.lat, r.lon);
-      g.lineWidth = 1.6;
+    for (const r of cfg.ringSets) {
+      const ctr = c.P(r.lat, r.lon), hot = ctx.hot === r.id;
       for (let k = 1; k <= n; k += 1) {
         const ring = PlanGeo.circle(r, k * step, 120).map((p) => c.P(p.lat, p.lon));
-        g.strokeStyle = 'rgba(5,9,16,0.55)'; g.lineWidth = 3.4; g.setLineDash([]);
+        g.strokeStyle = hot ? 'rgba(255,255,255,0.5)' : 'rgba(5,9,16,0.55)'; g.lineWidth = hot ? 5 : 3.4; g.setLineDash([]);
         g.beginPath(); ring.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
         g.strokeStyle = k % 5 === 0 ? 'rgba(255,214,90,0.95)' : 'rgba(255,214,90,0.7)'; g.lineWidth = k % 5 === 0 ? 2 : 1.3; g.setLineDash(k % 5 === 0 ? [] : [7, 5]);
         g.beginPath(); ring.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
         g.setLineDash([]);
-        // Labels north and east of the centre.
         for (const brg of [0, 90]) {
           const lp = PlanGeo.dest(r, brg, k * step), q = c.P(lp.lat, lp.lon);
           if (c.inView(q, 0)) zpText(g, `${String(+(k * (cfg.rings.stepNm || 5)).toFixed(2)).replace('.', ',')} ${PlanUnits.DIST[du].name}`, q[0] + 4, q[1] - 7, { font, color: '#ffd65a' });
         }
       }
-      // Compass rose: a tick every 10°, the cardinal and intercardinal courses labelled (magnetic or true).
       if (cfg.compass !== false) {
         const R = c.pxPerM(r.lat) * step * n;
         const mv = cfg.units.north === 'true' ? 0 : ctx.mag(r.lat, r.lon);
@@ -132,14 +161,14 @@ function zpTools(ctx) {
         }
       }
       g.beginPath(); g.arc(ctr[0], ctr[1], 4.5, 0, Math.PI * 2); g.fillStyle = '#ffd65a'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#0a0f18'; g.stroke();
-      c.hit({ x: ctr[0], y: ctr[1], r: 9, kind: 'rings', item: { idx }, z: 4 });
-    });
+      c.hit({ x: ctr[0], y: ctr[1], r: 9, kind: 'item', item: { kind: 'rings', id: r.id }, z: 4 });
+    }
   });
 
-  /* ---------- search patterns ---------- */
+  /* ---------- search pattern ---------- */
   const pat = cfg.pattern || (cfg.pattern = { type: 'ss', spacingNm: 0.5, legs: 12, radiusNm: 2, lengthNm: 10, widthNm: 4, axis: 0, firstTrack: 0, right: true });
   function buildPattern() {
-    const d = ctx.selected;
+    const d = cfg.placed.pattern;
     if (!d) { T.pattern = null; return; }
     const nm = PlanUnits.DIST[cfg.units.dist].m;
     let pts;
@@ -152,18 +181,21 @@ function zpTools(ctx) {
   }
   ctx.cv.add(55, (c) => {
     if (!T.pattern) return;
-    const { g } = c;
+    const { g } = c, hot = cfg.placed.pattern && ctx.hot === cfg.placed.pattern.id;
     const p = T.pattern.pts.map((x) => c.P(x.lat, x.lon));
-    g.lineWidth = 5; g.strokeStyle = 'rgba(5,9,16,0.6)'; g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
+    g.lineWidth = hot ? 8 : 5; g.strokeStyle = hot ? 'rgba(255,255,255,0.5)' : 'rgba(5,9,16,0.6)'; g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
     g.lineWidth = 2.2; g.strokeStyle = '#d18cff'; g.setLineDash([9, 5]); g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke(); g.setLineDash([]);
     const font = `700 ${(0.6 * rem()).toFixed(1)}px ${fam()}`;
-    p.forEach((q, i) => { if (i && i < p.length) { g.beginPath(); g.arc(q[0], q[1], 3.5, 0, Math.PI * 2); g.fillStyle = '#d18cff'; g.fill(); zpText(g, String(i), q[0] + 6, q[1] - 6, { font, color: '#e6c4ff' }); } });
+    p.forEach((q, i) => { if (i) { g.beginPath(); g.arc(q[0], q[1], 3.5, 0, Math.PI * 2); g.fillStyle = '#d18cff'; g.fill(); zpText(g, String(i), q[0] + 6, q[1] - 6, { font, color: '#e6c4ff' }); } });
+    const d = c.P(cfg.placed.pattern.lat, cfg.placed.pattern.lon);
+    g.beginPath(); g.arc(d[0], d[1], 6, 0, Math.PI * 2); g.fillStyle = '#d18cff'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#0a0f18'; g.stroke();
+    c.hit({ x: d[0], y: d[1], r: 9, kind: 'item', item: { kind: 'pattern', id: cfg.placed.pattern.id }, z: 4 });
   });
 
   /* ---------- orbit ---------- */
   const orb = cfg.orbit || (cfg.orbit = { radiusNm: 0.4, tas: null, bank: 30, show: 'circle' });
   function buildOrbit() {
-    const d = ctx.selected;
+    const d = cfg.placed.orbit;
     if (!d) { T.orbit = null; return; }
     const pl = ctx.planning();
     const tas = orb.tas || Math.round(ctx.tas() * 0.7);
@@ -175,19 +207,22 @@ function zpTools(ctx) {
   }
   ctx.cv.add(50, (c) => {
     if (!T.orbit) return;
-    const { g } = c;
+    const { g } = c, hot = ctx.hot === cfg.placed.orbit.id;
     const ring = PlanGeo.circle(T.orbit.center, T.orbit.r, 90).map((p) => c.P(p.lat, p.lon));
-    g.lineWidth = 2.4; g.strokeStyle = '#4dd0e1'; g.beginPath(); ring.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
+    g.lineWidth = hot ? 5 : 2.4; g.strokeStyle = '#4dd0e1'; g.beginPath(); ring.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke();
     if (orb.show === 'drift' || orb.show === 'both') {
       const d = T.orbit.drift.points.map((p) => c.P(p.lat, p.lon));
       g.lineWidth = 1.6; g.strokeStyle = 'rgba(77,208,225,0.75)'; g.setLineDash([4, 4]); g.beginPath(); d.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke(); g.setLineDash([]);
     }
+    const q = c.P(T.orbit.center.lat, T.orbit.center.lon);
+    g.beginPath(); g.arc(q[0], q[1], 5, 0, Math.PI * 2); g.fillStyle = '#4dd0e1'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#0a0f18'; g.stroke();
+    c.hit({ x: q[0], y: q[1], r: 9, kind: 'item', item: { kind: 'orbit', id: cfg.placed.orbit.id }, z: 4 });
   });
 
   /* ---------- radius of action with wind ---------- */
   const rch = cfg.reach || (cfg.reach = { fuelKg: null, roundTrip: true, oneWay: true });
   function buildReach() {
-    const d = ctx.selected;
+    const d = cfg.placed.reach;
     if (!d) { T.reach = null; return; }
     const pl = ctx.planning();
     const fuel = (rch.fuelKg != null ? rch.fuelKg : pl.fuelKg) - pl.taxiKg - pl.reserveKg;
@@ -198,48 +233,60 @@ function zpTools(ctx) {
   }
   ctx.cv.add(15, (c) => {
     if (!T.reach) return;
-    const { g } = c;
+    const { g } = c, hot = ctx.hot === cfg.placed.reach.id;
     const font = `700 ${(0.64 * rem()).toFixed(1)}px ${fam()}`;
     const poly = (list, color, dash, fill, label) => {
       const p = list.map((r) => c.P(r.point.lat, r.point.lon));
       g.beginPath(); p.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath();
       if (fill) { g.fillStyle = fill; g.fill(); }
-      g.lineWidth = 2.2; g.strokeStyle = color; g.setLineDash(dash); g.stroke(); g.setLineDash([]);
+      g.lineWidth = hot ? 4.5 : 2.2; g.strokeStyle = color; g.setLineDash(dash); g.stroke(); g.setLineDash([]);
       const top = p.reduce((a, b) => (b[1] < a[1] ? b : a));
       zpText(g, label, top[0], top[1] - 10, { font, color, align: 'center' });
     };
     if (rch.oneWay) poly(T.reach.ow, '#7bd88f', [3, 5], null, `Enkele reis · ${ctx.fmt.dur(T.reach.minutes)}`);
     if (rch.roundTrip) poly(T.reach.rt, '#7bd88f', [], 'rgba(123,216,143,0.08)', 'Actieradius heen en terug');
+    const q = c.P(T.reach.center.lat, T.reach.center.lon);
+    g.beginPath(); g.arc(q[0], q[1], 5, 0, Math.PI * 2); g.fillStyle = '#7bd88f'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#0a0f18'; g.stroke();
+    c.hit({ x: q[0], y: q[1], r: 9, kind: 'item', item: { kind: 'reach', id: cfg.placed.reach.id }, z: 4 });
   });
 
   /* ---------- who gets there first ---------- */
+  // With or without the wind at flying height, as chosen with the switch; both times are worked out, so
+  // the list can say what the wind does.
   function buildFirst() {
     const d = ctx.selected;
     if (!d) { T.first = null; return; }
     const out = [];
     const profiles = ctx.profiles();
     const snap = trafficFeed.snap;
-    const own = (cfg.fleet.groups || ['police']);
+    const useWind = cfg.firstWind !== false;
+    const own = cfg.fleet.groups || ['police'];
+    const time = (from, tas, alt) => {
+      const calm = PlanPerf.directTime(from, d, tas, null);
+      const windy = PlanPerf.directTime(from, d, tas, (la, lo, ms) => ctx.windAt(la, lo, ms, alt));
+      return { calm, windy, use: useWind ? windy : calm };
+    };
     for (const a of (snap && snap.ac) || []) {
       if (!a.group || !own.includes(a.group) || a.lat == null || a.alt === 'ground') continue;
       const nm = UNIT_NAMES(a.hex) || {};
       const prof = /139/.test(nm.type || a.type || '') ? profiles.aw139 : /135|EC35/.test(nm.type || a.type || '') ? profiles.ec135 : null;
       const pl = prof ? PlanProfiles.planning(prof) : null;
-      const tas = pl ? PlanPerf.tasFromIas(pl.ias, typeof a.alt === 'number' ? a.alt : pl.altFt) : Math.max(90, a.gs || 0);
       const alt = typeof a.alt === 'number' ? a.alt : 1000;
-      const t = PlanPerf.directTime({ lat: a.lat, lon: a.lon }, d, tas, (la, lo, ms) => ctx.windAt(la, lo, ms, alt));
-      out.push({ kind: 'air', name: a.flight || a.reg || nm.reg || a.hex.toUpperCase(), sub: `${nm.reg || a.reg || ''} ${nm.type || a.type || ''} · in de lucht`, from: { lat: a.lat, lon: a.lon }, tas, minutes: t, dist: PlanGeo.dist(a, d) });
+      const tas = pl ? PlanPerf.tasFromIas(pl.ias, alt) : Math.max(90, a.gs || 0);
+      const t = time({ lat: a.lat, lon: a.lon }, tas, alt);
+      out.push({ kind: 'air', name: a.flight || a.reg || nm.reg || a.hex.toUpperCase(), sub: `${nm.reg || a.reg || ''} ${nm.type || a.type || ''} · in de lucht · ${Math.round(tas)} KTAS`, from: { lat: a.lat, lon: a.lon }, tas, minutes: t.use, calm: t.calm, windy: t.windy, dist: PlanGeo.dist(a, d) });
     }
     for (const b of ctx.bases()) {
       for (const id of ['ec135', 'aw139']) {
         const pl = PlanProfiles.planning(profiles[id]);
         const tas = PlanPerf.tasFromIas(pl.ias, pl.altFt);
-        const t = PlanPerf.directTime(b, d, tas, (la, lo, ms) => ctx.windAt(la, lo, ms, pl.altFt));
-        out.push({ kind: 'base', name: `${profiles[id].name} vanaf ${b.name}`, sub: `+${b.startMin || 0} min opstarten · ${Math.round(tas)} KTAS`, from: b, tas, minutes: t == null ? null : t + (b.startMin || 0), dist: PlanGeo.dist(b, d) });
+        const t = time(b, tas, pl.altFt);
+        const start = b.startMin || 0;
+        out.push({ kind: 'base', name: `${profiles[id].name} vanaf ${b.name}`, sub: `+${start} min opstarten · ${Math.round(tas)} KTAS`, from: b, tas, minutes: t.use == null ? null : t.use + start, calm: t.calm == null ? null : t.calm + start, windy: t.windy == null ? null : t.windy + start, dist: PlanGeo.dist(b, d) });
       }
     }
     out.sort((x, y) => (x.minutes ?? 1e9) - (y.minutes ?? 1e9));
-    T.first = { target: d, list: out };
+    T.first = { target: d, list: out, useWind };
   }
   ctx.cv.add(45, (c) => {
     if (!T.first || !cfg.firstShow) return;
@@ -255,101 +302,125 @@ function zpTools(ctx) {
     });
   });
 
-  // Rebuild what depends on the selected point when it, the profile, the units or the wind change.
-  const rebuild = () => { if (cfg.toolPattern) buildPattern(); else T.pattern = null; if (cfg.toolOrbit) buildOrbit(); else T.orbit = null; if (cfg.toolReach) buildReach(); else T.reach = null; buildFirst(); ctx.cv.request(); ctx.emit('tools'); };
-  for (const ev of ['select', 'profile', 'units', 'wind']) ctx.on(ev, rebuild);
+  const rebuild = () => { buildPattern(); buildOrbit(); buildReach(); buildFirst(); ctx.cv.request(); ctx.emit('tools'); };
+  for (const ev of ['select', 'profile', 'units', 'wind', 'ready']) ctx.on(ev, rebuild);
   ctx.timers.push(setInterval(() => { if (cfg.firstShow || ctx.cfg.sideTab === 'fleet') { buildFirst(); ctx.cv.request(); ctx.emit('first'); } }, 5000));
-  ctx.on('hit', ({ hit }) => {
-    if (hit.kind === 'tape-close') { T.tape = null; ctx.cv.request(); }
-    else if (hit.kind === 'rings') { T.rings.splice(hit.item.idx, 1); ctx.save(); ctx.cv.request(); }
-  });
+
+  /* ---------- what is on the map, for the list and the bins ---------- */
+  const fmtAt = (ms) => ctx.fmt.time(ms);
+  function items() {
+    const out = [];
+    for (const t of cfg.tapes) {
+      if (!t.b) continue;
+      out.push({ id: t.id, kind: 'measure', at: t.at, label: `Meetlint ${ctx.fmt.dist(PlanGeo.dist(t.a, t.b))}`, sub: `${ctx.fmt.course(PlanGeo.bearing(t.a, t.b), t.a.lat, t.a.lon)} · ${fmtAt(t.at)}`, anchor: t.b, points: [t.a, t.b] });
+    }
+    for (const r of cfg.ringSets) out.push({ id: r.id, kind: 'rings', at: r.at, label: `Ringen${r.label ? ' ' + r.label : ''}`, sub: `${cfg.rings.count || 5} × ${String(cfg.rings.stepNm || 5).replace('.', ',')} ${PlanUnits.DIST[cfg.units.dist].name} · ${fmtAt(r.at)}`, anchor: r, points: [PlanGeo.dest(r, 0, (cfg.rings.stepNm || 5) * (cfg.rings.count || 5) * PlanUnits.DIST[cfg.units.dist].m), PlanGeo.dest(r, 180, (cfg.rings.stepNm || 5) * (cfg.rings.count || 5) * PlanUnits.DIST[cfg.units.dist].m)] });
+    if (cfg.placed.pattern && T.pattern) out.push({ id: cfg.placed.pattern.id, kind: 'pattern', at: cfg.placed.pattern.at, label: ZP_PATTERNS[pat.type].name, sub: `${ctx.fmt.dist(T.pattern.lengthM)} · ${ctx.fmt.dur(T.pattern.timeMin)} · ${fmtAt(cfg.placed.pattern.at)}`, anchor: cfg.placed.pattern, points: T.pattern.pts });
+    if (cfg.placed.orbit && T.orbit) out.push({ id: cfg.placed.orbit.id, kind: 'orbit', at: cfg.placed.orbit.at, label: `Orbit ${ctx.fmt.dist(T.orbit.r)}`, sub: `${Math.round(T.orbit.o.bankCalm)}° helling · ${fmtAt(cfg.placed.orbit.at)}`, anchor: cfg.placed.orbit, points: [PlanGeo.dest(T.orbit.center, 0, T.orbit.r * 1.5), PlanGeo.dest(T.orbit.center, 180, T.orbit.r * 1.5)] });
+    if (cfg.placed.reach && T.reach) out.push({ id: cfg.placed.reach.id, kind: 'reach', at: cfg.placed.reach.at, label: 'Actieradius', sub: `${ctx.fmt.dur(T.reach.minutes)} vliegtijd · ${fmtAt(cfg.placed.reach.at)}`, anchor: cfg.placed.reach, points: T.reach.ow.map((r) => r.point) });
+    return out.map((it) => ({ ...it, tool: ZP_TOOLS[it.kind], remove: () => remove(it.kind, it.id), restore: snapshot(it.kind, it.id) }));
+  }
+  // To bring something back right after it was thrown away.
+  function snapshot(kind, id) {
+    const copy = kind === 'measure' ? cfg.tapes.find((t) => t.id === id) : kind === 'rings' ? cfg.ringSets.find((r) => r.id === id) : cfg.placed[kind];
+    const data = copy && JSON.parse(JSON.stringify(copy));
+    return () => {
+      if (!data) return;
+      if (kind === 'measure') cfg.tapes.push(data); else if (kind === 'rings') cfg.ringSets.push(data); else cfg.placed[kind] = data;
+      changed();
+    };
+  }
 
   /* ---------- panel ---------- */
+  // One card per tool; the active one is open with what a click does and its settings, the others show
+  // how many of theirs are on the map.
   function panel() {
     const nmName = PlanUnits.DIST[cfg.units.dist].name;
-    const sel = ctx.selected;
-    const where = sel ? h('p', { class: 'zp-hint' }, 'Vanaf: ', h('b', {}, sel.label || ctx.fmt.coord(sel.lat, sel.lon))) : h('p', { class: 'zp-hint warn' }, 'Klik eerst een punt op de kaart (of zoek een plaats): de gereedschappen werken vanaf het geselecteerde punt.');
-    const set = (obj, k, fn) => (v) => { obj[k] = v; ctx.save(); fn(); ctx.cv.request(); ctx.emit('tools'); };
-    const sec = (title, on, toggle, ...content) => h('div', { class: 'zp-sec' + (on ? ' open' : '') },
-      h('div', { class: 'zp-sec-head' }, h('h3', {}, title), switchTool('', on ? 'Uitzetten' : 'Aanzetten', () => on, toggle)), on ? content.flat(2) : null);
-
-    // Tape and rings.
-    const tape = h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Meetlint en ringen')),
-      h('div', { class: 'zp-btnrow' },
-        zpBtn('Meetlint A→B', () => ctx.setMode('measure'), { icon: 'route', cls: ctx.mode === 'measure' ? 'on' : '', title: 'Meten (M): klik punt A en punt B. Kortste rechte lijn (grootcirkel) met maatstreepjes, koers heen en terug en vliegtijd.' }),
-        zpBtn('Ringen plaatsen', () => ctx.setMode('rings'), { icon: 'target', cls: ctx.mode === 'rings' ? 'on' : '', title: 'Ringen (G): klik op de kaart om afstandsringen te plaatsen. Klik op het middelpunt om ze weer weg te halen.' }),
-        sel ? zpBtn('Ringen hier', () => addRings(sel), { icon: 'plus' }) : null,
-        T.rings.length ? zpBtn('Alle ringen weg', clearRings, { icon: 'trash' }) : null),
-      h('div', { class: 'zp-grid4' },
-        field('Stap', zpNum(cfg.rings.stepNm, set(cfg.rings, 'stepNm', () => {}), { step: 0.5, min: 0.1 }), nmName),
-        field('Aantal', zpNum(cfg.rings.count, set(cfg.rings, 'count', () => {}), { step: 1, min: 1, max: 40 }), 'ringen'),
-        field('Kompasroos', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], cfg.compass === false ? 'off' : 'on', (v) => { cfg.compass = v === 'on'; ctx.save(); ctx.cv.request(); })),
-        field('Zichtbaar', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], cfg.ringsOff ? 'off' : 'on', (v) => { cfg.ringsOff = v === 'off'; ctx.save(); ctx.cv.request(); }))));
-
-    // Search pattern.
-    const pf = [];
-    pf.push(field('Patroon', zpSelect(Object.entries(ZP_PATTERNS).map(([k, d]) => ({ value: k, label: d.name })), pat.type, set(pat, 'type', () => { buildPattern(); ctx.emit('tools'); })), ZP_PATTERNS[pat.type].hint));
-    const grid = h('div', { class: 'zp-grid4' });
-    if (pat.type !== 'vs') grid.append(field('Baanafstand S', zpNum(pat.spacingNm, set(pat, 'spacingNm', buildPattern), { step: 0.1, min: 0.05 }), nmName));
-    if (pat.type === 'ss') grid.append(field('Poten', zpNum(pat.legs, set(pat, 'legs', buildPattern), { step: 1, min: 2, max: 60 })));
-    if (pat.type === 'vs') grid.append(field('Straal', zpNum(pat.radiusNm, set(pat, 'radiusNm', buildPattern), { step: 0.5, min: 0.1 }), nmName));
-    if (pat.type === 'cs' || pat.type === 'ps') grid.append(field('Lengte', zpNum(pat.lengthNm, set(pat, 'lengthNm', buildPattern), { step: 1, min: 0.5 }), nmName), field('Breedte', zpNum(pat.widthNm, set(pat, 'widthNm', buildPattern), { step: 0.5, min: 0.2 }), nmName), field('Lange as', zpNum(pat.axis, set(pat, 'axis', buildPattern), { step: 5, min: 0, max: 359 }), '° waar'));
-    if (pat.type === 'ss' || pat.type === 'vs') grid.append(field('Eerste koers', zpNum(pat.firstTrack, set(pat, 'firstTrack', buildPattern), { step: 5, min: 0, max: 359 }), '° waar (vaak met de wind mee)'));
-    grid.append(field('Draairichting', segmented([{ value: 'r', label: 'Rechts' }, { value: 'l', label: 'Links' }], pat.right ? 'r' : 'l', (v) => { pat.right = v === 'r'; ctx.save(); buildPattern(); ctx.cv.request(); ctx.emit('tools'); })));
-    pf.push(grid);
-    if (T.pattern) pf.push(h('div', { class: 'zp-totals' }, zpRow('Lengte', ctx.fmt.dist(T.pattern.lengthM)), zpRow('Duur', `${ctx.fmt.dur(T.pattern.timeMin, true)} bij ${Math.round(ctx.tas())} KTAS`), zpRow('Brandstof', ctx.fmt.fuel(T.pattern.fuelKg))),
-      zpBtn('Als route gebruiken', () => ctx.parts.zpRoute.setPoints(T.pattern.pts, { name: ZP_PATTERNS[pat.type].name }), { icon: 'route', primary: true }));
-    const patSec = sec('Zoekpatroon', !!cfg.toolPattern, () => { cfg.toolPattern = !cfg.toolPattern; ctx.save(); rebuild(); }, sel ? pf : where);
-
-    // Orbit.
-    const of = [];
-    if (T.orbit) {
-      const o = T.orbit.o;
-      of.push(h('div', { class: 'zp-grid4' },
-        field('Straal', zpNum(orb.radiusNm, set(orb, 'radiusNm', buildOrbit), { step: 0.05, min: 0.05 }), nmName),
-        field('TAS', zpNum(orb.tas || '', set(orb, 'tas', buildOrbit), { step: 5, placeholder: String(T.orbit.tas) }), 'kt'),
-        field('Helling (drift)', zpNum(orb.bank, set(orb, 'bank', buildOrbit), { step: 5, min: 5, max: 45 }), '° voor de baan met vaste helling'),
-        field('Tonen', zpSelect([{ value: 'circle', label: 'Cirkel over de grond' }, { value: 'drift', label: 'Baan bij vaste helling' }, { value: 'both', label: 'Beide' }], orb.show, set(orb, 'show', () => {})))),
-      h('div', { class: 'zp-totals' },
-        zpRow('Wind', T.orbit.wnd ? ctx.fmt.wind(T.orbit.wnd.dirDeg, T.orbit.wnd.speedKt) : 'onbekend (zet de windlaag aan)'),
-        zpRow('Helling windstil', `${Math.round(o.bankCalm)}°`),
-        zpRow('Helling met wind', `${Math.round(o.bankMin)}° (tegenwind) tot ${Math.round(o.bankMax)}° (rugwind)`, 'Om de cirkel over de grond vast te houden: steilst met de wind mee, waar de grondsnelheid het hoogst is'),
-        zpRow('GS', `${Math.round(o.gsMin)}–${Math.round(o.gsMax)} kt`),
-        zpRow('Tijd per rondje', ctx.fmt.dur(o.minutes, true)),
-        zpRow('Straal bij ' + orb.bank + '°', ctx.fmt.dist(T.orbit.drift.radiusM))));
-    }
-    const orbSec = sec('Orbit', !!cfg.toolOrbit, () => { cfg.toolOrbit = !cfg.toolOrbit; ctx.save(); rebuild(); }, sel ? of : where);
-
-    // Reach.
-    const rf = [];
-    if (T.reach) {
+    const set = (obj, k) => (v) => { obj[k] = v; changed(); };
+    const list = items();
+    const card = (kind, body) => {
+      const tl = ZP_TOOLS[kind], on = ctx.mode === kind, mine = list.filter((x) => x.kind === kind);
+      return h('div', { class: 'zp-tool' + (on ? ' on' : ''), style: `--zp-c:${tl.color}` },
+        h('button', { class: 'zp-tool-head', title: on ? 'Klik om dit gereedschap te stoppen (Esc)' : `Kies ${tl.name.toLowerCase()} (${tl.key})`, onclick: () => ctx.setMode(kind) },
+          icon(tl.icon), h('b', {}, tl.name), mine.length ? h('span', { class: 'zp-count' }, String(mine.length)) : null, h('span', { class: 'zp-tool-state' }, on ? 'Actief' : 'Kiezen')),
+        on ? h('div', { class: 'zp-tool-body' }, h('p', { class: 'zp-tool-click' }, icon('info'), tl.click), ...body()) : null,
+        mine.length ? h('div', { class: 'zp-tool-items' }, mine.map((it) => h('div', { class: 'zp-tool-item' },
+          h('button', { class: 'zp-linkbtn', title: 'Toon op de kaart', onclick: () => ctx.focusItem(it) }, h('b', {}, it.label), h('small', {}, it.sub)),
+          h('button', { class: 'w-tool zp-bin', title: 'Verwijderen', onclick: () => ctx.removeItem(it) }, icon('trash'))))) : null);
+    };
+    const measure = card('measure', () => []);
+    const rings = card('rings', () => [h('div', { class: 'zp-grid4' },
+      field('Stap', zpNum(cfg.rings.stepNm, set(cfg.rings, 'stepNm'), { step: 0.5, min: 0.1 }), nmName),
+      field('Aantal', zpNum(cfg.rings.count, set(cfg.rings, 'count'), { step: 1, min: 1, max: 40 }), 'ringen'),
+      field('Kompasroos', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], cfg.compass === false ? 'off' : 'on', (v) => { cfg.compass = v === 'on'; changed(); })))]);
+    const pattern = card('pattern', () => {
+      const grid = h('div', { class: 'zp-grid4' });
+      if (pat.type !== 'vs') grid.append(field('Baanafstand S', zpNum(pat.spacingNm, set(pat, 'spacingNm'), { step: 0.1, min: 0.05 }), nmName));
+      if (pat.type === 'ss') grid.append(field('Poten', zpNum(pat.legs, set(pat, 'legs'), { step: 1, min: 2, max: 60 })));
+      if (pat.type === 'vs') grid.append(field('Straal', zpNum(pat.radiusNm, set(pat, 'radiusNm'), { step: 0.5, min: 0.1 }), nmName));
+      if (pat.type === 'cs' || pat.type === 'ps') grid.append(field('Lengte', zpNum(pat.lengthNm, set(pat, 'lengthNm'), { step: 1, min: 0.5 }), nmName), field('Breedte', zpNum(pat.widthNm, set(pat, 'widthNm'), { step: 0.5, min: 0.2 }), nmName), field('Lange as', zpNum(pat.axis, set(pat, 'axis'), { step: 5, min: 0, max: 359 }), '° waar'));
+      if (pat.type === 'ss' || pat.type === 'vs') grid.append(field('Eerste koers', zpNum(pat.firstTrack, set(pat, 'firstTrack'), { step: 5, min: 0, max: 359 }), '° waar (vaak met de wind mee)'));
+      grid.append(field('Draairichting', segmented([{ value: 'r', label: 'Rechts' }, { value: 'l', label: 'Links' }], pat.right ? 'r' : 'l', (v) => { pat.right = v === 'r'; changed(); })));
+      return [field('Patroon', zpSelect(Object.entries(ZP_PATTERNS).map(([k, d]) => ({ value: k, label: d.name })), pat.type, set(pat, 'type')), ZP_PATTERNS[pat.type].hint), grid,
+        T.pattern ? h('div', { class: 'zp-totals' }, zpRow('Lengte', ctx.fmt.dist(T.pattern.lengthM)), zpRow('Duur', `${ctx.fmt.dur(T.pattern.timeMin, true)} bij ${Math.round(ctx.tas())} KTAS`), zpRow('Brandstof', ctx.fmt.fuel(T.pattern.fuelKg))) : null,
+        T.pattern ? zpBtn('Als route gebruiken', () => ctx.parts.zpRoute.setPoints(T.pattern.pts, { name: ZP_PATTERNS[pat.type].name }), { icon: 'route', primary: true }) : null];
+    });
+    const orbit = card('orbit', () => {
+      const out = [h('div', { class: 'zp-grid4' },
+        field('Straal', zpNum(orb.radiusNm, set(orb, 'radiusNm'), { step: 0.05, min: 0.05 }), nmName),
+        field('TAS', zpNum(orb.tas || '', set(orb, 'tas'), { step: 5, placeholder: String(Math.round(ctx.tas() * 0.7)) }), 'kt'),
+        field('Helling (drift)', zpNum(orb.bank, set(orb, 'bank'), { step: 5, min: 5, max: 45 }), '° voor de baan met vaste helling'),
+        field('Tonen', zpSelect([{ value: 'circle', label: 'Cirkel over de grond' }, { value: 'drift', label: 'Baan bij vaste helling' }, { value: 'both', label: 'Beide' }], orb.show, set(orb, 'show'))))];
+      if (T.orbit) {
+        const o = T.orbit.o;
+        out.push(h('div', { class: 'zp-totals' },
+          zpRow('Wind', T.orbit.wnd ? ctx.fmt.wind(T.orbit.wnd.dirDeg, T.orbit.wnd.speedKt) : 'windstil gerekend (nog geen wind bekend)'),
+          zpRow('Helling windstil', `${Math.round(o.bankCalm)}°`),
+          zpRow('Helling met wind', `${Math.round(o.bankMin)}° (tegenwind) tot ${Math.round(o.bankMax)}° (rugwind)`, 'Om de cirkel over de grond vast te houden: steilst met de wind mee, waar de grondsnelheid het hoogst is'),
+          zpRow('GS', `${Math.round(o.gsMin)}–${Math.round(o.gsMax)} kt`),
+          zpRow('Tijd per rondje', ctx.fmt.dur(o.minutes, true)),
+          zpRow(`Straal bij ${orb.bank}°`, ctx.fmt.dist(T.orbit.drift.radiusM))));
+      }
+      return out;
+    });
+    const reach = card('reach', () => {
       const pl = ctx.planning();
-      rf.push(h('div', { class: 'zp-grid4' },
-        field('Brandstof', zpNum(rch.fuelKg != null ? Math.round(PlanUnits.fuelIn(rch.fuelKg, cfg.units.fuel, pl.density)) : '', (v) => { rch.fuelKg = v == null ? null : PlanUnits.fuelKg(v, cfg.units.fuel, pl.density); ctx.save(); buildReach(); ctx.cv.request(); ctx.emit('tools'); }, { step: 10, placeholder: String(Math.round(PlanUnits.fuelIn(pl.fuelKg, cfg.units.fuel, pl.density))) }), `${PlanUnits.FUEL[cfg.units.fuel].name} aan boord`),
-        field('Heen en terug', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.roundTrip ? 'on' : 'off', (v) => { rch.roundTrip = v === 'on'; ctx.save(); ctx.cv.request(); })),
-        field('Enkele reis', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.oneWay ? 'on' : 'off', (v) => { rch.oneWay = v === 'on'; ctx.save(); ctx.cv.request(); }))),
-      h('div', { class: 'zp-totals' },
-        zpRow('Vliegtijd beschikbaar', ctx.fmt.dur(T.reach.minutes, true), `Brandstof min opstart/taxi (${ctx.fmt.fuel(pl.taxiKg)}) en eindreserve (${ctx.fmt.fuel(pl.reserveKg)}), bij ${Math.round(pl.flowKgh)} kg/u`),
-        zpRow('Wind', T.reach.wnd ? ctx.fmt.wind(T.reach.wnd.dirDeg, T.reach.wnd.speedKt) : 'windstil gerekend (geen wind bekend)'),
-        zpRow('Max. actieradius', ctx.fmt.dist(Math.max(...T.reach.rt.map((r) => r.m)))),
-        zpRow('Min. actieradius', ctx.fmt.dist(Math.min(...T.reach.rt.map((r) => r.m))))));
-    }
-    const reachSec = sec('Actieradius met wind', !!cfg.toolReach, () => { cfg.toolReach = !cfg.toolReach; ctx.save(); rebuild(); }, sel ? rf : where);
-    return h('div', { class: 'zp-panel' }, tape, patSec, orbSec, reachSec);
+      const out = [h('div', { class: 'zp-grid4' },
+        field('Brandstof', zpNum(rch.fuelKg != null ? Math.round(PlanUnits.fuelIn(rch.fuelKg, cfg.units.fuel, pl.density)) : '', (v) => { rch.fuelKg = v == null ? null : PlanUnits.fuelKg(v, cfg.units.fuel, pl.density); changed(); }, { step: 10, placeholder: String(Math.round(PlanUnits.fuelIn(pl.fuelKg, cfg.units.fuel, pl.density))) }), `${PlanUnits.FUEL[cfg.units.fuel].name} aan boord`),
+        field('Heen en terug', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.roundTrip ? 'on' : 'off', (v) => { rch.roundTrip = v === 'on'; changed(); })),
+        field('Enkele reis', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.oneWay ? 'on' : 'off', (v) => { rch.oneWay = v === 'on'; changed(); })))];
+      if (T.reach) {
+        out.push(h('div', { class: 'zp-totals' },
+          zpRow('Vliegtijd beschikbaar', ctx.fmt.dur(T.reach.minutes, true), `Brandstof min opstart/taxi (${ctx.fmt.fuel(pl.taxiKg)}) en eindreserve (${ctx.fmt.fuel(pl.reserveKg)}), bij ${Math.round(pl.flowKgh)} kg/u`),
+          zpRow('Wind', T.reach.wnd ? ctx.fmt.wind(T.reach.wnd.dirDeg, T.reach.wnd.speedKt) : 'windstil gerekend (nog geen wind bekend)'),
+          zpRow('Max. actieradius', ctx.fmt.dist(Math.max(...T.reach.rt.map((r) => r.m)))),
+          zpRow('Min. actieradius', ctx.fmt.dist(Math.min(...T.reach.rt.map((r) => r.m))))));
+      }
+      return out;
+    });
+    return h('div', { class: 'zp-panel' }, h('p', { class: 'zp-hint' }, 'Kies een gereedschap en klik op de kaart. Er is steeds één gereedschap actief; Esc of nog een klik op de knop stopt het. Wat je plaatst blijft staan tot je het weggooit.'), measure, rings, pattern, orbit, reach);
   }
 
   // Who gets there first, for the fleet panel.
   function firstPanel() {
     if (!ctx.selected) return h('p', { class: 'zp-hint warn' }, 'Klik een punt op de kaart (of zoek een adres): hier zie je dan welk toestel er het snelst kan zijn.');
     if (!T.first) buildFirst();
+    const useWind = cfg.firstWind !== false;
     return h('div', { class: 'zp-sec open' },
-      h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Wie is er het snelst?'), switchTool('KAART', 'Lijnen naar het doel op de kaart tonen', () => cfg.firstShow, () => { cfg.firstShow = !cfg.firstShow; ctx.save(); ctx.cv.request(); })),
-      h('p', { class: 'zp-hint' }, 'Naar ', h('b', {}, ctx.selected.label || ctx.fmt.coord(ctx.selected.lat, ctx.selected.lon)), ': rechtstreeks, met de wind op vlieghoogte, op de planningssnelheid van het profiel. Vanaf de basis met de opstarttijd erbij.'),
-      h('div', { class: 'zp-first' }, T.first.list.map((r, i) => h('div', { class: 'zp-first-row' + (i === 0 ? ' best' : '') },
-        h('span', { class: 'zp-first-n' }, String(i + 1)),
-        h('div', {}, h('b', {}, r.name), h('small', {}, r.sub)),
-        h('div', { class: 'zp-first-t' }, h('b', {}, r.minutes == null ? '—' : ctx.fmt.dur(r.minutes)), h('small', {}, `${ctx.fmt.dist(r.dist)} · ETA ${r.minutes == null ? '—' : ctx.fmt.time(Date.now() + r.minutes * 60000)}`))))));
+      h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Wie is er het snelst?'), switchTool('LIJNEN', 'Lijnen naar het doel op de kaart tonen', () => cfg.firstShow, () => { cfg.firstShow = !cfg.firstShow; ctx.save(); ctx.cv.request(); })),
+      h('div', { class: 'zp-windswitch' + (useWind ? ' on' : '') },
+        switchTool('WIND MEEREKENEN', 'Wind op vlieghoogte meerekenen of windstil rekenen', () => cfg.firstWind !== false, () => { cfg.firstWind = cfg.firstWind === false; ctx.save(); buildFirst(); ctx.cv.request(); ctx.emit('first'); }),
+        h('span', {}, useWind ? 'Met de wind op vlieghoogte (Open-Meteo), langs de hele lijn' : 'Windstil gerekend: alleen afstand en snelheid')),
+      h('p', { class: 'zp-hint' }, 'Naar ', h('b', {}, ctx.selected.label || ctx.fmt.coord(ctx.selected.lat, ctx.selected.lon)), ': rechtstreeks, op de planningssnelheid van het profiel. Vanaf de basis met de opstarttijd erbij.'),
+      h('div', { class: 'zp-first' }, T.first.list.map((r, i) => {
+        const diff = r.windy != null && r.calm != null ? r.windy - r.calm : null;
+        const windNote = diff == null ? '' : Math.abs(diff) < 0.5 ? 'wind maakt geen verschil' : `${useWind ? 'windstil' : 'met wind'} ${ctx.fmt.dur(useWind ? r.calm : r.windy)}`;
+        return h('div', { class: 'zp-first-row' + (i === 0 ? ' best' : '') },
+          h('span', { class: 'zp-first-n' }, String(i + 1)),
+          h('div', {}, h('b', {}, r.name), h('small', {}, r.sub)),
+          h('div', { class: 'zp-first-t' }, h('b', {}, r.minutes == null ? '—' : ctx.fmt.dur(r.minutes)), h('small', {}, `${ctx.fmt.dist(r.dist)} · ETA ${r.minutes == null ? '—' : ctx.fmt.time(Date.now() + r.minutes * 60000)}`), windNote ? h('small', { class: 'zp-windnote' }, windNote) : null));
+      })));
   }
 
-  return { panel, firstPanel, addRings, clearRings, state: T, setTape: (a, b) => { T.tape = { a, b }; ctx.cv.request(); } };
+  return { panel, firstPanel, addRings, place, items, remove, state: T, setTape: (a) => { if (cfg.tapes.length >= 8) cfg.tapes.shift(); tapeOpen = { id: uid(), a, b: null, at: Date.now() }; cfg.tapes.push(tapeOpen); changed(); } };
 }

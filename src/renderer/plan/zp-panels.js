@@ -11,7 +11,6 @@ const ZP_TABS = [
   { id: 'tools', name: 'Gereedschap', icon: 'target' },
   { id: 'profile', name: 'Profiel', icon: 'shield' },
   { id: 'saved', name: 'Opgeslagen', icon: 'star' },
-  { id: 'sources', name: 'Bronnen', icon: 'info' },
 ];
 
 function zpPanels(ctx) {
@@ -28,14 +27,20 @@ function zpPanels(ctx) {
   };
   regSel.addEventListener('change', () => { cfg.reg = regSel.value; ctx.save(); ctx.emit('profile'); });
   paintReg();
+  // The same tools as in the panel Gereedschap: choosing one here opens it there, and the other way round.
   const modes = segmented([
-    { value: 'select', label: 'Selecteer', icon: 'target', title: 'Klik op de kaart om een punt of object te selecteren (Esc)' },
+    { value: 'select', label: 'Selecteer', icon: 'target', title: 'Klik op de kaart om een punt of object te bekijken (Esc)' },
     { value: 'route', label: 'Route', icon: 'route', title: 'Route bouwen (R): klik om punten toe te voegen' },
-    { value: 'measure', label: 'Meten', icon: 'route', title: 'Meetlint A→B (M): kortste rechte lijn met maatstreepjes' },
-    { value: 'rings', label: 'Ringen', icon: 'radar', title: 'Afstandsringen (G): klik om ringen te plaatsen' },
-  ], 'select', (v) => ctx.setMode(v));
+    ...Object.entries(ZP_TOOLS).map(([k, t]) => ({ value: k, label: t.short, icon: t.icon, title: `${t.name} (${t.key}): ${t.click}` })),
+  ], 'select', (v) => ctx.setMode(v, true));
   modes.classList.add('zp-modes');
-  ctx.on('mode', (m) => modes.setValue(m));
+  ctx.on('mode', (m) => {
+    modes.setValue(m);
+    // The panel follows the tool: the route to Route, every other tool to Gereedschap.
+    const tab = m === 'route' ? 'route' : ZP_TOOLS[m] ? 'tools' : null;
+    if (tab && cfg.sideTab !== tab) { cfg.sideTab = tab; ctx.save(); if (!cfg.side) { cfg.side = true; ctx.root.classList.remove('side-off'); setTimeout(() => map.invalidateSize(), 220); } paintTabs(); }
+    paintSoon();
+  });
   const distSeg = segmented([{ value: 'nm', label: 'NM' }, { value: 'km', label: 'km' }], cfg.units.dist, (v) => { cfg.units.dist = v; ctx.save(); ctx.emit('units'); paintSoon(); });
   distSeg.title = 'Afstanden in zeemijlen of kilometers (meer eenheden onder de knop Eenheden)';
   ctx.on('units', () => distSeg.setValue(cfg.units.dist === 'km' ? 'km' : 'nm'));
@@ -126,7 +131,8 @@ function zpPanels(ctx) {
       field('Koersen', zpSelect([{ value: 'mag', label: 'Magnetisch (WMM2025)' }, { value: 'true', label: 'Waar noord' }], u.north, set('north')), `Magnetische variatie hier: ${(ctx.mag(map.getCenter().lat, map.getCenter().lng)).toFixed(1).replace('.', ',')}° oost`),
       field('Coördinaten', zpSelect([{ value: 'ddm', label: 'Graden, decimale minuten (N52°18,517\')' }, { value: 'dms', label: 'Graden, minuten, seconden' }, { value: 'dd', label: 'Decimale graden' }, { value: 'avi', label: 'Luchtvaart compact (N52 18.52)' }, { value: 'rd', label: 'Rijksdriehoek (RD)' }, { value: 'mgrs', label: 'MGRS' }, { value: 'utm', label: 'UTM' }], u.coord, set('coord'))),
       field('Tijd', zpSelect([{ value: 'utc', label: 'UTC (Z)' }, { value: 'lt', label: 'Lokale tijd' }], u.time, set('time'))),
-      h('button', { class: 'btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); paintSoon(); paintUnits(); } }, 'Standaard luchtvaart (NM, kt, ft, kg)')));
+      h('button', { class: 'btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); paintSoon(); paintUnits(); } }, 'Standaard luchtvaart (NM, kt, ft, kg)'),
+      h('button', { class: 'zp-linkbtn zp-deep', onclick: () => { pop.hidden = true; openSettings('zoekplan'); } }, icon('gear'), 'Bronnen, sleutels, offline kaarten en profielbestand…')));
   }
 
   /* ---------- the card ---------- */
@@ -149,16 +155,18 @@ function zpPanels(ctx) {
   };
   // A plain spot on the map (or a search result): what is there.
   ctx.showPoint = async (pt) => {
-    ctx.showCard({ title: pt.label || 'Punt op de kaart', sub: pt.sub || 'Zoeken naar adres…', color: '#ffb941', point: pt, rows: [], extra: pt.airport ? [zpAirportExtra(ctx, pt.airport)] : [] });
-    if (!pt.label) {
-      try {
-        const r = await window.palv.plan.reverse(pt.lat, pt.lon);
-        if (ctx.selected && ctx.selected.lat === pt.lat && ctx.selected.lon === pt.lon && r && r.label) {
-          ctx.selected.label = r.label.split(',')[0];
-          ctx.showCard({ title: r.label, sub: r.sub || 'Dichtstbijzijnde adres', color: '#ffb941', point: pt, rows: [] });
-        } else if (r && !r.label) ctx.showCard({ title: 'Punt op de kaart', sub: 'Geen adres in de buurt (zee of buitengebied)', color: '#ffb941', point: pt, rows: [] });
-      } catch { /* the card stays as it is */ }
-    }
+    const extra = pt.airport ? [zpAirportExtra(ctx, pt.airport)] : [];
+    if (pt.label) { ctx.showCard({ title: pt.label, sub: pt.sub || '', color: '#ffb941', point: pt, rows: [], extra }); return; }
+    const coord = ctx.fmt.coord(pt.lat, pt.lon);
+    const near = (txt) => h('div', { class: 'zp-near' }, icon('globe'), h('div', {}, h('small', {}, 'Dichtstbijzijnde adres op land'), h('b', {}, txt)));
+    ctx.showCard({ title: coord, sub: 'Coördinaat · punt op de kaart', color: '#ffb941', point: pt, rows: [], extra: [near('zoeken…')] });
+    try {
+      const r = await window.palv.plan.reverse(pt.lat, pt.lon);
+      if (!ctx.selected || ctx.selected.lat !== pt.lat || ctx.selected.lon !== pt.lon) return;
+      const d = r && r.lat != null ? PlanGeo.dist(pt, r) : r && r.distance;
+      const txt = r && r.label ? `${r.label}${r.sub ? ', ' + r.sub.replace(/^Adres · /, '') : ''}${d != null && d > 50 ? ` · ${ctx.fmt.dist(d)} richting ${ctx.fmt.course(PlanGeo.bearing(pt, r), pt.lat, pt.lon)}` : ''}` : 'geen adres gevonden';
+      ctx.showCard({ title: coord, sub: 'Coördinaat · punt op de kaart', color: '#ffb941', point: pt, rows: [], extra: [near(txt)] });
+    } catch { /* the card stays as it is */ }
   };
   // Winds and the airspace come in after the card opened: it is drawn again with them.
   let cardTimer = null;
@@ -189,6 +197,7 @@ function zpPanels(ctx) {
   let pending = false;
   function paintSide() {
     pending = false;
+    if (!ZP_TABS.some((t) => t.id === cfg.sideTab)) cfg.sideTab = 'route';
     // Never while someone is typing in the panel: it would take the field away under their fingers.
     if (ctx.side.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { pending = 'focus'; return; }
     const scroll = content.scrollTop;
@@ -201,7 +210,6 @@ function zpPanels(ctx) {
         case 'tools': el = ctx.parts.zpTools.panel(); break;
         case 'profile': el = zpProfilePanel(ctx); break;
         case 'saved': el = zpSavedPanel(ctx); break;
-        case 'sources': el = zpSourcesPanel(ctx); break;
         default: el = h('div');
       }
     } catch (err) { plog('warn', 'zoek & plan: paneel mislukt', String(err && err.stack || err)); el = h('p', { class: 'zp-hint warn' }, 'Dit paneel kon niet worden getoond.'); }
@@ -217,12 +225,12 @@ function zpPanels(ctx) {
   ctx.on('units', paintSoon);
   ctx.on('store', paintIf('saved', 'profile', 'sources'));
   ctx.on('tools', paintIf('tools'));
+  ctx.on('items', paintIf('tools', 'route'));
   ctx.on('first', paintIf('fleet'));
   ctx.on('select', paintIf('tools', 'fleet'));
   ctx.on('wx', paintIf('brief'));
   ctx.on('aero', paintIf('brief', 'sources'));
   ctx.on('offshore', paintIf('sources'));
-  ctx.on('mode', paintIf('route', 'tools'));
   ctx.on('layers', () => { if (!pop.hidden && popKind === 'layers') paintPop(); ctx.cv.request(); });
   ctx.on('ready', paintSide);
 
@@ -240,7 +248,8 @@ function zpPanels(ctx) {
             h('div', { class: 'zp-first-t' }, h('b', {}, vrAltText(a)), h('small', {}, a.gs == null ? '—' : `${Math.round(a.gs)} kt · ${a.track == null ? '' : ctx.fmt.course(a.track, a.lat, a.lon)}`)));
         })) : h('p', { class: 'zp-hint' }, 'Geen eigen eenheden in de lucht (of zet de groepen aan onder Lagen › Vloot).')));
   }
-  return { paintSide: paintSoon, paintPop };
+  const showTab = (id) => { cfg.sideTab = id; ctx.save(); paintTabs(); paintSoon(); };
+  return { paintSide: paintSoon, paintPop, showTab };
 }
 
 /* ---------- pieces of the card ---------- */
@@ -290,27 +299,27 @@ function zpPointActions(ctx, p) {
     zpBtn('Route +', () => { route.add({ lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }); toast(`${name} aan de route toegevoegd`); }, { icon: 'plus', title: 'Achteraan aan de route toevoegen' }),
     zpBtn('Vertrek', () => { const wp = { lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }; if (route.points().length) route.add(wp, 0); else route.add(wp); }, { icon: 'route', title: 'Als eerste routepunt' }),
     zpBtn('Ringen', () => tools.addRings(p), { icon: 'radar', title: 'Afstandsringen rond dit punt' }),
-    zpBtn('Meten', () => { tools.setTape(p, null); ctx.setMode('measure'); }, { icon: 'route', title: 'Meetlint vanaf dit punt' }),
+    zpBtn('Meten', () => { ctx.setMode('measure', true); tools.setTape({ lat: p.lat, lon: p.lon }); }, { icon: 'route', title: 'Meetlint vanaf dit punt: klik daarna punt B' }),
     zpBtn('Snelst', () => { sel(); ctx.cfg.sideTab = 'fleet'; ctx.cfg.firstShow = true; ctx.save(); ctx.parts.zpPanels.paintSide(); ctx.emit('select', ctx.selected); }, { icon: 'plane', title: 'Wie is er het snelst naar dit punt' }),
-    zpBtn('Zoeken', () => { sel(); ctx.cfg.toolPattern = true; ctx.cfg.sideTab = 'tools'; ctx.save(); ctx.emit('select', ctx.selected); ctx.parts.zpPanels.paintSide(); }, { icon: 'target', title: 'Zoekpatroon vanaf dit punt' }),
-    zpBtn('Orbit', () => { sel(); ctx.cfg.toolOrbit = true; ctx.cfg.sideTab = 'tools'; ctx.save(); ctx.emit('select', ctx.selected); ctx.parts.zpPanels.paintSide(); }, { icon: 'refresh', title: 'Orbit rond dit punt' }),
-    zpBtn('Bereik', () => { sel(); ctx.cfg.toolReach = true; ctx.cfg.sideTab = 'tools'; ctx.save(); ctx.emit('select', ctx.selected); ctx.parts.zpPanels.paintSide(); }, { icon: 'wind', title: 'Actieradius met wind vanaf dit punt' }),
+    ...['pattern', 'orbit', 'reach'].map((k) => zpBtn(ZP_TOOLS[k].short, () => { tools.place(k, { lat: p.lat, lon: p.lon, label: name }); ctx.parts.zpPanels.showTab('tools'); }, { icon: ZP_TOOLS[k].icon, title: `${ZP_TOOLS[k].name} op dit punt` })),
     zpBtn('', () => { const id = Math.random().toString(36).slice(2, 10); ctx.put('shared', 'favorites', id, { name, lat: p.lat, lon: p.lon }).then(() => toast(`${name} bij de favorieten`)); }, { icon: 'star', title: 'Als favoriet bewaren (gaat mee naar de andere schermen)' }));
 }
 
 /* ---------- profile ---------- */
+let zpProfQuery = '';
 function zpProfilePanel(ctx) {
   const p = ctx.profile(), pl = ctx.planning(), cfg = ctx.cfg;
   const own = ctx.store.private.profiles && ctx.store.private.profiles[p.id];
   const show = (label, f, fmt) => (f ? zpRow(label, `${fmt ? fmt(f.v) : f.v} ${f.unit || ''}`.trim(), zpSrc(f)) : null);
   const vne = ctx.vne();
-  const sec = (title, ...kids) => h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, title)), ...kids);
+  const sec = (title, ...kids) => (title === 'Deze vlucht'
+    ? h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, title)), ...kids)
+    : h('details', { class: 'zp-sec zp-fold' }, h('summary', { class: 'zp-sec-head' }, h('h3', {}, title), h('i', { class: 'zp-chev' })), h('div', { class: 'zp-fold-body' }, ...kids)));
   const route = cfg.route;
   const num = (v) => (typeof v === 'number' ? v.toLocaleString('nl-NL') : v);
   const ops = own && own.ops ? Object.entries(own.ops).flatMap(([k, list]) => (Array.isArray(list) ? list.map((x) => ({ k, ...x })) : [])) : [];
-  return h('div', { class: 'zp-panel' },
-    h('div', { class: 'zp-prof-head', style: `--zp-c:${p.color}` }, h('b', {}, p.name), h('span', {}, `${p.maker} · ${(p.regs || []).join(', ')}`),
-      h('div', { class: 'zp-src-tag ' + (own ? 'own' : '') }, own ? `Eigen profiel actief: ${(own.documents || []).map((d) => `${d.doc}${d.rev ? ' ' + d.rev : ''}`).join(', ') || 'vlieghandboek en SOP'}` : 'Alleen openbare gegevens (EASA TCDS en fabrikant). Importeer het profielbestand van de eenheid voor de waarden uit RFM en SOP.')),
+  const panel = h('div', { class: 'zp-panel zp-profpanel' },
+    h('div', { class: 'zp-prof-head', style: `--zp-c:${p.color}` }, h('b', {}, p.name), h('span', {}, `${p.maker} · ${(p.regs || []).join(', ')}`)),
     sec('Deze vlucht',
       h('div', { class: 'zp-grid4' },
         field('Vlieggewicht', zpNum(route.weightKg || '', (v) => { route.weightKg = v; ctx.save(); ctx.emit('profile'); }, { placeholder: String(PlanProfiles.planning(p).weightKg), step: 50 }), `kg · MTOW ${num(pl.mtow) || '—'}`),
@@ -334,12 +343,34 @@ function zpProfilePanel(ctx) {
     sec('Prestaties en afmetingen', ...Object.entries(p.perf || {}).map(([k, f]) => show({ hige: 'HIGE', hoge: 'HOGE', ceiling: 'Dienstplafond', oeiCeiling: 'Plafond één motor', maxAlt: 'Max. hoogte', slope: 'Helling', rangeNm: 'Bereik', enduranceMin: 'Vliegduur', oat: 'Temperatuur' }[k] || k, f, num)),
       ...Object.entries(p.dims || {}).map(([k, f]) => show({ rotor: 'Rotordiameter', dValue: 'D-waarde', height: 'Hoogte', lengthM: 'Lengte' }[k] || k, f)),
       show('Motoren', p.engines && p.engines.type), show('Bemanning', p.crew)),
-    ops.length ? sec('Operationeel (SOP / TACSOP)', h('div', { class: 'zp-rows' }, ops.map((x) => zpRow(x.what, String(x.value), x.src)))) : null,
-    sec('Profielbestand',
-      h('p', { class: 'zp-hint' }, 'De waarden uit het vlieghandboek (RFM) en de SOP/TACSOP van de eenheid staan in een eigen bestand op dit scherm, nooit in de openbare code. Ze gaan vanzelf mee naar de andere schermen van de eenheid.'),
-      h('div', { class: 'zp-btnrow' },
-        zpBtn('Profielbestand importeren', async () => { const r = await window.palv.plan.importProfiles(); if (r && r.ok) { toast(`Profiel ingelezen: ${r.ids.join(', ').toUpperCase()}`); ctx.loadStore(); } else if (r && r.error) toast(r.error, true); }, { icon: 'download' }),
-        zpBtn('Eigen gegevens exporteren', () => window.palv.plan.exportPrivate(), { icon: 'download', title: 'Profielen, dekkaarten en sleutel als bestand (intern houden)' }))));
+    ops.length ? sec('Operationeel (BOM, SOP, TACSOP)', h('div', { class: 'zp-rows' }, ops.map((x) => zpRow(x.what, String(x.value), x.src)))) : null);
+  // Search: every row whose label or value holds all words shows, its section opens; the rest folds away.
+  const q = h('input', { class: 'input zp-profq', type: 'search', placeholder: 'Zoek in het profiel: VNE, wind, hoist, brandstof, minima…', value: zpProfQuery });
+  const run = () => {
+    zpProfQuery = q.value;
+    const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let hits = 0;
+    for (const d of panel.querySelectorAll('details.zp-fold')) {
+      let any = false;
+      for (const r of d.querySelectorAll('.zp-kv, .field, tr')) {
+        const ok = !words.length || words.every((w) => r.textContent.toLowerCase().includes(w) || (r.title || '').toLowerCase().includes(w));
+        r.style.display = ok ? '' : 'none';
+        if (ok && words.length) any = true;
+      }
+      const inTitle = words.length && words.every((w) => d.querySelector('summary').textContent.toLowerCase().includes(w));
+      if (inTitle) for (const r of d.querySelectorAll('.zp-kv, .field, tr')) r.style.display = '';
+      d.open = !!words.length && (any || inTitle);
+      d.hidden = !!words.length && !any && !inTitle;
+      if (d.open) hits += 1;
+    }
+    found.textContent = words.length ? (hits ? `${hits} onderdel${hits === 1 ? '' : 'en'} met "${q.value}"` : `Niets gevonden voor "${q.value}"`) : '';
+  };
+  const found = h('small', { class: 'zp-hint' });
+  q.addEventListener('input', run);
+  panel.children[0].after(h('div', { class: 'zp-profsearch' }, icon('globe'), q), found);
+  requestAnimationFrame(run);
+  return panel;
+
 }
 function zpVneTable(p) {
   const bands = [...new Set(p.vneTable.map((r) => r.weightKg ?? Infinity))].sort((a, b) => a - b);

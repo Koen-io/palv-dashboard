@@ -28,17 +28,19 @@ function zpRoute(ctx) {
   function add(p, at = pts().length, opts = {}) {
     const wp = { id: uidWp(), lat: +p.lat, lon: +p.lon, name: p.name || `WP${pts().length + 1}`, named: !!p.name, kind: p.kind || null };
     pts().splice(at, 0, wp);
+    if (!route.at) route.at = Date.now();
     if (!p.name && !opts.noName) nameFor(wp);
     changed('add');
     return wp;
   }
   function remove(i) { if (i < 0 || i >= pts().length) return; pts().splice(i, 1); selectedWp = -1; changed('remove'); }
   function move(i, latlng) { const wp = pts()[i]; if (!wp) return; wp.lat = latlng.lat; wp.lon = latlng.lng; changed('move'); }
-  function clear() { route.points = []; route.name = ''; selectedWp = -1; changed('clear'); }
+  function clear() { route.points = []; route.name = ''; route.at = null; route.alternate = null; selectedWp = -1; changed('clear'); }
   function reverse() { route.points.reverse(); changed('reverse'); }
   function setPoints(list, meta = {}) {
     route.points = list.map((p, i) => ({ id: uidWp(), lat: p.lat, lon: p.lon, name: p.name || `WP${i + 1}`, named: true, kind: p.kind || null }));
     Object.assign(route, meta);
+    route.at = Date.now();
     selectedWp = -1;
     changed('set');
     if (route.points.length > 1) map.fitBounds(L.latLngBounds(route.points.map((p) => [p.lat, p.lon])).pad(0.2), { animate: true });
