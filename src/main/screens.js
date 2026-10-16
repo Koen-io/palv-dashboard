@@ -26,6 +26,7 @@ let peers = new Map(); // id or address -> peer
 let selfStatus = () => ({});
 let onChange = () => {};
 let server = null, udp = null, port = PORT;
+let share = null; // live traffic between the screens (share.js): its two routes are served here
 
 
 const isPrivate = (addr) => {
@@ -160,17 +161,21 @@ function handle(req, res) {
   if (req.method !== 'GET') return respond(res, 405, 'text/plain', 'Alleen lezen');
   // A dashboard that polls us is a peer as well: that is how the way back is learned.
   const hdr = req.headers['x-palv-screen'];
+  let caller = null;
   if (hdr) {
     try {
       const p = JSON.parse(hdr);
       if (p && typeof p.id === 'string' && p.id.length < 80 && !p.ephemeral) {
         const known = peers.get(p.id);
         meet({ id: p.id, name: String(p.name || '').slice(0, 60), address: from, port: +p.port || PORT });
+        caller = { id: p.id, name: String(p.name || '').slice(0, 60) || from };
         if (!known) setTimeout(pollAll, 500);
       }
     } catch { /* ignore a malformed header */ }
   }
   const url = (req.url || '/').split('?')[0];
+  if (share && url === share.STREAM) return share.handleStream(req, res, caller);
+  if (share && url === share.WANT) return respond(res, share.handleWant(req, caller) ? 200 : 409, 'text/plain; charset=utf-8', '');
   if (url === '/api/status') return respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(selfStatus()));
   if (url === '/api/screens') return respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(list()));
   if (url === '/' || url === '/index.html') return respond(res, 200, 'text/html; charset=utf-8', page());
@@ -222,8 +227,9 @@ function startUdp() {
   });
 }
 
-async function start({ userData, status, onUpdate, test }) {
+async function start({ userData, status, onUpdate, test, share: sh }) {
   ephemeral = !!test;
+  share = sh || null;
   load(userData);
   selfStatus = () => ({ ...status(), id: self.id, name: self.name, port, ephemeral });
   onChange = onUpdate || (() => {});
@@ -312,6 +318,7 @@ async function load(){
       +(s.window&&s.online?'<dt>Venster</dt><dd>'+(s.window.fullscreen?'volledig scherm':s.window.minimized?'geminimaliseerd':'venster')+(s.page?' · pagina '+esc(s.page):'')+'</dd>':'')
       +(s.online&&s.displays!=null?'<dt>Beeldschermen</dt><dd>'+esc(s.displays)+(s.displayList?' ('+s.displayList.map(esc).join(', ')+')':'')+'</dd>':'')
       +(s.online&&s.renderer?'<dt>Hartslag</dt><dd>'+ago(s.renderer.heartbeat)+(s.renderer.reloads?' · '+esc(s.renderer.reloads)+'× herstart':'')+'</dd>':'')
+      +(s.online&&s.share?'<dt>Live verkeer</dt><dd>'+(s.share.leader?'via '+esc(s.share.leader.name):'haalt zelf op'+(s.share.followers&&s.share.followers.length?' · deelt met '+s.share.followers.map(esc).join(', '):''))+'</dd>':'')
       +(s.online?'':'<dt>Laatst gezien</dt><dd>'+ago(s.lastSeen)+'</dd>')
       +'</dl>'+(w.length?'<div class="issues">'+w.join('<br>')+'</div>':'')+'</div>';}).join('');
     document.getElementById('sum').innerHTML='<span style="color:'+(ok===list.length?'#3ecf6e':'#ff5148')+'">'+ok+' van '+list.length+'</span><br><small style="color:#8ea2bf;font-weight:400">schermen actief</small>';
@@ -322,4 +329,7 @@ load();setInterval(load,5000);
 </script></body></html>`;
 }
 
-module.exports = { start, list, rename, add, remove, addresses, isPrivate, pollAll, name: () => self.name, port: () => port, PORT };
+// The other screens as last polled, for choosing who fetches the live traffic (share.js).
+const peerList = () => [...peers.values()].map((p) => ({ id: p.id, name: p.name, address: p.address, port: p.port || PORT, online: p.online, status: p.status }));
+
+module.exports = { start, list, rename, add, remove, addresses, isPrivate, pollAll, peers: peerList, id: () => self.id, name: () => self.name, port: () => port, PORT };

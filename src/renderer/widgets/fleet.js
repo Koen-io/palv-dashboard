@@ -57,7 +57,7 @@ function renderFleet(root, w) {
   const followed = Object.keys(FLEET_GROUPS).filter((g) => fleetGroupsOf(w.cfg).includes(g)).flatMap((g) => hexList(g)).filter((x) => !(w.cfg.hide || []).includes(x)).length;
   if (!d) { dot.className = 'dot warn'; text.textContent = 'Laden…'; }
   else if (!d.ok) { dot.className = 'dot bad'; text.textContent = d.lastOk ? `Geen verbinding · laatst ${zulu(d.lastOk)}` : 'Geen verbinding met live-bron'; }
-  else { dot.className = 'dot' + (d.reserve || now - d.lastOk > 5000 ? ' warn' : ''); text.textContent = `${d.reserve ? 'Reserve (OpenSky)' : 'Live'} · ${zuluSec(d.lastOk)} · ${followed} eenheden gevolgd`; }
+  else { dot.className = 'dot' + (d.reserve || now - d.lastOk > 5000 ? ' warn' : ''); text.textContent = `${d.reserve ? 'Reserve (OpenSky)' : 'Live'}${d.via ? ` via ${d.via}` : ''} · ${zuluSec(d.lastOk)} · ${followed} eenheden gevolgd`; }
   count.textContent = up ? `${up} in de lucht` : '';
 }
 

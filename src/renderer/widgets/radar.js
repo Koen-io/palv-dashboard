@@ -126,7 +126,7 @@ defineWidget('radar', {
     return {
       fresh: () => {
         const snap = trafficFeed.snap;
-        return { t: snap && snap.lastOk, fail: !!snap && !snap.ok, loading: !snap, warn: 5000, bad: 30000, seconds: true, label: 'Live verkeer', note: `Bron: ${(snap && snap.src) || 'adsb.fi / adsb.lol'}, elke seconde opgehaald.` };
+        return { t: snap && snap.lastOk, fail: !!snap && !snap.ok, loading: !snap, warn: 5000, bad: 30000, seconds: true, label: 'Live verkeer', note: `Bron: ${(snap && snap.src) || 'adsb.fi / adsb.lol'}${snap && snap.via ? `, doorgegeven door ${snap.via}` : ''}, elke seconde opgehaald.` };
       },
       focus(hex, at) { vr.focus(hex, at); trafficWatch(); },
       destroy() {

@@ -133,6 +133,8 @@ function openSettings(startTab) {
         return [
           h('h3', {}, 'Bronnen'),
           h('p', {}, 'De Vluchtradar, "In de lucht" en de noodsquawkbewaking halen hun posities elke seconde bij adsb.fi, aangevuld met adsb.lol. Leveren die allebei langer dan 5 seconden niets vers (een storing, of een bron die dit adres blokkeert), dan springt OpenSky bij als reserve. De Vluchtradar toont dan RESERVE en "In de lucht" "Reserve (OpenSky)".'),
+          h('h3', {}, 'Meerdere schermen'),
+          h('p', {}, 'Draaien er meer dashboards op het netwerk, dan haalt er maar één het verkeer op: het scherm waarvan adsb.fi het best werkt. De andere schermen krijgen elke ronde direct van dat scherm door, zodat de bronnen niet vaker gevraagd worden dan met één scherm en niet gaan weigeren of blokkeren. Valt dat scherm weg, dan haalt een ander binnen een paar seconden zelf op; de kaart blijft intussen gevuld. De Vluchtradar en "In de lucht" tonen dan "via" met de naam van het scherm dat ophaalt. Er is niets voor in te stellen; het schermoverzicht laat zien wie wat doet.'),
           h('h3', {}, 'OpenSky-sleutel'),
           h('p', {}, 'Maak op opensky-network.org onder Account een API-client aan en vul hier client id en client secret in. De sleutel blijft alleen op deze computer (in opensky.json bij de gebruikersgegevens) en gaat niet mee in een export, reservekopie of het schermoverzicht.'),
           h('div', { class: 'row' }, field('Client id', id), field('Client secret', secret)),

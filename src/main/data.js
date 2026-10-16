@@ -5,6 +5,7 @@ const runways = require('../runways');
 const fleet = require('../fleet');
 const traffic = require('../traffic');
 const opensky = require('../opensky');
+const share = require('../share');
 const log = require('./log');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -87,13 +88,14 @@ function start(getWin) {
     (snap) => {
       const groups = traffic.hexGroups();
       fleet.ingest(traffic.records(), groups, snap.now);
-      snap.fleet = { ok: snap.ok, reserve: snap.reserve, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, aircraft: fleet.snapshot(groups, snap.now) };
+      snap.fleet = { ok: snap.ok, reserve: snap.reserve, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, via: snap.via || null, aircraft: fleet.snapshot(groups, snap.now) };
       const win = getWin();
       // The runways in use, read from the same feed while it covers Schiphol.
       if (traffic.covers(52.31, 4.76, 14, snap.now)) runways.ingest(traffic.records(), snap.now);
       if (win && !win.isDestroyed()) win.webContents.send('traffic:update', snap);
     },
-    { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) }
+    { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) },
+    { onShare: () => share.broadcast(), onWant: (want) => share.sendWant(want) }
   );
   fleet.start(async (url) => JSON.parse(await fetchText(url, 10000, UA, { Referer: 'https://globe.adsbexchange.com/' })));
 }

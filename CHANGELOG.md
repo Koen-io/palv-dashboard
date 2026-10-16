@@ -1,5 +1,17 @@
 # Wijzigingen
 
+## 1.16.0
+
+### Nieuw
+- Eén ophaler voor alle schermen: draaien er meer dashboards, dan haalt er maar één het live verkeer op (het scherm waarvan adsb.fi het best werkt) en krijgen de andere elke ronde direct van dat scherm door. De bronnen worden daardoor niet vaker gevraagd dan met één scherm en gaan niet weigeren of blokkeren
+- Geen merkbare vertraging: de andere schermen houden een open verbinding met de ophaler en krijgen elke wijziging op het moment dat die binnenkomt, met alleen de toestellen die veranderd zijn
+- Automatische overname: valt de ophaler weg, dan haalt een ander scherm meteen zelf op (binnen een halve seconde, of 2,5 seconden als de ophaler vastloopt zonder af te sluiten). Raakt de ophaler adsb.fi kwijt terwijl een ander scherm het nog wel heeft, dan neemt dat scherm het over. De kaart blijft intussen gevuld
+- De ophaler haalt ook het gebied en de eigen eenheden van de andere schermen op
+- Vluchtradar en "In de lucht" tonen "via" met de naam van het scherm dat ophaalt; het schermoverzicht toont per scherm of het zelf ophaalt, met wie het deelt of van wie het ontvangt
+
+### Verbeterd
+- Posities van adsb.lol en OpenSky gaan direct naar het scherm, in plaats van bij de volgende ronde
+
 ## 1.15.1
 
 ### Opgelost

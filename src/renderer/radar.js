@@ -568,10 +568,10 @@ function vrCreate(body, w) {
       const cats = vrCats(w.cfg);
       let n = 0;
       for (const a of snap.ac) if (a.lat != null && (now - a.posAt) / 1000 <= VR_HIDE_S && vrMatch(a, cats)) n += 1;
-      detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? zuluSec(snap.lastOk) : null, snap.src].filter(Boolean);
+      detail = [`${n} toestel${n === 1 ? '' : 'len'}`, snap.lastOk ? zuluSec(snap.lastOk) : null, snap.via ? `${snap.src || 'live'} via ${snap.via}` : snap.src].filter(Boolean);
     }
     status.className = 'vr-status ' + level;
-    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol; leveren die allebei niets, dan springt OpenSky bij (RESERVE, elke 5 tot 30 seconden). Groen: actueel. Oranje: laden, vertraagd of reserve. Rood: geen verbinding.\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid (bij OpenSky 20 seconden); een bericht ouder dan 20 seconden (bij OpenSky 35) wordt vervaagd getoond, ouder dan 60 seconden niet meer.' + (snap && snap.reason ? `\n\nNu: ${snap.reason}` : '');
+    status.title = 'Live posities van adsb.fi (elke seconde) aangevuld met adsb.lol; leveren die allebei niets, dan springt OpenSky bij (RESERVE, elke 5 tot 30 seconden). Groen: actueel. Oranje: laden, vertraagd of reserve. Rood: geen verbinding.\nMet meerdere schermen haalt één scherm het verkeer op en krijgen de andere elke ronde direct van dat scherm door ("via ...").\nTussen twee berichten schuift een toestel maximaal 4 seconden door langs zijn koers met zijn grondsnelheid (bij OpenSky 20 seconden); een bericht ouder dan 20 seconden (bij OpenSky 35) wordt vervaagd getoond, ouder dan 60 seconden niet meer.' + (snap && snap.reason ? `\n\nNu: ${snap.reason}` : '');
     status.replaceChildren(h('span', { class: 'wxm-dot' }), h('b', {}, label), ...detail.map((d) => h('span', {}, d)));
   }
   function paintCard() {

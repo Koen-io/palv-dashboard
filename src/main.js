@@ -8,6 +8,8 @@ const watchdog = require('./main/watchdog');
 const updater = require('./main/updater');
 const screens = require('./main/screens');
 const data = require('./main/data');
+const share = require('./share');
+const traffic = require('./traffic');
 require('./main/tiles');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -236,7 +238,13 @@ app.whenReady().then(() => {
   // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
   if (shotPath && !process.argv.includes('--shot-full')) return;
   if (!shotPath) updater.start({ repository: UPDATE_REPO, onStatus: (s) => send('update:status', s) });
-  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath });
+  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share });
+  // A test window never fetches for others nor follows them: it keeps to itself.
+  share.start({
+    traffic, peers: screens.peers, disabled: !!shotPath,
+    self: () => ({ id: screens.id(), name: screens.name(), port: screens.port() }),
+    log: { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) },
+  });
 });
 
 app.on('window-all-closed', () => app.quit());
@@ -369,6 +377,8 @@ function screenStatus() {
     health: Array.isArray(rendererInfo.health) ? rendererInfo.health.slice(0, 10) : [],
     emergencies: Array.isArray(rendererInfo.emergencies) ? rendererInfo.emergencies.slice(0, 5) : [],
     update: { state: u.state, latest: u.latest },
+    // Who fetches the live traffic, and who receives it from whom (share.js).
+    share: share.info(),
   };
 }
 ipcMain.handle('screens:info', () => ({ name: screens.name(), port: screens.port(), addresses: screens.addresses(), list: screens.list() }));
