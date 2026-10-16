@@ -31,18 +31,29 @@ const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).
 const sums = path.join(dist, 'SHA256SUMS.txt');
 fs.writeFileSync(sums, files.map((f) => `${sha(f)}  ${path.basename(f)}`).join('\n') + '\n');
 
-// The section of this version from the changelog, without its heading.
+// The notes for the update pop-up: the section of this version from the changelog, and those of any
+// versions in between that were never published (each under its own heading then), so no change is
+// left out. The dashboards show at most 4000 characters of it.
 const log = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
-const m = new RegExp(`^## ${v.replace(/\./g, '\\.')}\\s*$([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(log);
-if (!m) {
+const sections = [...log.matchAll(/^## (\d+\.\d+\.\d+)\s*$([\s\S]*?)(?=^## |(?![\s\S]))/gm)].map((x) => ({ v: x[1], text: x[2].trim() }));
+const cmp = (x, y) => { const a = x.split('.').map(Number), b = y.split('.').map(Number); for (let i = 0; i < 3; i += 1) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+if (!sections.some((x) => x.v === v)) {
   console.error(`Geen sectie "## ${v}" in CHANGELOG.md`);
   process.exit(1);
 }
+let published = null;
+try { published = execFileSync(GH, ['release', 'view', '--repo', repo, '--json', 'tagName', '-q', '.tagName'], { cwd: root, encoding: 'utf8' }).trim().replace(/^v/, ''); } catch { /* no release yet */ }
+const unpublished = sections.filter((x) => cmp(x.v, v) <= 0 && (!published || cmp(x.v, published) > 0));
+const body = unpublished.length > 1 ? unpublished.map((x) => `## ${x.v}\n\n${x.text}`).join('\n\n') : unpublished[0].text;
+if (body.length > 4000) console.warn(`Let op: de notities zijn ${body.length} tekens; de pop-up toont er 4000.`);
 const notes = path.join(dist, `release-notes-${v}.md`);
-fs.writeFileSync(notes, m[1].trim() + '\n');
+fs.writeFileSync(notes, body + '\n');
+// Tags of versions in between that were only made locally go along, so the history on GitHub is whole.
+const tags = unpublished.map((x) => `v${x.v}`).filter((t) => { try { execFileSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${t}`], { cwd: root, stdio: 'ignore' }); return true; } catch { return false; } });
+console.log(`Notities voor ${unpublished.map((x) => x.v).join(', ')} (laatst gepubliceerd: ${published || 'geen'})`);
 
 const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: 'inherit' });
 run('git', ['push', 'origin', 'main']);
-run('git', ['push', 'origin', tag]);
+run('git', ['push', 'origin', ...new Set([...tags, tag])]);
 run(GH, ['release', 'create', tag, ...files, sums, '--repo', repo, '--title', `P-ALV Dashboard ${v}`, '--notes-file', notes, '--latest']);
 console.log(`\nRelease ${tag} gepubliceerd op https://github.com/${repo}/releases/tag/${tag}`);
