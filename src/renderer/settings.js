@@ -158,6 +158,8 @@ function openSettings(startTab) {
         checkbox('Geluidssignaal bij een nieuwe melding', s.emergencySound, changed((v) => (s.emergencySound = v))),
         h('div', {}, h('button', { class: 'btn', onclick: () => chime() }, icon('alert'), 'Geluid testen')),
         h('div', { class: 'hint' }, 'Een bevestigde melding verdwijnt en komt terug zodra het toestel een andere noodcode uitzendt. Elke melding komt ook in het logboek.'),
+        h('hr'),
+        ...briefingSettings(s, changed),
       ],
     },
     weerradar: {
@@ -310,6 +312,32 @@ function openSettings(startTab) {
   openModal({ title: 'Instellingen', body: h('div', { class: 'settings' }, nav, pane), wide: true, bare: true });
   show(tabs[startTab] ? startTab : 'weergave');
 }
+// Instellingen > Meldingen: the briefing times, the sound and a test.
+function briefingSettings(s, changed) {
+  const info = h('span', { class: 'hint' }, 'Laden…');
+  const paintInfo = (st) => { info.textContent = st && st.name ? `Eigen geluid: ${st.name} (${Math.round(st.size / 1024)} kB)` : 'Geen eigen geluid: de ingebouwde aankondigingsgong klinkt.'; };
+  window.palv.briefing.soundInfo().then(paintInfo).catch(() => paintInfo(null));
+  const rows = s.briefings.map((b) => h('div', { class: 'bf-set-row' },
+    checkbox('', b.on !== false, changed((v) => (b.on = v))),
+    h('b', {}, b.where), h('span', {}, b.name),
+    h('input', { class: 'input', type: 'time', value: b.time, onchange: changed((e) => { if (BRIEFING.parse(e.target.value)) b.time = e.target.value; else e.target.value = b.time; }) })));
+  return [
+    h('h3', {}, 'Briefings'),
+    h('p', {}, '5 minuten voor een briefing verschijnt een melding met welke briefing het is, en krijgt het scherm een oranje gloed. Op 1 minuut en 30 seconden klinkt het geluid, komt de melding terug en wordt de gloed rood, tot de briefing begint. Tijden zijn de lokale tijd van deze computer.'),
+    checkbox('Melding en gloed voor de briefings', s.briefingAlert, changed((v) => (s.briefingAlert = v))),
+    checkbox('Geluid op 1:30 voor de briefing', s.briefingSound, changed((v) => (s.briefingSound = v))),
+    h('div', { class: 'bf-set' }, rows),
+    h('div', {}, info),
+    h('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' },
+      h('button', { class: 'btn', onclick: async () => { const r = await window.palv.briefing.chooseSound(); if (r && r.error) return toast(r.error, true); paintInfo(r); await loadBriefingSound(); } }, icon('folder'), 'Eigen geluid kiezen…'),
+      h('button', { class: 'btn', onclick: async () => { paintInfo(await window.palv.briefing.clearSound()); await loadBriefingSound(); } }, icon('trash'), 'Ingebouwde gong gebruiken'),
+      h('button', { class: 'btn', onclick: () => briefingSound() }, icon('alert'), 'Geluid testen'),
+      h('button', { class: 'btn primary', onclick: () => startBriefingTest() }, icon('clock'), 'Melding testen (20 s)'),
+      h('button', { class: 'btn', onclick: changed(() => { s.briefings = DEFAULT_BRIEFINGS.map((b) => ({ ...b })); closeModalTop(); openSettings('meldingen'); }) }, icon('refresh'), 'Standaardtijden herstellen')),
+    h('div', { class: 'hint' }, 'Het eigen geluid staat alleen op dit scherm (briefing-geluid in de gebruikersgegevens) en gaat niet mee in een export of naar andere schermen.'),
+  ];
+}
+
 const closeModalTop = () => { const m = $('#modal-root').lastChild; if (m) m.remove(); };
 
 // An imported layout can contain app tiles that start programs. Those are listed before anything is

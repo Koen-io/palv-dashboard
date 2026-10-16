@@ -41,6 +41,17 @@
     plan: { name: 'Zoek & Plan', defaults: {} },
   };
 
+  // Briefing times from the sheet at Flight Ops; editable under Instellingen > Meldingen.
+  const DEFAULT_BRIEFINGS = [
+    { id: 'opco-am', where: 'Driebergen (OPCO)', name: 'Ochtend', time: '08:00', on: true },
+    { id: 'fo-am', where: 'Flight Ops', name: 'Ochtend', time: '08:15', on: true },
+    { id: 'fo-pm', where: 'Flight Ops', name: 'Middag', time: '14:30', on: true },
+    { id: 'opco-pm', where: 'Driebergen (OPCO)', name: 'Middag', time: '15:00', on: true },
+    { id: 'fo-night', where: 'Flight Ops', name: 'Nacht', time: '22:30', on: true },
+    { id: 'opco-night', where: 'Driebergen (OPCO)', name: 'Nacht', time: '23:00', on: true },
+  ];
+
+
   const DEFAULT_SETTINGS = {
     theme: 'auto',
     autoMode: 'sun',
@@ -55,6 +66,9 @@
     oledCare: true,
     emergencyAlert: true,
     emergencySound: true,
+    briefingAlert: true,
+    briefingSound: true,
+    briefings: DEFAULT_BRIEFINGS.map((b) => ({ ...b })),
     snap: true,
     rotate: 0,
     wxMarginFt: 200,
@@ -123,6 +137,8 @@
     loaded.version = VERSION;
     loaded.settings.hex = { ...def.settings.hex, ...(loaded.settings.hex || {}) };
     if (!loaded.settings.unitInfo || typeof loaded.settings.unitInfo !== 'object') loaded.settings.unitInfo = {};
+    if (!Array.isArray(loaded.settings.briefings)) loaded.settings.briefings = def.settings.briefings;
+    loaded.settings.briefings = loaded.settings.briefings.filter((b) => b && typeof b === 'object' && b.id);
     if (!Array.isArray(loaded.settings.clocks) || loaded.settings.clocks.length !== 2) loaded.settings.clocks = def.settings.clocks;
     loaded.pages = loaded.pages.filter((p) => p && typeof p === 'object');
     if (!loaded.pages.length) return def;
@@ -236,5 +252,5 @@
     st.pages.push({ id: uid(), name: 'Zoek & Plan', widgets: [{ id: uid(), type: 'plan', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.plan.name, cfg: {} }] });
   }
 
-  return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };
+  return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_BRIEFINGS, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };
 });

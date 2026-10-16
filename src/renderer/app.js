@@ -42,6 +42,7 @@ function everySecond() {
   paintHealth();
   paintFreshBadges();
   oledTick();
+  briefingTick();
   nightlyReload();
   const r = state.settings.rotate;
   if (r > 0 && state.pages.length > 1 && !editing && !modalOpen()) {
@@ -76,6 +77,7 @@ async function boot() {
   refreshRunways();
   setInterval(refreshRunways, 5000);
   startEmergencyWatch();
+  loadBriefingSound();
   setInterval(everySecond, 1000);
   window.palv.status.heartbeat();
   sendStatus();

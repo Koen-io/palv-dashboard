@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld('palv', {
     openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
     reload: () => ipcRenderer.invoke('app:reload'),
   },
+  briefing: {
+    sound: () => ipcRenderer.invoke('briefing:sound'),
+    soundInfo: () => ipcRenderer.invoke('briefing:soundInfo'),
+    chooseSound: () => ipcRenderer.invoke('briefing:chooseSound'),
+    clearSound: () => ipcRenderer.invoke('briefing:clearSound'),
+  },
   status: {
     heartbeat: () => ipcRenderer.send('status:heartbeat'),
     report: (info) => ipcRenderer.send('status:report', info),

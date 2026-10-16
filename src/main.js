@@ -313,6 +313,35 @@ ipcMain.handle('config:import', async () => {
   }
 });
 
+/* ---------- briefing sound ---------- */
+// The sound before a briefing: briefing-geluid.<ext> in the user data of this screen, chosen in the
+// settings or put there by hand. It is never part of the app or the repository.
+const SOUND_TYPES = { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac' };
+const SOUND_MAX = 8 * 1024 * 1024;
+const soundFile = () => Object.keys(SOUND_TYPES).map((ext) => path.join(app.getPath('userData'), 'briefing-geluid.' + ext)).find((f) => fs.existsSync(f)) || null;
+const soundInfo = () => { const f = soundFile(); return f ? { name: path.basename(f), size: fs.statSync(f).size } : null; };
+ipcMain.handle('briefing:sound', () => {
+  const f = soundFile();
+  if (!f || fs.statSync(f).size > SOUND_MAX) return null;
+  return `data:${SOUND_TYPES[path.extname(f).slice(1).toLowerCase()]};base64,${fs.readFileSync(f).toString('base64')}`;
+});
+ipcMain.handle('briefing:soundInfo', () => soundInfo());
+ipcMain.handle('briefing:chooseSound', async () => {
+  const res = await dialog.showOpenDialog(win, { title: 'Geluid voor de briefings kiezen', filters: [{ name: 'Geluid', extensions: Object.keys(SOUND_TYPES) }], properties: ['openFile'] });
+  if (res.canceled || !res.filePaths[0]) return soundInfo();
+  const src = res.filePaths[0], ext = path.extname(src).slice(1).toLowerCase();
+  if (!SOUND_TYPES[ext]) return { error: 'Kies een mp3-, wav-, ogg-, m4a- of aac-bestand.' };
+  if (fs.statSync(src).size > SOUND_MAX) return { error: 'Dit bestand is groter dan 8 MB.' };
+  for (const e of Object.keys(SOUND_TYPES)) fs.rmSync(path.join(app.getPath('userData'), 'briefing-geluid.' + e), { force: true });
+  fs.copyFileSync(src, path.join(app.getPath('userData'), 'briefing-geluid.' + ext));
+  log.info('app', `briefinggeluid gekozen: ${path.basename(src)}`);
+  return soundInfo();
+});
+ipcMain.handle('briefing:clearSound', () => {
+  for (const e of Object.keys(SOUND_TYPES)) fs.rmSync(path.join(app.getPath('userData'), 'briefing-geluid.' + e), { force: true });
+  return null;
+});
+
 /* ---------- app ---------- */
 ipcMain.handle('app:setAutoStart', (_e, on) => {
   app.setLoginItemSettings({ openAtLogin: !!on });

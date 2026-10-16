@@ -1,5 +1,13 @@
 # Wijzigingen
 
+## 1.21.0
+
+### Briefingmelding
+- 5 minuten voor een briefing verschijnt een melding met welke briefing het is (Flight Ops of Driebergen OPCO, ochtend, middag of nacht) en een aftelling, en krijgt het scherm een oranje gloed
+- Op 1 minuut en 30 seconden klinkt het aankondigingsgeluid, komt de melding terug en wordt de gloed rood, tot de briefing begint
+- Tijden: Flight Ops 08:15, 14:30 en 22:30; Driebergen (OPCO) 08:00, 15:00 en 23:00. Aan te passen of uit te zetten onder Instellingen › Meldingen, met een knop om de melding te testen
+- Eigen geluid per scherm te kiezen; zonder eigen geluid klinkt een ingebouwde gong, anders dan bij de noodsquawk
+
 ## 1.20.0
 
 ### In de lucht: waar vliegt de eenheid?

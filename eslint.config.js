@@ -18,7 +18,7 @@ for (const file of rendererFiles) {
 }
 // Set on window by model.js, astro.js, wx.js, squawk.js and suntable.js, and by Leaflet.
 for (const name of Object.keys(require('./src/renderer/model.js'))) shared[name] = 'readonly';
-Object.assign(shared, { ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', PLACES: 'readonly', L: 'readonly' });
+Object.assign(shared, { ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', PLACES: 'readonly', BRIEFING: 'readonly', L: 'readonly' });
 // Zoek & Plan: the pure modules in plan/ hang one namespace each on window (and are required by the tests).
 Object.assign(shared, { PlanGeo: 'readonly', PlanCoords: 'readonly', PlanWmm: 'readonly', PlanPerf: 'readonly', PlanUnits: 'readonly', PlanProfiles: 'readonly' });
 
