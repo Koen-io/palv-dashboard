@@ -55,6 +55,7 @@
         plan: val(220, 'kg/u', 'Standaard planning', 'Pas aan naar de SOP'),
         taxi: val(15, 'kg', 'Standaard planning'),
         reserveMin: val(20, 'min', 'Standaard planning', 'Eindreserve; pas aan naar de SOP'),
+        bom: { contingencyPct: val(5, '%', 'Standaard planning'), frfMinDay: val(20, 'min', 'Standaard planning'), frfMinNight: val(30, 'min', 'Standaard planning') },
       },
       planning: { ias: val(120, 'KIAS', 'Standaard planning'), altFt: val(1000, 'ft', 'Standaard planning') },
       wind: {
@@ -103,6 +104,7 @@
         plan: val(500, 'kg/u', 'Standaard planning', 'Geen officieel gepubliceerd verbruik; pas aan naar de SOP'),
         taxi: val(30, 'kg', 'Standaard planning'),
         reserveMin: val(20, 'min', 'Standaard planning', 'Eindreserve; pas aan naar de SOP'),
+        bom: { contingencyPct: val(5, '%', 'Standaard planning'), frfMinDay: val(20, 'min', 'Standaard planning'), frfMinNight: val(30, 'min', 'Standaard planning') },
       },
       planning: { ias: val(140, 'KIAS', 'Standaard planning'), altFt: val(1000, 'ft', 'Standaard planning') },
       wind: {

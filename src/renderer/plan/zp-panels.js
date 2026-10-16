@@ -270,12 +270,14 @@ function zpPointExtras(ctx, p) {
   })));
   // The airspace over this point.
   const rows = ctx.airspaceRows ? ctx.airspaceRows(p.lat, p.lon) : [];
-  if (rows.length) out.push(h('h4', { class: 'zp-sub' }, 'Luchtruim boven dit punt'), h('div', { class: 'zp-airlist' }, rows.map((r) => h('div', { class: 'zp-air' }, h('i', { class: 'zp-dot', style: `background:${r.color}` }), h('div', {}, h('b', {}, r.text), h('small', {}, r.sub))))));
+  if (rows.length) out.push(h('h4', { class: 'zp-sub' }, 'Luchtruim boven dit punt'), h('div', { class: 'zp-airlist' }, rows.map((r) => { const url = zpAipUrl({ airspace: r.a }); return h('div', { class: 'zp-air' }, h('i', { class: 'zp-dot', style: `background:${r.color}` }), h('div', {}, h('b', {}, r.text), h('small', {}, r.sub)), url ? h('button', { class: 'w-tool', title: 'Officiële AIP (LVNL) voor dit luchtruim', onclick: () => zpOpenAip(url) }, icon('globe')) : null); })));
   return h('div', {}, out);
 }
 function zpAirportExtra(ctx, ap) {
   if (!ap) return null;
+  const code = ap.icao || ap.gps_code || ap.ident;
   return h('div', { class: 'zp-rows' },
+    zpAipBtn(zpAipUrl({ icao: code })),
     ap.elevation_ft != null || ap.elevFt != null ? zpRow('Hoogte', ctx.fmt.alt(ap.elevFt ?? ap.elevation_ft)) : null,
     ...(ap.runways || []).slice(0, 6).map((r) => zpRow(`Baan ${r.le_ident || r.des || ''}${r.he_ident ? '/' + r.he_ident : ''}`, `${r.length_ft ? Math.round(r.length_ft * 0.3048) + ' m' : r.lengthM ? r.lengthM + ' m' : ''} ${r.surface || ''}`.trim())),
     ...(ap.frequencies || ap.freqs || []).slice(0, 8).map((f) => zpRow(f.type || 'Freq.', `${f.frequency_mhz || f.mhz || ''} ${f.description || f.name || ''}`)));
@@ -285,8 +287,8 @@ function zpPointActions(ctx, p) {
   const sel = () => ctx.select({ lat: p.lat, lon: p.lon, label: p.label, kind: ctx.selected && ctx.selected.kind });
   const name = String(p.label || 'Punt').split(',')[0].slice(0, 40);
   return h('div', { class: 'zp-card-actions' },
-    zpBtn('Route +', () => { route.add({ lat: p.lat, lon: p.lon, name }); toast(`${name} aan de route toegevoegd`); }, { icon: 'plus', title: 'Achteraan aan de route toevoegen' }),
-    zpBtn('Vertrek', () => { route.points().length ? route.add({ lat: p.lat, lon: p.lon, name }, 0) : route.add({ lat: p.lat, lon: p.lon, name }); }, { icon: 'route', title: 'Als eerste routepunt' }),
+    zpBtn('Route +', () => { route.add({ lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }); toast(`${name} aan de route toegevoegd`); }, { icon: 'plus', title: 'Achteraan aan de route toevoegen' }),
+    zpBtn('Vertrek', () => { const wp = { lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }; if (route.points().length) route.add(wp, 0); else route.add(wp); }, { icon: 'route', title: 'Als eerste routepunt' }),
     zpBtn('Ringen', () => tools.addRings(p), { icon: 'radar', title: 'Afstandsringen rond dit punt' }),
     zpBtn('Meten', () => { tools.setTape(p, null); ctx.setMode('measure'); }, { icon: 'route', title: 'Meetlint vanaf dit punt' }),
     zpBtn('Snelst', () => { sel(); ctx.cfg.sideTab = 'fleet'; ctx.cfg.firstShow = true; ctx.save(); ctx.parts.zpPanels.paintSide(); ctx.emit('select', ctx.selected); }, { icon: 'plane', title: 'Wie is er het snelst naar dit punt' }),
@@ -322,6 +324,7 @@ function zpProfilePanel(ctx) {
         zpRow('Bereik (windstil)', ctx.fmt.dist((((pl.fuelKg - pl.taxiKg - pl.reserveKg) / pl.flowKgh) * ctx.tas()) * 1852)))),
     sec('Snelheden', ...Object.entries({ vne: 'VNE', vneOei: 'VNE één motor', vneAutorot: 'VNE autorotatie', vy: 'Vy', vtoss: 'VTOSS', cruiseFast: 'Snelle kruisvlucht', cruiseEco: 'Economische kruisvlucht', endurance: 'Max. vliegduur' }).map(([k, n]) => show(n, p.speeds[k])),
       ...(Array.isArray(p.speeds.limits) ? p.speeds.limits.map((x) => zpRow(x.what, typeof x.kias === 'number' ? `${x.kias} KIAS` : x.kias != null ? String(x.kias) : x.value || '', [x.src, x.note].filter(Boolean).join(' — '))) : [])),
+    sec('Massa (standaardmassa\'s BOM)', zpMassCalc(ctx)),
     p.vneTable && p.vneTable.length ? sec('VNE-tabel', zpVneTable(p)) : null,
     sec('Wind', ...Object.entries(p.wind || {}).filter(([, f]) => f && typeof f === 'object' && 'v' in f).map(([k, f]) => show({ rotorStartStop: 'Rotor starten/stoppen', rotorStartLog: 'Registreren boven', sideward: 'Zijwaarts', rearward: 'Achterwaarts', crosswind: 'Dwarswind', tailwind: 'Staartwind', catACross: 'Cat A dwarswind', gust: 'Vlagen' }[k] || k, f)),
       ...['envelope', 'catA', 'offshore', 'other'].flatMap((k) => (Array.isArray(p.wind && p.wind[k]) ? p.wind[k].map((x) => zpRow(x.what || x.weightNote || k, x.value != null ? String(x.value) : x.kt != null ? `${x.kt} kt${x.azimuthDeg != null ? ' op ' + x.azimuthDeg + '°' : ''}` : '', x.src)) : []))),
@@ -403,8 +406,12 @@ function zpSourcesPanel(ctx) {
           ...(aero && aero.fetchedAt ? Object.entries(aero.fetchedAt).map(([cc, t]) => zpRow(cc, `${t ? new Date(t).toLocaleString('nl-NL') : '—'}${aero.counts && aero.counts[cc] ? ` · ${aero.counts[cc].airspaces} luchtruimen, ${aero.counts[cc].airports} vliegvelden` : ''}`)) : [])),
         h('div', { class: 'zp-btnrow' }, keyIn, zpBtn('Opslaan', async () => { const r = await window.palv.plan.aeroKey(keyIn.value); if (r && r.ok) { toast('openAIP-sleutel opgeslagen'); ctx.parts.zpAero.reload(); } else toast((r && (r.lastError || r.error)) || 'Sleutel geweigerd', true); })),
         h('p', { class: 'zp-hint' }, '© openAIP (CC BY-NC 4.0). Gemeenschapsdata: niet voor navigatie, controleer de AIP. De kaartlaag "VFR-luchtvaartkaart" komt van openFlightMaps (op basis van LVNL-gegevens).')),
+      sec('Officiële AIP (LVNL)',
+        h('p', { class: 'zp-hint' }, `Geldende cyclus: AIRAC ${String(zpAirac().num).padStart(2, '0')}-${zpAirac().year}, van kracht sinds ${zpAirac().eff.toLocaleDateString('nl-NL', { timeZone: 'UTC' })}. LVNL staat niet toe dat de AIP of de ICAO-kaart zonder schriftelijke toestemming wordt overgenomen of omgezet; daarom opent het tabblad de officiële pagina's zelf. Bij elk vliegveld en luchtruim staat een knop naar het juiste hoofdstuk.`),
+        h('div', { class: 'zp-btnrow' }, zpAipBtn(zpAipUrl(), 'eAIP Nederland'), zpBtn('ICAO-kaart voorzijde', () => zpOpenAip(ZP_AIP_CHART.front), { icon: 'globe' }), zpBtn('ICAO-kaart achterzijde', () => zpOpenAip(ZP_AIP_CHART.back), { icon: 'globe' }))),
       sec('Wind (Open-Meteo)', h('div', { class: 'zp-rows' },
-        zpRow('Vandaag gebruikt', budget ? `${Math.round(budget.day)} van ${budget.dayLimit} verzoeken` : '—', 'Gratis tarief: 10.000 per dag. Met meerdere schermen haalt één scherm de wind op voor allemaal.'),
+        zpRow('Vandaag gebruikt', budget ? `${Math.round(budget.day)} door dit scherm${budget.others && budget.others.day ? ` + ${Math.round(budget.others.day)} door de andere schermen` : ''} · grens ${budget.dayCap} van ${budget.dayLimit}` : '—', 'Gratis tarief: 10.000 per dag, 5.000 per uur, 600 per minuut, per internetadres. Het dashboard blijft onder 70 % per dag, 60 % per uur en 50 % per minuut, alle schermen samen. Met meerdere schermen haalt één scherm de wind op voor allemaal.'),
+        budget ? zpRow('Dit uur / deze minuut', `${Math.round(budget.hour + (budget.others ? budget.others.hour : 0))} van ${budget.hourCap} · ${Math.round(budget.minute + (budget.others ? budget.others.minute : 0))} van ${budget.minuteCap}`) : null,
         budget && budget.blockedUntil > Date.now() ? zpRow('Gepauzeerd tot', new Date(budget.blockedUntil).toLocaleTimeString('nl-NL')) : null,
         budget && budget.lastError ? zpRow('Laatste fout', budget.lastError) : null),
         h('p', { class: 'zp-hint' }, 'ICON (DWD) voor Europa, GFS (NOAA) elders; wind op 10 m en op 975, 950, 900 en 850 hPa, elk uur. Data CC BY 4.0.')),
@@ -427,4 +434,33 @@ function zpSourcesPanel(ctx) {
         zpRow('Kaarten', 'OpenStreetMap, PDOK (Kadaster, Beeldmateriaal NL, RVO), EOX Sentinel-2, OpenTopoMap, openFlightMaps, OpenSeaMap'))));
   })();
   return el;
+}
+
+// Take-off mass from the basic mass of the registration, the people on board at the standard masses of
+// the BOM (Deel A 8.2.8), load and the fuel at take-off; one click makes it this flight's mass.
+const ZP_STD_MASS = [
+  ['police', 'Politie incl. bewapening en uitrusting', 100], ['police_vest', 'Met zwaar vest en bewapening (o.a. DSI)', 120],
+  ['male', 'Passagier man', 90], ['female', 'Passagier vrouw', 80], ['child', 'Kind onder 12 jaar', 35],
+];
+function zpMassCalc(ctx) {
+  const cfg = ctx.cfg, pl = ctx.planning(), p = ctx.profile();
+  const key = cfg.reg || p.type;
+  cfg.mass = cfg.mass || {};
+  const m = cfg.mass[key] = cfg.mass[key] || { basic: null, count: {}, loadKg: 0 };
+  const set = (fn) => (v) => { fn(v); ctx.save(); ctx.parts.zpPanels.paintSide(); };
+  const people = ZP_STD_MASS.reduce((n, [k, , kg]) => n + (m.count[k] || 0) * kg, 0);
+  const fuelTo = pl.fuelKg - pl.taxiKg;
+  const tow = m.basic ? m.basic + people + (m.loadKg || 0) + fuelTo : null;
+  return h('div', {},
+    h('div', { class: 'zp-grid4' },
+      field(`Basismassa ${key}`, zpNum(m.basic || '', set((v) => { m.basic = v; }), { step: 1, placeholder: 'uit de W&B' }), 'kg, leeg met vaste uitrusting (W&B-rapport)'),
+      field('Lading en uitrusting', zpNum(m.loadKg || '', set((v) => { m.loadKg = v || 0; }), { step: 5, placeholder: '0' }), 'kg'),
+      ...ZP_STD_MASS.map(([k, label, kg]) => field(`${label} (${kg} kg)`, zpNum(m.count[k] || '', set((v) => { m.count[k] = v || 0; }), { step: 1, min: 0, placeholder: '0' })))),
+    h('div', { class: 'zp-totals' },
+      zpRow('Personen', ctx.fmt.fuel(people).replace(/ (kg|lb|L)$/, ' kg')),
+      zpRow('Brandstof bij de start', ctx.fmt.fuel(fuelTo)),
+      zpRow('Startmassa', tow ? `${Math.round(tow).toLocaleString('nl-NL')} kg` : 'vul de basismassa in', pl.mtow ? `MTOW ${pl.mtow.toLocaleString('nl-NL')} kg` : null),
+      tow && pl.mtow ? zpRow(tow <= pl.mtow ? 'Ruimte tot MTOW' : 'Boven MTOW', `${Math.round(Math.abs(pl.mtow - tow)).toLocaleString('nl-NL')} kg`) : null),
+    tow ? zpBtn('Gebruik als vlieggewicht', () => { cfg.route.weightKg = Math.round(tow); ctx.save(); ctx.emit('profile'); }, { icon: 'check', primary: true }) : null,
+    h('p', { class: 'zp-hint' }, 'Standaardmassa\'s volgens BOM Deel A 8.2.8: alleen als de werkelijke massa onbekend is; sommige TACSOP\'s wijken af. De officiële massa- en zwaartepuntberekening blijft Easyweigh op de EFB.'));
 }

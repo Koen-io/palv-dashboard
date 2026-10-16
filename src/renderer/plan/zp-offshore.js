@@ -23,7 +23,9 @@ const ZP_DECK_FIELDS = [
   ['dValue', 'D-waarde', 'm', 'Grootste toegestane D-waarde (totale lengte met draaiende rotoren)'],
   ['tValue', 't-waarde', 't', 'Maximaal toegestane massa'],
   ['sizeM', 'Dekgrootte', 'm', 'Diameter of zijde van het landingsvlak'],
-  ['obstacleSector', 'Obstakelvrije sector', '', 'bv. 210° vanaf 315°'],
+  ['ofsFromDeg', 'Obstakelvrije sector vanaf', '°', 'Begin van de sector, met de klok mee (zelfde noord als de heading)'],
+  ['ofsWidthDeg', 'Breedte obstakelvrije sector', '°', 'Meestal 210°'],
+  ['obstacleSector', 'Sector (tekst)', '', 'Zoals in de bron vermeld, bv. 210° vanaf 315°'],
   ['freq', 'Frequentie', 'MHz', 'Radio (HLO / platform)'],
   ['callsign', 'Roepnaam', '', ''],
   ['ndb', 'NDB', '', 'Identificatie en frequentie'],
@@ -185,6 +187,7 @@ function zpOffshore(ctx) {
           ...(o.freqs || []).map((f) => zpRow(f.type || 'Freq.', `${f.mhz.toFixed(3).replace('.', ',')} ${f.name || ''}`)),
           ...(o.runways || []).slice(0, 2).map((r) => zpRow(`Richting ${r.des}`, r.trueHdg != null ? PlanUnits.hdg(r.trueHdg) + 'T' : '—'))));
     }
+    if (deck) extra.push(zpDeckWind(ctx, p, deck));
     extra.push(h('h4', { class: 'zp-sub' }, 'Eigen dekkaart'),
       deck ? h('div', { class: 'zp-rows' }, ZP_DECK_FIELDS.filter(([f]) => deck[f] != null && deck[f] !== '').map(([f, label, unit]) => zpRow(label, `${typeof deck[f] === 'number' ? deck[f].toLocaleString('nl-NL') : deck[f]}${unit && typeof deck[f] === 'number' ? (unit === '°' ? '°' : ' ' + unit) : ''}${f === 'headingDeg' ? (deck.headingRef === 'T' ? ' waar' : ' magnetisch') : ''}`)), h('small', { class: 'zp-hint' }, `Bijgewerkt ${new Date(deck.updatedAt).toLocaleString('nl-NL')}`))
         : h('p', { class: 'zp-hint' }, 'Nog geen dekgegevens. Dekheading, dekhoogte, D- en t-waarde en frequenties worden voor de Nederlandse sector niet openbaar gepubliceerd (HCA Helideck Limitations List, operator route guides). Vul ze hier in; ze gaan mee naar de andere schermen van de eenheid, nooit naar buiten.'),
@@ -192,7 +195,15 @@ function zpOffshore(ctx) {
     return { title: p.name, sub: `${k.name.replace(/s( \(|$)/, '$1')} · ${p.country || ''} · ${p.src}`, color: k.color, point: p, rows, extra };
   }
   function editDeck(p, deck) {
-    const cur = deck || {};
+    // A new card starts with what is public: deck height (Danish register, openAIP) and frequencies (openAIP).
+    const pre = {};
+    if (!deck) {
+      if (p.helideckElevationM != null) { pre.elevationFt = Math.round(p.helideckElevationM / 0.3048); pre.source = `Dekhoogte: ${p.src}`; }
+      else if (p.oaip && p.oaip.elevFt) { pre.elevationFt = p.oaip.elevFt; pre.source = 'Dekhoogte: openAIP'; }
+      if (p.oaip && p.oaip.freqs && p.oaip.freqs.length) pre.freq = p.oaip.freqs.map((x) => x.mhz.toFixed(3)).join(' / ');
+      if (p.oaip && p.oaip.icao) pre.callsign = p.oaip.icao;
+    }
+    const cur = deck || pre;
     const inputs = {};
     const body = h('div', { class: 'zp-deckform' },
       h('p', { class: 'zp-hint' }, `${p.name} — ${ctx.fmt.coord(p.lat, p.lon)}`),
@@ -227,4 +238,44 @@ function zpOffshore(ctx) {
   ctx.on('ready', () => { load(); loadAreas(); });
   ctx.timers.push(setInterval(() => load(), 6 * 3600e3));
   return { load, sources: () => sources, status: () => ({ loading, error: err, count: items.length, osm: osm.size }), drawFarms, card };
+}
+
+// The wind on a helideck now: at deck height, against the deck heading and the obstacle-free sector.
+// A landing is planned into wind; the question is whether that approach lies within the sector, and what
+// the wind components and limits of the selected helicopter say.
+function zpDeckWind(ctx, p, deck) {
+  const elev = +deck.elevationFt || 100;
+  const w = ctx.windAt(p.lat, p.lon, Date.now(), elev);
+  const rows = [];
+  if (!w) return h('div', { class: 'zp-rows' }, zpRow('Wind op het dek', 'opvragen…'));
+  const mag = ctx.mag(p.lat, p.lon);
+  const toTrue = (d) => (deck.headingRef === 'T' ? +d : +d + mag);
+  const show = (t) => ctx.fmt.course(t, p.lat, p.lon);
+  rows.push(zpRow(`Wind op ${ctx.fmt.alt(elev)}`, `${ctx.fmt.wind(w.dirDeg, w.speedKt)}${w.gustKt ? ' · vlagen ' + ctx.fmt.windSpeed(w.gustKt) + ' (10 m)' : ''}`));
+  // The approach into wind comes from downwind: its course is the wind direction itself.
+  const into = w.dirDeg;
+  rows.push(zpRow('Nadering tegen de wind in', `koers ${show(into)}`));
+  const warns = [];
+  if (deck.ofsFromDeg != null && deck.ofsWidthDeg != null) {
+    // The helicopter approaches over the sector: the direction it comes FROM must lie inside it.
+    const from = PlanGeo.norm360(into + 180), start = toTrue(deck.ofsFromDeg), off = PlanGeo.norm360(from - start);
+    const inside = off <= +deck.ofsWidthDeg;
+    rows.push(zpRow('Obstakelvrije sector', `${show(start)} + ${deck.ofsWidthDeg}° · nadering ${inside ? 'binnen' : 'BUITEN'} de sector`));
+    if (!inside) warns.push('Een nadering recht tegen de wind in komt niet over de obstakelvrije sector: kies een andere naderingsrichting met dwarswind, of let op turbulentie achter de installatie.');
+  }
+  if (deck.headingDeg != null) {
+    const c = PlanPerf.components(toTrue(deck.headingDeg), w.dirDeg, w.speedKt);
+    rows.push(zpRow('Langs de dek-heading', `${c.head >= 0 ? 'tegenwind' : 'rugwind'} ${ctx.fmt.windSpeed(Math.abs(c.head))} · dwars ${ctx.fmt.windSpeed(Math.abs(c.cross))} van ${c.cross >= 0 ? 'rechts' : 'links'}`));
+  }
+  const pl = ctx.planning();
+  const gust = w.gustKt || w.speedKt;
+  if (pl.rotorStartStop && gust > pl.rotorStartStop) warns.push(`Wind (${Math.round(gust)} kt) boven de limiet voor rotor starten/stoppen van ${pl.rotorStartStop} kt: niet uitschakelen op het dek.`);
+  // The unit's own offshore rules, as found in its manuals.
+  const prof = ctx.profile();
+  const rules = [...(prof.wind && Array.isArray(prof.wind.offshore) ? prof.wind.offshore : []), ...(prof.ops && Array.isArray(prof.ops.offshore) ? prof.ops.offshore : []), ...(prof.ops && Array.isArray(prof.ops.helideck) ? prof.ops.helideck : [])].filter((r) => /wind|kt|knoop|deck|dek/i.test(`${r.what} ${r.value}`)).slice(0, 8);
+  return h('div', {},
+    h('h4', { class: 'zp-sub' }, 'Wind op het dek (nu)'),
+    h('div', { class: 'zp-rows' }, rows),
+    warns.length ? h('div', { class: 'zp-warns' }, warns.map((t) => h('div', { class: 'zp-warn bad' }, icon('alert'), t))) : null,
+    rules.length ? h('details', { class: 'zp-rules' }, h('summary', {}, `Offshore-regels ${prof.type} (${rules.length})`), h('div', { class: 'zp-rows' }, rules.map((r) => zpRow(r.what, String(r.value), r.src)))) : null);
 }

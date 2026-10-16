@@ -20,7 +20,9 @@ const path = require('path');
 const API = 'https://api.open-meteo.com/v1/forecast';
 const UA = 'P-ALV-Dashboard/1.17 (desktop dashboard)';
 const LIMITS = { minute: 600, hour: 5000, day: 10000 };
-const MARGIN = 0.85;
+// Never closer to a limit than this share of it. The limits count per internet address, so they are
+// shared by every screen behind it: what the other screens report using is counted along (others()).
+const MARGIN = { minute: 0.5, hour: 0.6, day: 0.7 };
 const HOURS = 13;               // hour 0 = the current hour, then 12 ahead
 const FRESH_MS = 60 * 60 * 1000;
 const MAX_GRIDS = 30;
@@ -68,6 +70,7 @@ const pointCache = new Map();     // 'lat,lon' -> { fetchedAt, model, elev, time
 const inflight = new Map();
 let spend = { day: null, used: 0 };
 let recent = [];                  // [t, cost] for the rolling minute and hour
+let others = () => null;          // use of the other screens: { day, hour, minute } or null
 let blockedUntil = 0, backoffMs = 0, lastError = null;
 const counters = { requests: 0, locations: 0, gridHits: 0, gridFetches: 0, pointHits: 0, pointFetches: 0, fills: 0, refused: 0, lastFetchAt: 0, lastOkAt: 0 };
 
@@ -191,15 +194,28 @@ function windowSums(t) {
 function budget() {
   const t = now(); rollDay(t);
   const w = windowSums(t);
-  return { day: r2(spend.used), dayLimit: LIMITS.day, hour: w.hour, hourLimit: LIMITS.hour, minute: w.minute, minuteLimit: LIMITS.minute, blockedUntil: blockedUntil > t ? blockedUntil : 0, lastError };
+  const o = othersNow();
+  return { day: r2(spend.used), dayLimit: LIMITS.day, hour: w.hour, hourLimit: LIMITS.hour, minute: w.minute, minuteLimit: LIMITS.minute, others: o, dayCap: Math.round(LIMITS.day * MARGIN.day), hourCap: Math.round(LIMITS.hour * MARGIN.hour), minuteCap: Math.round(LIMITS.minute * MARGIN.minute), blockedUntil: blockedUntil > t ? blockedUntil : 0, lastError };
+}
+function othersNow() {
+  let o = null;
+  try { o = others(); } catch { o = null; }
+  return { day: (o && +o.day) || 0, hour: (o && +o.hour) || 0, minute: (o && +o.minute) || 0 };
+}
+// What this screen itself used, for the other screens to count along.
+function own() {
+  const t = now(); rollDay(t);
+  const w = windowSums(t);
+  return { d: spend.day, day: r2(spend.used), hour: w.hour, minute: w.minute };
 }
 // Null when the request may go out, else the Dutch reason why not.
 function refuse(cost) {
   const t = now(); rollDay(t);
   if (t < blockedUntil) return MSG.blocked;
-  if (spend.used + cost > LIMITS.day * MARGIN) return MSG.budget;
+  const o = othersNow();
+  if (spend.used + o.day + cost > LIMITS.day * MARGIN.day) return MSG.budget;
   const w = windowSums(t);
-  if (w.hour + cost > LIMITS.hour * MARGIN || w.minute + cost > LIMITS.minute * MARGIN) return MSG.busy;
+  if (w.hour + o.hour + cost > LIMITS.hour * MARGIN.hour || w.minute + o.minute + cost > LIMITS.minute * MARGIN.minute) return MSG.busy;
   return null;
 }
 function charge(cost) {
@@ -488,6 +504,7 @@ function start(opts = {}) {
   fetchJson = opts.fetchJson || null;
   if (opts.log) log = opts.log;
   if (typeof opts.now === 'function') now = opts.now; // for tests
+  others = typeof opts.others === 'function' ? opts.others : () => null;
   grids = new Map(); pointCache.clear(); inflight.clear();
   spend = { day: null, used: 0 }; recent = []; blockedUntil = 0; backoffMs = 0; lastError = null;
   for (const k of Object.keys(counters)) counters[k] = 0;
@@ -514,7 +531,7 @@ function stats() {
 }
 
 module.exports = {
-  start, grid, points, budget, stats, serialize, ingest, LEVELS,
+  start, grid, points, budget, own, stats, serialize, ingest, LEVELS, LIMITS, MARGIN,
   // pure helpers, for the tests
   uv, fromUv, snapBox, interpLevels, nodesAt, isaHeightM, callCost, modelFor, GRID_VARS, POINT_VARS, MSG,
 };

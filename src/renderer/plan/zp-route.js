@@ -62,6 +62,14 @@ function zpRoute(ctx) {
     pnr = PlanPerf.pointOfReturn(plan, { ...q, keepKg: 0 });
     psr = PlanPerf.pointOfReturn(plan, { ...q, keepKg: pl.reserveKg });
     plan.pnr = pnr; plan.psr = psr;
+    // The fuel the operations manual asks for: start/taxi + trip + 5 % contingency + alternate + final
+    // reserve + extra, against what is on board.
+    const last = pts()[pts().length - 1];
+    const alt = route.alternate && route.alternate.lat != null ? route.alternate : null;
+    const altMin = alt ? PlanPerf.directTime(last, alt, tas, q.windAt, plan.total.etaMs) : null;
+    const altKg = altMin != null ? (altMin / 60) * pl.flowKgh : 0;
+    plan.fuel = PlanPerf.fuelPlan({ taxiKg: pl.taxiKg, tripKg: plan.total.fuelKg - pl.taxiKg, alternateKg: altKg, contingencyPct: pl.contPct, finalReserveKg: pl.reserveKg, extraKg: route.extraKg || 0, onBoardKg: pl.fuelKg });
+    Object.assign(plan.fuel, { alternate: alt, altMin, altDistM: alt ? PlanGeo.dist(last, alt) : null, altRequired: ['ifr', 'vfr-zee'].includes(pl.flightType) && !route.isolated });
     ctx.plan = plan;
     ctx.emit('plan', plan);
     // Wind along the route: what is not known yet is asked for; the route is reckoned again when it comes.
@@ -86,8 +94,9 @@ function zpRoute(ctx) {
     }
     list.forEach((wp, i) => {
       const m = L.marker([wp.lat, wp.lon], { icon: wpIcon(i, wp), draggable: true, autoPan: true, keyboard: false, zIndexOffset: 1000, title: `${wp.name} — sleep om te verplaatsen, rechtsklik om te verwijderen` }).addTo(map);
+      m.on('dragstart', () => { ctx.dragging = true; });
       m.on('drag', (e) => { wp.lat = e.latlng.lat; wp.lon = e.latlng.lng; recompute(); redrawLine(); ctx.cv.request(); });
-      m.on('dragend', (e) => { wp.named = false; move(i, e.target.getLatLng()); nameFor(wp); });
+      m.on('dragend', (e) => { ctx.dragging = false; wp.named = false; move(i, e.target.getLatLng()); nameFor(wp); });
       m.on('click', (e) => { L.DomEvent.stopPropagation(e); selectedWp = i; ctx.select({ lat: wp.lat, lon: wp.lon, label: wp.name, kind: 'wp', item: wp }); draw(); ctx.emit('route', 'select'); });
       m.on('contextmenu', (e) => { L.DomEvent.stopPropagation(e); remove(i); });
       markers.push(m);
@@ -231,6 +240,7 @@ function zpRoute(ctx) {
       zpRow('PSR', psr ? (psr.beyond ? `${ctx.fmt.dist(psr.m)} · na ${ctx.fmt.dur(psr.tMin)}` : 'Hele route binnen bereik') : '—', 'Point of safe return: tot hier kom je terug met de eindreserve nog aan boord'),
       zpRow('TAS / verbruik', `${Math.round(plan.tasKt)} kt · ${Math.round(pl.flowKgh)} kg/u`, 'TAS uit de IAS op hoogte (ISA); verbruik uit het profiel')) : null;
     const warn = plan ? zpRouteWarnings(ctx, plan) : [];
+    const fuelSec = plan ? zpFuelSection(ctx, plan, changed) : null;
     // The points themselves, to rename and reorder.
     const wps = h('div', { class: 'zp-wps' }, list.map((wp, i) => {
       const nameIn = h('input', { class: 'input', value: wp.name, onchange: (e) => { wp.name = e.target.value.slice(0, 40) || `WP${i + 1}`; wp.named = true; changed('name'); } });
@@ -242,7 +252,7 @@ function zpRoute(ctx) {
       h('button', { class: 'w-tool', title: 'Inzoomen op dit punt', onclick: () => map.setView([wp.lat, wp.lon], Math.max(map.getZoom(), 11)) }, icon('target')),
       h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => remove(i) }, icon('close')));
     }));
-    return h('div', { class: 'zp-panel' }, head, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, tot, table, list.length ? h('h4', { class: 'zp-sub' }, 'Routepunten (sleep om de volgorde te wijzigen)') : null, wps);
+    return h('div', { class: 'zp-panel' }, head, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, fuelSec, tot, table, list.length ? h('h4', { class: 'zp-sub' }, 'Routepunten (sleep om de volgorde te wijzigen)') : null, wps);
   }
 
   function zpDepart() {
@@ -265,8 +275,55 @@ function zpRouteWarnings(ctx, plan) {
   if (plan.impossible) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), 'Op een deel van de route is de wind te sterk om de koers te houden.'));
   if (plan.total.landingFuelKg != null && plan.total.landingFuelKg < 0) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), `Te weinig brandstof: ${ctx.fmt.fuel(-plan.total.landingFuelKg)} tekort.`));
   else if (plan.total.belowReserve) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), `Landing onder de eindreserve van ${ctx.fmt.fuel(pl.reserveKg)} (${pl.reserveMin} min).`));
+  const F = plan.fuel;
+  if (F && F.marginKg != null && F.marginKg < 0) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), `Brandstof volgens BOM Deel A: ${ctx.fmt.fuel(-F.marginKg)} te weinig (benodigd ${ctx.fmt.fuel(F.requiredKg)}, aan boord ${ctx.fmt.fuel(F.onBoardKg)}).`));
+  if (F && F.altRequired && !F.alternate) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), 'Voor deze vluchtsoort is een uitwijkhaven vereist (BOM 8.2.3.7.2): kies er een in het brandstofblok.'));
+  if (plan.total.timeMin > 360) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), 'Vliegtijd boven 6 uur: meer dan de maximale vliegtijd per dienst (BOM).'));
+  if (pl.altFt < 300) out.push(h('div', { class: 'zp-warn' }, icon('alert'), 'Onder 300 ft: minimum boven bebouwing 300 ft, elders 200 ft (politievrijstelling), altijd 100 ft boven obstakels binnen 100 m.'));
+  if (pl.flightType === 'vfr-zee' && pl.altFt < 1000) out.push(h('div', { class: 'zp-warn' }, icon('alert'), 'Boven zee is de minimumhoogte 1000 ft (BOM), tenzij de taak anders vraagt.'));
   const last = plan.legs[plan.legs.length - 1];
   const wEnd = last && ctx.windAt(last.to.lat, last.to.lon, plan.total.etaMs, 33);
   if (wEnd && pl.rotorStartStop && (wEnd.gustKt || wEnd.speedKt) > pl.rotorStartStop) out.push(h('div', { class: 'zp-warn bad' }, icon('alert'), `Wind bij aankomst (${Math.round(wEnd.gustKt || wEnd.speedKt)} kt) boven de limiet voor rotor starten/stoppen (${pl.rotorStartStop} kt).`));
   return out;
+}
+
+const ZP_FLIGHT_TYPES = [
+  { value: 'auto', label: 'Automatisch (dag/nacht volgens UDP, zee bij een platform)' },
+  { value: 'vfr-dag', label: 'VFR dag' }, { value: 'vfr-nacht', label: 'VFR nacht' },
+  { value: 'vfr-zee', label: 'VFR boven zee (meer dan 5 NM uit de kust)' }, { value: 'ifr', label: 'IFR' },
+];
+// Candidate alternates: airfields and heliports near the destination (not offshore decks), nearest first.
+function zpAlternates(ctx, dest) {
+  const list = (ctx.aero ? ctx.aero().airports : []).filter((a) => !['heliport-offshore', 'closed', 'glider', 'ultralight', 'strip', 'agricultural', 'water'].includes(a.type));
+  return list.map((a) => ({ a, d: PlanGeo.dist(dest, a) })).filter((x) => x.d > 500).sort((x, y) => x.d - y.d).slice(0, 12);
+}
+function zpFuelSection(ctx, plan, changed) {
+  const route = ctx.cfg.route, pl = plan.planning, F = plan.fuel;
+  const pts = route.points, dest = pts[pts.length - 1];
+  const alts = zpAlternates(ctx, dest);
+  const altSel = zpSelect([{ value: '', label: 'Geen uitwijkhaven' }, ...alts.map((x) => ({ value: x.a.id, label: `${x.a.icao || ''} ${x.a.name} · ${ctx.fmt.dist(x.d)}` }))],
+    route.alternate ? route.alternate.id : '', (v) => { const x = alts.find((y) => y.a.id === v); route.alternate = x ? { id: x.a.id, name: x.a.icao || x.a.name, lat: x.a.lat, lon: x.a.lon } : null; changed('alternate'); });
+  const ft = ZP_FLIGHT_TYPES.find((t) => t.value === pl.flightType);
+  const frf = pl.frf;
+  const row = (k, v, title, cls) => h('div', { class: 'zp-kv' + (cls ? ' ' + cls : ''), title: title || null }, h('span', {}, k), h('b', {}, v));
+  const frfTitle = [`${pl.reserveMin} min op ${pl.frfBasis} (${Math.round(pl.frfBasisFlow)} kg/u) · ${pl.frfSrc}`, frf.fixedKg ? `P-ALV hanteert ${frf.fixedKg} kg · ${pl.frfKgSrc}` : null, frf.fixedKg ? 'De hoogste van beide telt.' : null].filter(Boolean).join('\n');
+  return h('div', { class: 'zp-sec open' },
+    h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Brandstof (BOM Deel A)')),
+    h('div', { class: 'zp-grid4' },
+      field('Vluchtsoort', zpSelect(ZP_FLIGHT_TYPES, route.flightType || 'auto', (v) => { route.flightType = v; changed('flighttype'); ctx.emit('profile'); }), (route.flightType || 'auto') === 'auto' ? `Nu: ${ft ? ft.label : pl.flightType}` : null),
+      field('Uitwijkhaven', altSel, F.altRequired ? 'Vereist voor deze vluchtsoort' : 'Niet vereist (wel mogelijk)'),
+      field('Brandstofsoort', zpSelect([{ value: 'jeta1', label: 'JET A-1 (0,80 kg/L)' }, { value: 'jp8', label: 'JP-8 (0,81 kg/L)' }], route.fuelType || 'jeta1', (v) => { route.fuelType = v; changed('fueltype'); }), 'Dichtheid als de werkelijke onbekend is'),
+      field('Extra (gezagvoerder)', zpNum(route.extraKg || '', (v) => { route.extraKg = v || 0; changed('extra'); }, { step: 10, min: 0, placeholder: '0' }), 'kg'),
+      ctx.profile().type === 'AW139' ? field('Geïsoleerde bestemming', segmented([{ value: 'no', label: 'Nee' }, { value: 'yes', label: 'Ja (offshore)' }], route.isolated ? 'yes' : 'no', (v) => { route.isolated = v === 'yes'; changed('isolated'); }), 'Geen uitwijk, wel een PNR bepalen') : null),
+    h('div', { class: 'zp-totals' },
+      row('Start en taxi', ctx.fmt.fuel(F.taxiKg), 'Geen vaste waarde in BOM of SOP; profielwaarde'),
+      row('Trip', `${ctx.fmt.fuel(F.tripKg)} · ${ctx.fmt.dur(plan.total.timeMin)}`, `Vliegtijd × ${Math.round(pl.flowKgh)} kg/u (${pl.flowSrc})`),
+      row(`Contingency ${pl.contPct} %`, ctx.fmt.fuel(F.contingencyKg), `${pl.contPct} % van trip + uitwijk · ${pl.contSrc}`),
+      row('Uitwijk', F.alternate ? `${ctx.fmt.fuel(F.alternateKg)} · ${F.alternate.name}, ${ctx.fmt.dist(F.altDistM)}, ${ctx.fmt.dur(F.altMin)}` : F.altRequired ? 'ontbreekt' : '—', 'Rechtstreeks van de bestemming naar de uitwijkhaven, met wind, op kruissnelheid', F.altRequired && !F.alternate ? 'bad' : ''),
+      row(`Eindreserve (${pl.reserveMin} min)`, `${ctx.fmt.fuel(F.finalReserveKg)}${frf.by === 'fixed' && frf.fromMin != null ? ` · P-ALV-waarde (${pl.reserveMin} min = ${ctx.fmt.fuel(frf.fromMin)})` : ''}`, frfTitle),
+      F.extraKg ? row('Extra', ctx.fmt.fuel(F.extraKg)) : null,
+      row('Benodigd', ctx.fmt.fuel(F.requiredKg), null, 'strong'),
+      row('Aan boord', ctx.fmt.fuel(F.onBoardKg), null, 'strong'),
+      row(F.marginKg >= 0 ? 'Over (extra beschikbaar)' : 'Tekort', ctx.fmt.fuel(Math.abs(F.marginKg)), F.marginKg >= 0 ? `Komt overeen met ${ctx.fmt.dur((F.marginKg / pl.flowKgh) * 60)} extra vliegtijd` : null, F.marginKg >= 0 ? 'ok' : 'bad')),
+    h('p', { class: 'zp-hint' }, 'In de vlucht: elke 10 min brandstof controleren. Verwachte brandstof bij de bestemming onder uitwijk + eindreserve: uitwijken of herplannen. Onder de eindreserve: PANPAN (BOM 8.2.7.3, 8.4.7).'));
 }

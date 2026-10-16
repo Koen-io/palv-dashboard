@@ -325,11 +325,13 @@ ipcMain.handle('app:openLogs', () => shell.openPath(log.dir()));
 // The nightly fresh start. Done from here: location.reload() in the page counts as navigating away,
 // which will-navigate blocks for the dashboard window.
 ipcMain.handle('app:reload', (e) => { setTimeout(() => { if (!e.sender.isDestroyed()) e.sender.reloadIgnoringCache(); }, 200); });
-// Only the status pages of other dashboards: http on a private or Tailscale address.
+// Only the status pages of other dashboards (http on a private or Tailscale address) and the official
+// AIP of LVNL (Zoek & Plan), in the browser.
 ipcMain.handle('app:openExternal', (_e, url) => {
   try {
     const u = new URL(String(url));
     if (u.protocol === 'http:' && screens.isPrivate(u.hostname)) return shell.openExternal(u.toString());
+    if (u.protocol === 'https:' && /^(eaip\.lvnl\.nl|www\.lvnl\.nl)$/.test(u.hostname)) return shell.openExternal(u.toString()).then(() => true);
   } catch { /* not a url */ }
   return false;
 });

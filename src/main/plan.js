@@ -268,7 +268,18 @@ function start(opts) {
   const dir = app.getPath('userData');
   tileDir = path.join(dir, 'plan-tiles');
   store.start({ dir, log: lg });
-  wind.start({ dir, fetchJson, log: lg });
+  // The other screens' own use of Open-Meteo today, as they tell it in their status: one budget for all.
+  const today = () => new Date().toISOString().slice(0, 10);
+  const others = () => {
+    const sum = { day: 0, hour: 0, minute: 0 };
+    for (const p of screens.peers()) {
+      const w = p.online && p.status && p.status.plan && p.status.plan.wind;
+      if (!w || w.d !== today() || p.status.ephemeral) continue;
+      sum.day += +w.day || 0; sum.hour += +w.hour || 0; sum.minute += +w.minute || 0;
+    }
+    return sum;
+  };
+  wind.start({ dir, fetchJson, log: lg, others });
   aero.start({ dir, fetchJson, log: lg });
   platforms.start({ dir, fetchText, fetchBuffer, log: lg });
   geocode.start({ dir, fetchJson, fetchText, log: lg });
@@ -340,6 +351,6 @@ ipcMain.handle('plan:tileStats', () => ({ bytes: tileBytes, sources: Object.from
 ipcMain.handle('plan:saveText', safe(async (_e, { title, name, ext, content }) => ({ ok: !!(await saveFile(title, name, [{ name: ext.toUpperCase(), extensions: [ext] }], String(content))) })));
 ipcMain.handle('plan:printPdf', safe(async (_e, { html, name }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'))) })));
 
-const status = () => ({ ...store.digests() });
+const status = () => ({ ...store.digests(), wind: wind.own() });
 
 module.exports = { start, registerScheme, status, TILE_SOURCES };

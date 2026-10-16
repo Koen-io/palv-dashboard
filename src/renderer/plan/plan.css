@@ -241,3 +241,8 @@
 
 /* light theme: the dark map overlays stay dark, the panels follow the theme */
 html[data-theme="light"] .zp-side { background: var(--surface); }
+.zp-rules { font-size: 0.74rem; }
+.zp-rules summary { cursor: pointer; color: #8ea2bf; margin: 0.2rem 0; }
+.zp-kv.strong > b, .zp-kv.strong > span { font-weight: 700; color: var(--text); }
+.zp-kv.ok > b { color: #3ecf6e; }
+.zp-kv.bad > b { color: #ff6b62; }

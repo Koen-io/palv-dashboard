@@ -77,7 +77,7 @@ function zpSearch(ctx) {
       cfg.recent = [{ id: it.id, label: it.label, sub: it.sub, lat: p.lat, lon: p.lon }, ...cfg.recent.filter((r) => r.id !== it.id)].slice(0, 8);
       ctx.save();
     }
-    if (toRoute) { ctx.parts.zpRoute.add({ lat: p.lat, lon: p.lon, name: it.label.split(',')[0].slice(0, 40) }); toast(`${it.label} aan de route toegevoegd`); return; }
+    if (toRoute) { ctx.parts.zpRoute.add({ lat: p.lat, lon: p.lon, name: it.label.split(',')[0].slice(0, 40), kind: it.kind }); toast(`${it.label} aan de route toegevoegd`); return; }
     if (p.bbox && p.bbox.length === 4 && (p.bbox[2] - p.bbox[0] > 0.01 || p.bbox[3] - p.bbox[1] > 0.01)) map.fitBounds([[p.bbox[0], p.bbox[1]], [p.bbox[2], p.bbox[3]]], { maxZoom: 14, animate: true });
     else map.setView([p.lat, p.lon], Math.max(map.getZoom(), { luchthaven: 12, heliport: 14, platform: 12, woonplaats: 12, gemeente: 11 }[it.kind] || 15), { animate: true });
     if (it.kind === 'platform' && it.item) { ctx.select({ lat: p.lat, lon: p.lon, label: it.label, kind: 'platform', item: it.item }); ctx.showCard(ctx.platformCard(it.item)); return; }

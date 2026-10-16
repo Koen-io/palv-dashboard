@@ -121,8 +121,28 @@ test('grid: identical concurrent requests share one fetch; regions pick their mo
   const [a, b] = await Promise.all([wind.grid({ bbox: [52, 4, 53, 6], level: '10m' }), wind.grid({ bbox: [52, 4, 53, 6], level: '975' })]);
   assert.ok(a.ok && b.ok);
   assert.strictEqual(f.calls.length, 1);
+  // A second large grid in the same minute would go past half the minute limit: refused, asked later.
+  const soon = await wind.grid({ bbox: [38, -106, 41, -103], level: '850' });
+  if (wind.budget().minute + 150 > wind.LIMITS.minute * wind.MARGIN.minute) assert.strictEqual(soon.ok, false);
+  clock += 61000;
   const us = await wind.grid({ bbox: [38, -106, 41, -103], level: '850' });
   assert.strictEqual(us.model, 'gfs_seamless');
+});
+
+test('budget: the other screens behind the same connection count along', async () => {
+  const f = fake();
+  clock = T0 + 20 * 60000;
+  // The others already used 6900 of today's 7000 (70 %): one more grid does not fit.
+  wind.start({ dir: tmp(), fetchJson: f.fetchJson, log: quiet, now, others: () => ({ day: 6900, hour: 0, minute: 0 }) });
+  const g = await wind.grid({ bbox: [52, 4, 53, 6], level: '10m' });
+  assert.strictEqual(g.ok, false);
+  assert.strictEqual(f.calls.length, 0, 'nothing asked');
+  assert.strictEqual(wind.budget().others.day, 6900);
+  // Own use for the others to count: none yet.
+  assert.strictEqual(wind.own().day, 0);
+  wind.start({ dir: tmp(), fetchJson: f.fetchJson, log: quiet, now, others: () => ({ day: 100, hour: 0, minute: 0 }) });
+  assert.ok((await wind.grid({ bbox: [52, 4, 53, 6], level: '10m' })).ok);
+  assert.ok(wind.own().day > 0);
 });
 
 test('grid: empty values are filled from the other model', async () => {
@@ -203,7 +223,7 @@ test('points: interpolated by the model heights, in order, cached', async () => 
   assert.strictEqual(f.calls[1].hours, 21);
 });
 
-test('budget: refuses above 85 % of the day, serves the stale grid', async () => {
+test('budget: refuses above 70 % of the day, serves the stale grid', async () => {
   const dir = tmp();
   const f = fake();
   clock = T0 + 20 * 60000;

@@ -311,5 +311,20 @@
   }
   const lengthOf = (pts) => G.measure(pts).total;
 
-  return { NM, KT, isaTemp, pressureRatio, densityRatio, densityAltitude, tasFromIas, iasFromTas, components, triangle, meanWind, vneAt, flowAt, planRoute, sampleAt, directTime, pointOfReturn, reach, turnRadius, bankFor, orbit, driftOrbit, expandingSquare, sectorSearch, ladder, lengthOf, clamp };
+  /* ---------- fuel policy ---------- */
+  // The required fuel as the operations manual builds it up: start/taxi + trip + contingency (a share of
+  // trip and alternate) + alternate + final reserve + extra. The final reserve is the larger of its minutes
+  // at the speed the rule names and the fixed figure the operator holds, when it has one.
+  function finalReserve({ minutes, flowKgh, fixedKg }) {
+    const fromMin = minutes != null && flowKgh > 0 ? (minutes / 60) * flowKgh : null;
+    const kg = Math.max(fromMin || 0, fixedKg || 0);
+    return { kg, fromMin, fixedKg: fixedKg || null, by: fixedKg != null && fixedKg >= (fromMin || 0) ? 'fixed' : 'minutes' };
+  }
+  function fuelPlan({ taxiKg = 0, tripKg = 0, alternateKg = 0, contingencyPct = 0, finalReserveKg = 0, extraKg = 0, onBoardKg = null }) {
+    const contingencyKg = ((tripKg + alternateKg) * contingencyPct) / 100;
+    const requiredKg = taxiKg + tripKg + contingencyKg + alternateKg + finalReserveKg + extraKg;
+    return { taxiKg, tripKg, contingencyKg, alternateKg, finalReserveKg, extraKg, requiredKg, onBoardKg, marginKg: onBoardKg == null ? null : onBoardKg - requiredKg };
+  }
+
+  return { NM, KT, isaTemp, pressureRatio, densityRatio, densityAltitude, tasFromIas, iasFromTas, components, triangle, meanWind, vneAt, flowAt, planRoute, sampleAt, directTime, pointOfReturn, reach, finalReserve, fuelPlan, turnRadius, bankFor, orbit, driftOrbit, expandingSquare, sectorSearch, ladder, lengthOf, clamp };
 });

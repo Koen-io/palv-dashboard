@@ -135,7 +135,7 @@ function zpExtras(ctx) {
         h('td', {}, h('i', { class: 'zp-dot', style: `background:${(T[x.a.type] || {}).color || '#888'}` }), h('b', {}, x.a.name), h('small', {}, `${(T[x.a.type] || {}).name || x.a.type}${x.a.icaoClass && x.a.icaoClass.length === 1 ? ' · klasse ' + x.a.icaoClass : ''}${x.a.freqs && x.a.freqs.length ? ' · ' + x.a.freqs.map((f) => f.mhz.toFixed(3).replace('.', ',')).join(' / ') : ''}`)),
         h('td', {}, `${x.a.lower ? x.a.lower.text : 'GND'} – ${x.a.upper ? x.a.upper.text : '?'}`),
         h('td', {}, `${ctx.fmt.dist(x.from)} – ${ctx.fmt.dist(x.to)}`, h('small', {}, `${ctx.fmt.dur(PlanPerf.sampleAt(plan, x.from).tMin)} na vertrek`)),
-        h('td', {}, x.inside ? 'Ja: binnen' : x.a.lower && alt < x.a.lower.ft ? 'Onder' : 'Boven'))) : h('tr', {}, h('td', { colspan: 4 }, 'Geen luchtruim gevonden (laad de luchtvaartgegevens of controleer de AIP).'))));
+        h('td', {}, x.inside ? 'Ja: binnen' : x.a.lower && alt < x.a.lower.ft ? 'Onder' : 'Boven', zpAipUrl({ airspace: x.a }) ? h('button', { class: 'w-tool', title: 'Officiële AIP (LVNL)', onclick: () => zpOpenAip(zpAipUrl({ airspace: x.a })) }, icon('globe')) : null))) : h('tr', {}, h('td', { colspan: 4 }, 'Geen luchtruim gevonden (laad de luchtvaartgegevens of controleer de AIP).'))));
 
     // Light: sunset and the end of civil twilight at departure and arrival.
     const light = (p, ms) => {
@@ -164,7 +164,8 @@ function zpExtras(ctx) {
       warns.length ? h('div', { class: 'zp-warns' }, warns) : h('div', { class: 'zp-warn ok' }, icon('check'), 'Geen waarschuwingen voor snelheid, gewicht, brandstof en wind.'),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Verticaal profiel')), zpProfileCanvas(ctx, plan, crossed)),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, `Luchtruim langs de route (${crossed.length})`)), tbl,
-        h('p', { class: 'zp-hint' }, 'Bron openAIP. Niet voor navigatie: controleer altijd de AIP, NOTAM\'s en actuele activatie van TRA/TSA en EHR/EHD-gebieden.')),
+        h('p', { class: 'zp-hint' }, 'Bron openAIP. Niet voor navigatie: controleer altijd de AIP, NOTAM\'s en actuele activatie van TRA/TSA en EHR/EHD-gebieden.'),
+        h('div', { class: 'zp-btnrow' }, zpAipBtn(zpAipUrl(), 'eAIP Nederland (geldende cyclus)'), zpBtn('ICAO-kaart 1:500.000', () => zpOpenAip(ZP_AIP_CHART.front), { icon: 'globe', title: 'Officiële VFR-kaart van LVNL (PDF, voorzijde)' }))),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Weer langs de route'), switchTool('STATIONS', 'Weerstations op de kaart', () => cfg.wx.metar, () => { cfg.wx.metar = !cfg.wx.metar; ctx.save(); applyWx(); ctx.emit('layers'); })),
         !cfg.wx.metar ? h('p', { class: 'zp-hint' }, 'Zet de weerstations aan om METAR en TAF langs de route te zien, getoetst aan de BOM-minima (profiel zoals op de weerradar).')
           : near.length ? h('div', { class: 'zp-metars' }, near.map(({ st, n, a }) => h('div', { class: 'zp-metar ' + a.status }, h('b', {}, `${st.icao} · ${ctx.fmt.dist(n.m)} langs de route, ${ctx.fmt.dist(n.off)} ernaast`), h('code', {}, st.raw), st.tafRaw ? h('code', { class: 'taf' }, st.tafRaw) : null)))
@@ -222,6 +223,7 @@ function zpExtras(ctx) {
       <div>Afstand: <b>${e(ctx.fmt.dist(plan.total.distM))}</b></div><div>Verbruik: <b>${e(ctx.fmt.fuel(plan.total.fuelKg))}</b></div><div>Na landing: <b>${plan.total.landingFuelKg == null ? '—' : e(ctx.fmt.fuel(plan.total.landingFuelKg))}</b></div>
       <div>PNR: <b>${plan.pnr && plan.pnr.beyond ? e(ctx.fmt.dist(plan.pnr.m)) : 'n.v.t.'}</b></div><div>PSR: <b>${plan.psr && plan.psr.beyond ? e(ctx.fmt.dist(plan.psr.m)) : 'n.v.t.'}</b></div><div>Verbruik/u: <b>${Math.round(plan.planning.flowKgh)} kg</b></div></div>
       ${zpRouteWarnings(ctx, plan).map((w) => `<div class="warn">${e(w.textContent)}</div>`).join('')}
+      ${plan.fuel ? `<h2>Brandstof (BOM Deel A)</h2><table><tr><th>Start/taxi</th><th>Trip</th><th>Cont. ${plan.planning.contPct}%</th><th>Uitwijk${plan.fuel.alternate ? ' ' + e(plan.fuel.alternate.name) : ''}</th><th>Eindres. ${plan.planning.reserveMin} min</th><th>Extra</th><th>Benodigd</th><th>Aan boord</th><th>${plan.fuel.marginKg >= 0 ? 'Over' : 'Tekort'}</th></tr><tr>${[plan.fuel.taxiKg, plan.fuel.tripKg, plan.fuel.contingencyKg, plan.fuel.alternateKg, plan.fuel.finalReserveKg, plan.fuel.extraKg, plan.fuel.requiredKg, plan.fuel.onBoardKg, Math.abs(plan.fuel.marginKg)].map((v) => `<td>${e(ctx.fmt.fuel(v))}</td>`).join('')}</tr></table>` : ''}
       <h2>Navigatielog</h2><table><thead><tr><th>Naar</th><th>${cfg.units.north === 'true' ? 'TC' : 'MC'}</th><th>Afst.</th><th>Wind</th><th>Kop</th><th>GS</th><th>ETE</th><th>ETA</th><th>Rest</th><th>ATA</th></tr></thead><tbody>${rows}</tbody></table>
       <h2>Vertrek</h2><div>${e(p[0].name)} · ${e(ctx.fmt.coord(p[0].lat, p[0].lon, 'ddm'))} · ${e(ctx.fmt.coord(p[0].lat, p[0].lon, 'rd') || '')}</div>
       <div class="foot">Gemaakt met P-ALV Dashboard ${e(document.getElementById('tb-version').textContent)} op ${e(new Date().toLocaleString('nl-NL'))} · wind Open-Meteo · luchtruim openAIP · magnetische variatie WMM2025. Niet voor navigatie zonder controle van AIP, NOTAM en actuele weerberichten.</div>

@@ -199,7 +199,7 @@ function zpAirportCard(ctx, a) {
     ...(a.runways || []).filter((r, i, all) => all.findIndex((x) => x.des === r.des) === i).map((r) => [`Baan ${r.des}`, `${r.trueHdg != null ? PlanUnits.hdg(r.trueHdg) + 'T · ' : ''}${r.lengthM ? r.lengthM + ' × ' + (r.widthM || '?') + ' m' : ''} ${r.surface || ''}`.trim()]),
     ...(a.freqs || []).map((f) => [f.type || 'Freq.', `${f.mhz.toFixed(3).replace('.', ',')} · ${f.name || ''}`]),
   ].filter(Boolean);
-  return { title: a.icao ? `${a.icao} · ${a.name}` : a.name, sub: `${kinds[a.type] || a.type} · openAIP`, color: a.type === 'heliport-hospital' ? '#ff6b6b' : '#e9eff8', point: a, rows, airport: a.icao };
+  return { title: a.icao ? `${a.icao} · ${a.name}` : a.name, sub: `${kinds[a.type] || a.type} · openAIP`, color: a.type === 'heliport-hospital' ? '#ff6b6b' : '#e9eff8', point: a, rows, airport: a.icao, extra: [zpAipBtn(zpAipUrl({ icao: a.icao }))].filter(Boolean) };
 }
 
 /* ---------- symbols ---------- */

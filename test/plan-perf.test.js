@@ -166,3 +166,14 @@ test('units', () => {
   assert.strictEqual(U.fmtDur(45, true), '45 min');
   near(U.fuelKg(U.fuelIn(500, 'l', 0.79), 'l', 0.79), 500, 1e-9);
 });
+
+test('fuel policy: required fuel and final reserve', () => {
+  // AW139 VFR day: 20 min at best range (389 kg/h) is 130 kg, the fixed 200 kg is higher and counts.
+  const frf = P.finalReserve({ minutes: 20, flowKgh: 389, fixedKg: 200 });
+  near(frf.fromMin, 129.67, 0.01); assert.strictEqual(frf.kg, 200); assert.strictEqual(frf.by, 'fixed');
+  // Without a fixed figure the minutes count.
+  assert.strictEqual(P.finalReserve({ minutes: 30, flowKgh: 160 }).kg, 80);
+  // 5 % contingency over trip and alternate.
+  const f = P.fuelPlan({ taxiKg: 30, tripKg: 400, alternateKg: 100, contingencyPct: 5, finalReserveKg: 200, extraKg: 0, onBoardKg: 800 });
+  near(f.contingencyKg, 25, 1e-9); near(f.requiredKg, 755, 1e-9); near(f.marginKg, 45, 1e-9);
+});

@@ -1,5 +1,20 @@
 # Wijzigingen
 
+## 1.18.0
+
+### Nieuw in Zoek & Plan
+- Brandstofberekening volgens het BOM Deel A: start/taxi + trip + 5 % contingency + uitwijk + eindreserve + extra, tegen de brandstof aan boord, met wat er over is of tekort komt
+- Eindreserve per vluchtsoort: 20 minuten op beste bereiksnelheid bij VFR dag, 30 minuten op holdingsnelheid bij VFR nacht, boven zee en IFR, en nooit minder dan de vaste P-ALV-waarde. Beide getallen staan erbij
+- Vluchtsoort automatisch (dag of nacht volgens de UDP, boven zee als de route naar een platform gaat) of zelf te kiezen; uitwijkhaven te kiezen uit de velden rond de bestemming, met waarschuwing als die vereist is; geïsoleerde offshore-bestemming voor de AW139 (dan een PNR)
+- Brandstofsoort JET A-1 of JP-8 met de dichtheid uit het BOM, en de brandstofopbouw ook op de kniebord-PDF
+- Waarschuwingen voor vliegtijd boven 6 uur per dienst en voor de minimumhoogtes (300/200 ft, 1000 ft boven zee)
+- Massacalculator met de standaardmassa's uit het BOM, die met één klik het vlieggewicht van de vlucht invult
+- Helidek: de dekkaart vult zich met wat openbaar is (dekhoogte, frequenties), en toont de wind op het dek nu: nadering tegen de wind in binnen of buiten de obstakelvrije sector, componenten langs de dek-heading, de rotorlimiet en de offshore-regels uit de eigen documenten
+- Knoppen naar de officiële AIP van LVNL (geldende AIRAC-cyclus) bij elk vliegveld, elk luchtruim en in de briefing, en naar de ICAO-kaart 1:500.000
+
+### Verbeterd
+- Windgegevens: alle schermen samen blijven ruim onder de limieten van Open-Meteo (70 % per dag, 60 % per uur, 50 % per minuut); de schermen vertellen elkaar hoeveel ze gebruikt hebben. Wind langs de route wordt per 0,25° gevraagd en niet meer tijdens het slepen van routepunten. Bij een drukke server wordt het na een minuut opnieuw geprobeerd
+
 ## 1.17.0
 
 ### Nieuw: tabblad Zoek & Plan

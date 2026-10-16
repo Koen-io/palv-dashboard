@@ -138,8 +138,33 @@ function zpCreate(body, w) {
       const f = PlanPerf.flowAt(tbl.filter((x) => x.kias > 0), { kias: out.ias, weightKg: out.weightKg, paFt: out.altFt });
       if (f && f.kgh > 0) { out.flowKgh = f.kgh; out.flowSrc = prof.fuel.flowTableSrc || 'verbruikstabel vlieghandboek'; }
     }
-    out.reserveKg = (out.flowKgh * out.reserveMin) / 60;
+    // Final reserve and contingency by the operations manual (BOM Deel A): minutes at best range speed by
+    // day, at holding speed at night, over sea and IFR; never less than the fixed figure the unit holds.
+    const B = prof.fuel.bom || {}, V = PlanProfiles.v;
+    const ft = ctx.flightType();
+    const minutes = ft === 'vfr-dag' ? V(B.frfMinDay, 20) : ft === 'vfr-zee' ? V(B.frfMinSea, 30) : ft === 'ifr' ? V(B.frfMinIfr, 30) : V(B.frfMinNight, 30);
+    const basisKias = ft === 'vfr-dag' ? V(prof.speeds.maxRange) || V(prof.speeds.cruiseEco) : V(prof.speeds.endurance);
+    let basisFlow = null;
+    if (Array.isArray(tbl) && tbl.length && typeof basisKias === 'number') { const f = PlanPerf.flowAt(tbl.filter((x) => x.kias > 0), { kias: basisKias, weightKg: out.weightKg, paFt: out.altFt }); basisFlow = f && f.kgh; }
+    if (!(basisFlow > 0)) basisFlow = V(ft === 'vfr-dag' ? prof.fuel.flowEco : prof.fuel.flowEndurance) || out.flowKgh;
+    const frf = PlanPerf.finalReserve({ minutes, flowKgh: basisFlow, fixedKg: V(B.frfKg) });
+    Object.assign(out, {
+      flightType: ft, frf, frfBasis: ft === 'vfr-dag' ? 'beste bereiksnelheid' : 'holdingsnelheid', frfBasisFlow: basisFlow,
+      frfSrc: zpSrc(ft === 'vfr-dag' ? B.frfMinDay : B.frfMinNight) || 'Standaard planning', frfKgSrc: zpSrc(B.frfKg),
+      reserveMin: minutes, reserveKg: frf.kg, contPct: V(B.contingencyPct, 5), contSrc: zpSrc(B.contingencyPct) || 'Standaard planning',
+      density: r.fuelType === 'jp8' ? 0.81 : out.density,
+    });
     return out;
+  };
+  // Day or night by the official daylight period (UDP) at departure and arrival, over sea when the route
+  // goes to a platform or helideck; or as set for the flight.
+  ctx.flightType = () => {
+    const r = cfg.route;
+    if (r.flightType && r.flightType !== 'auto') return r.flightType;
+    if (r.points.some((p) => p.kind === 'platform' || p.kind === 'heliport-offshore')) return 'vfr-zee';
+    const dep = r.departAt || Date.now(), eta = ctx.plan ? ctx.plan.total.etaMs : dep;
+    const day = (ms) => { try { const u = ASTRO.udpToday(ms); return ms >= u.begin && ms < u.end; } catch { return true; } };
+    return day(dep) && day(eta) ? 'vfr-dag' : 'vfr-nacht';
   };
   ctx.tas = (altFt, oatC) => { const pl = ctx.planning(); return PlanPerf.tasFromIas(pl.ias, altFt != null ? altFt : pl.altFt, oatC); };
   ctx.vne = (q = {}) => {

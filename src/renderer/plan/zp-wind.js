@@ -38,19 +38,23 @@ function zpWind(ctx) {
   let grid = null, gridErr = null, loading = false, reqId = 0, retryTimer = null;
 
   /* ---------- point winds ---------- */
-  const key = (lat, lon, ms, ft) => `${Math.round(lat / 0.05)}|${Math.round(lon / 0.05)}|${Math.floor(ms / 3600e3)}|${Math.round(Math.max(0, ft) / 250)}`;
+  // Per 0.25° (about 15 km), hour and 250 ft: wind hardly differs within that, and it keeps the questions
+  // to Open-Meteo few (each point costs two calls).
+  const STEP = 0.25;
+  const key = (lat, lon, ms, ft) => `${Math.round(lat / STEP)}|${Math.round(lon / STEP)}|${Math.floor(ms / 3600e3)}|${Math.round(Math.max(0, ft) / 250)}`;
   let queue = new Map(), flushTimer = null, waiters = [];
   function queuePoint(lat, lon, ms, ft) {
     const k = key(lat, lon, ms, ft);
     if (zpWindPoints.has(k) || queue.has(k)) return;
     const miss = zpWindMiss.get(k);
     if (miss && Date.now() - miss < 120000) return;
-    queue.set(k, { lat: Math.round(lat / 0.05) * 0.05, lon: Math.round(lon / 0.05) * 0.05, time: Math.floor(ms / 3600e3) * 3600e3 + 1800e3, ftAmsl: Math.round(Math.max(0, ft) / 250) * 250 });
+    if (ctx.dragging) return; // while a point is being dragged: only when it is let go
+    queue.set(k, { lat: +(Math.round(lat / STEP) * STEP).toFixed(4), lon: +(Math.round(lon / STEP) * STEP).toFixed(4), time: Math.floor(ms / 3600e3) * 3600e3 + 1800e3, ftAmsl: Math.round(Math.max(0, ft) / 250) * 250 });
     clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, 250);
   }
   async function flush() {
-    const batch = [...queue.entries()].slice(0, 200);
+    const batch = [...queue.entries()].slice(0, 60); // 60 points = 120 calls: well inside the minute budget
     for (const [k] of batch) queue.delete(k);
     if (!batch.length) return;
     let got = false;
