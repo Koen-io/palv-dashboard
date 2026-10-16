@@ -1,0 +1,40 @@
+{
+ "response": {
+  "numFound": 3,
+  "start": 0,
+  "maxScore": 1,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "identificatie": "A2-450",
+    "type": "hectometerpaal",
+    "wegnummer": "A2",
+    "centroide_ll": "POINT(4.98665994 52.21363176)",
+    "hectometernummer": "450",
+    "weergavenaam": "Hectometerpaal A2-450",
+    "centroide_rd": "POINT(127625.124 469579.783)",
+    "id": "hmp-2b56dc849d4ca241eec0d588e0174bc8"
+   },
+   {
+    "identificatie": "A2-453",
+    "type": "hectometerpaal",
+    "wegnummer": "A2",
+    "centroide_ll": "POINT(4.98662819 52.21093383)",
+    "hectometernummer": "453",
+    "weergavenaam": "Hectometerpaal A2-453",
+    "centroide_rd": "POINT(127621.297 469279.623)",
+    "id": "hmp-bbce3b75edcb70e3d8588b32143735f6"
+   },
+   {
+    "identificatie": "A2-459",
+    "type": "hectometerpaal",
+    "wegnummer": "A2",
+    "centroide_ll": "POINT(4.98656678 52.20553814)",
+    "hectometernummer": "459",
+    "weergavenaam": "Hectometerpaal A2-459",
+    "centroide_rd": "POINT(127613.785 468679.32)",
+    "id": "hmp-2f8f93cd4c22f45ab83cf1ee728c385b"
+   }
+  ]
+ }
+}

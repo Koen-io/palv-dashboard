@@ -27,6 +27,7 @@ let selfStatus = () => ({});
 let onChange = () => {};
 let server = null, udp = null, port = PORT;
 let share = null; // live traffic between the screens (share.js): its two routes are served here
+let routes = {}; // more routes for the other screens (Zoek & Plan): path -> (req, res, caller, respond)
 
 
 const isPrivate = (addr) => {
@@ -176,6 +177,7 @@ function handle(req, res) {
   const url = (req.url || '/').split('?')[0];
   if (share && url === share.STREAM) return share.handleStream(req, res, caller);
   if (share && url === share.WANT) return respond(res, share.handleWant(req, caller) ? 200 : 409, 'text/plain; charset=utf-8', '');
+  if (routes[url]) return routes[url](req, res, caller, respond);
   if (url === '/api/status') return respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(selfStatus()));
   if (url === '/api/screens') return respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(list()));
   if (url === '/' || url === '/index.html') return respond(res, 200, 'text/html; charset=utf-8', page());
@@ -227,9 +229,10 @@ function startUdp() {
   });
 }
 
-async function start({ userData, status, onUpdate, test, share: sh }) {
+async function start({ userData, status, onUpdate, test, share: sh, routes: extra }) {
   ephemeral = !!test;
   share = sh || null;
+  routes = extra || {};
   load(userData);
   selfStatus = () => ({ ...status(), id: self.id, name: self.name, port, ephemeral });
   onChange = onUpdate || (() => {});

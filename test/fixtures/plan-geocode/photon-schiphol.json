@@ -1,0 +1,116 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1883613,
+    "osm_key": "place",
+    "osm_value": "hamlet",
+    "type": "district",
+    "name": "Schiphol",
+    "city": "Haarlemmermeer",
+    "state": "North Holland",
+    "country": "Netherlands",
+    "countrycode": "NL",
+    "extra": {
+     "admin_level": "10"
+    },
+    "extent": [
+     4.7059217,
+     52.3680121,
+     4.8170755,
+     52.2829353
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.7621975,
+     52.3080392
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 46114355,
+    "osm_key": "highway",
+    "osm_value": "motorway_junction",
+    "type": "house",
+    "name": "Schiphol",
+    "district": "Schiphol",
+    "city": "Haarlemmermeer",
+    "state": "North Holland",
+    "country": "Netherlands",
+    "postcode": "1118 BN",
+    "countrycode": "NL"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.7475751,
+     52.3083134
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 268645625,
+    "osm_key": "building",
+    "osm_value": "yes",
+    "type": "house",
+    "name": "Schiphol",
+    "street": "Energiestraat",
+    "district": "Schiphol",
+    "city": "Haarlemmermeer",
+    "state": "North Holland",
+    "country": "Netherlands",
+    "postcode": "1118 CK",
+    "countrycode": "NL",
+    "extent": [
+     4.7538642,
+     52.3059991,
+     4.7543722,
+     52.3056882
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.7541182,
+     52.3058439
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 46122858,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Schiphol Airport",
+    "street": "Vertrekpassage",
+    "district": "Schiphol",
+    "city": "Haarlemmermeer",
+    "state": "North Holland",
+    "country": "Netherlands",
+    "postcode": "1118 AX",
+    "countrycode": "NL"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.7620721,
+     52.3095969
+    ]
+   }
+  }
+ ]
+}

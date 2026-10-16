@@ -9,7 +9,7 @@ const globals = require('globals');
 const rendererDir = path.join(__dirname, 'src', 'renderer');
 const rendererFiles = [
   ...fs.readdirSync(rendererDir).filter((f) => f.endsWith('.js')).map((f) => path.join(rendererDir, f)),
-  ...fs.readdirSync(path.join(rendererDir, 'widgets')).map((f) => path.join(rendererDir, 'widgets', f)),
+  ...['widgets', 'plan'].flatMap((d) => fs.readdirSync(path.join(rendererDir, d)).filter((f) => f.endsWith('.js')).map((f) => path.join(rendererDir, d, f))),
 ];
 const shared = {};
 for (const file of rendererFiles) {
@@ -19,6 +19,8 @@ for (const file of rendererFiles) {
 // Set on window by model.js, astro.js, wx.js, squawk.js and suntable.js, and by Leaflet.
 for (const name of Object.keys(require('./src/renderer/model.js'))) shared[name] = 'readonly';
 Object.assign(shared, { ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', L: 'readonly' });
+// Zoek & Plan: the pure modules in plan/ hang one namespace each on window (and are required by the tests).
+Object.assign(shared, { PlanGeo: 'readonly', PlanCoords: 'readonly', PlanWmm: 'readonly', PlanPerf: 'readonly', PlanUnits: 'readonly', PlanProfiles: 'readonly' });
 
 module.exports = [
   { ignores: ['src/renderer/vendor/**', 'dist/**', 'node_modules/**'] },

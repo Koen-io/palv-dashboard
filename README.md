@@ -8,6 +8,7 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 - **Vluchtradar:** eigen live-kaart van al het ADS-B-verkeer (adsb.fi en adsb.lol), met categorieën, routes, kaartlagen en een noodsquawk-alarm.
 - **Weerradar:** Windy met METAR- en TAF-stations, getoetst aan de BOM-weerminima.
 - **Baangebruik Schiphol** en **In de lucht** (eigen eenheden), live waargenomen.
+- **Zoek & Plan:** navigatie en vluchtplanning voor EC135 en AW139: zoeken met aanvullen, routes met wind en brandstof, meetlint, afstandsringen, luchtruim (openAIP), platforms, live vloot, zoekpatronen, orbit, actieradius en briefing. De eigen cijfers uit vlieghandboek en SOP staan niet in deze code maar in een privébestand op het scherm (`plan-private.json`).
 - Versheidsbolletje op elke widget: groen, oranje of rood, met tijd en leeftijd van de gegevens.
 
 ## Beheer

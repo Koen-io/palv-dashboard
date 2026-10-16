@@ -1,0 +1,66 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 449386728,
+    "osm_key": "landuse",
+    "osm_value": "commercial",
+    "type": "locality",
+    "name": "Lake Geneva Park",
+    "city": "Tolochenaz",
+    "county": "District de Morges",
+    "state": "Vaud",
+    "country": "Schweiz/Suisse/Svizzera/Svizra",
+    "postcode": "1131",
+    "countrycode": "CH",
+    "extent": [
+     6.4803959,
+     46.5057486,
+     6.4820866,
+     46.5038666
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     6.4813654,
+     46.5047105
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 251404,
+    "osm_key": "place",
+    "osm_value": "town",
+    "type": "city",
+    "name": "Lake Geneva",
+    "county": "Walworth",
+    "state": "Wisconsin",
+    "country": "United States",
+    "countrycode": "US",
+    "extra": {
+     "admin_level": "8"
+    },
+    "extent": [
+     -88.459389,
+     42.615103,
+     -88.39359,
+     42.545538
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -88.4345369,
+     42.5918039
+    ]
+   }
+  }
+ ]
+}

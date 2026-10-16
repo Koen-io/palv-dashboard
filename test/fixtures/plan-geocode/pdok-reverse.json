@@ -1,0 +1,24 @@
+{
+ "response": {
+  "numFound": 2,
+  "start": 0,
+  "maxScore": 7.2950664,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "type": "adres",
+    "weergavenaam": "Domplein 21, 3512JE Utrecht",
+    "id": "adr-e3ffa2d4ff64ebf794a0a9a0ccf158dd",
+    "centroide_ll": "POINT(5.12143155 52.09061667)",
+    "afstand": 9.52
+   },
+   {
+    "type": "adres",
+    "weergavenaam": "Domplein 21B, Utrecht",
+    "id": "adr-a9556c3a6c0e1f18921db24cf3b2720c",
+    "centroide_ll": "POINT(5.12143711 52.09057559)",
+    "afstand": 14.07
+   }
+  ]
+ }
+}

@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 1.17.0
+
+### Nieuw: tabblad Zoek & Plan
+- Navigatie en vluchtplanning voor EC135 en AW139 op één kaart. Kies het profiel bovenin: snelheden, VNE, verbruik, bereik en windlimieten in het hele tabblad volgen het gekozen toestel
+- Zoekbalk met aanvullen tijdens het typen: adressen, plaatsen, postcodes en hectometerpalen in Nederland, plaatsen in de hele wereld, alle vliegvelden en heliports (ook op ICAO-code), platforms, favorieten en coördinaten in elk formaat (graden, RD, MGRS)
+- Route bouwen: punten klikken, slepen en invoegen. Navigatielog per stuk met koers (magnetisch of waar), wind op vlieghoogte op het moment dat je er bent, windcorrectie, grondsnelheid, ETE/ETA en brandstof. Met de muis over de route: afstand vanaf het vertrek en tot het eind, tijd, wind met kop- en dwarswind, en brandstof op dat punt
+- Point of no return en point of safe return, eindreserve en waarschuwingen voor VNE, gewicht, brandstof en wind
+- Meetlint A→B (kortste lijn met maatstreepjes), afstandsringen met kompasroos, in NM of km
+- Wind zoals op Windy: stromingslijnen, kleurvlak of windveren, vijf hoogtes en de komende 12 uur, wereldwijd
+- Luchtruim per soort aan en uit (CTR, TMA, TMZ, RMZ, P/R/D, TRA/TSA en meer) met hoogtegrenzen, meldpunten, bakens, vliegvelden, ziekenhuishelipads en obstakels (openAIP), en de VFR-kaart van openFlightMaps
+- Alle platforms in Nederland en grote delen van de wereld (NLOG, Rijkswaterstaat, Denemarken, Noorwegen, VK, Golf van Mexico, OpenStreetMap) met per platform alle openbare gegevens en een eigen dekkaart voor heading, dekhoogte, D/t-waarde en frequenties
+- Live vloot op de kaart met vooruitprojectie, en "Wie is er het snelst" naar een punt
+- Zoekpatronen (uitdijend vierkant, sector, kruipende lijn, parallelle banen), orbitplanner met helling in wind, actieradius met wind
+- Briefing: doorkruist luchtruim, verticaal profiel, weer langs de route getoetst aan de BOM-minima, SIGMET's, licht bij vertrek en aankomst. Exporteren als kniebord-PDF, GPX of KML
+- Eigen profielen uit RFM en SOP, dekkaarten, routes en favorieten gaan vanzelf mee naar de andere schermen van de eenheid. Bekeken kaarten blijven 30 dagen bewaard voor gebruik zonder internet
+
 ## 1.16.0
 
 ### Nieuw

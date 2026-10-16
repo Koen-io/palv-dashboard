@@ -1,0 +1,66 @@
+{
+ "response": {
+  "numFound": 203426,
+  "start": 0,
+  "maxScore": 11.529783,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "type": "provincie",
+    "centroide_ll": "POINT(5.16385544 52.08423158)",
+    "weergavenaam": "Provincie Utrecht",
+    "id": "pro-3c35250f0081bd7bc08056e290fbceb4",
+    "score": 11.529783
+   },
+   {
+    "type": "gemeente",
+    "centroide_ll": "POINT(5.0747543 52.09113798)",
+    "weergavenaam": "Gemeente Utrecht",
+    "id": "gem-df0ca8ab37eccea5217e2a13f74d2833",
+    "score": 9.301651
+   },
+   {
+    "type": "woonplaats",
+    "centroide_ll": "POINT(5.09520363 52.0886922)",
+    "weergavenaam": "Utrecht, Utrecht, Utrecht",
+    "id": "wpl-d7676180b7f172bcb7356429b19563a5",
+    "score": 8.042513
+   },
+   {
+    "type": "weg",
+    "weergavenaam": "Domplein, Utrecht",
+    "id": "weg-c2fa8d0196aa564cd833ed066fbc314e",
+    "centroide_ll": "POINT(5.1216017 52.09072066)",
+    "score": 9.7355585
+   },
+   {
+    "type": "adres",
+    "weergavenaam": "Domplein 21B, Utrecht",
+    "id": "adr-a9556c3a6c0e1f18921db24cf3b2720c",
+    "centroide_ll": "POINT(5.12143711 52.09057559)",
+    "score": 6.4933763
+   },
+   {
+    "type": "postcode",
+    "weergavenaam": "Domplein, 3512JD Utrecht",
+    "id": "pcd-6442cbb8fabcf18df16bbe3a8d8d630d",
+    "centroide_ll": "POINT(5.12076924 52.09087655)",
+    "score": 5.8142304
+   },
+   {
+    "type": "postcode",
+    "weergavenaam": "Domplein, 3512JE Utrecht",
+    "id": "pcd-105a609df06a8eb529ec57f073417500",
+    "centroide_ll": "POINT(5.12170481 52.09034392)",
+    "score": 5.813786
+   },
+   {
+    "type": "provincie",
+    "centroide_ll": "POINT(5.93864531 52.0617367)",
+    "weergavenaam": "Provincie Gelderland",
+    "id": "pro-0f6c28f4b7319a68ded823f1a7d5ae49",
+    "score": 16.852356
+   }
+  ]
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "response": {
+  "numFound": 1,
+  "start": 0,
+  "maxScore": 7.2950664,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "type": "adres",
+    "weergavenaam": "Gentsevaart 74, 4565EW Kapellebrug",
+    "id": "adr-865fa5dd69dd34e4bd08287a95d16cfe",
+    "centroide_ll": "POINT(4.06396212 51.24762689)",
+    "afstand": 48572.95
+   }
+  ]
+ }
+}

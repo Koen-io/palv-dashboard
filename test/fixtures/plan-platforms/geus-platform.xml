@@ -1,0 +1,135 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:wfs="http://www.opengis.net/wfs"
+   xmlns:gml="http://www.opengis.net/gml"
+   xmlns:ogc="http://www.opengis.net/ogc"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/WFS-basic.xsd 
+                       http://mapserver.gis.umn.edu/mapserver https://data.geus.dk/geusmap/ows/4326.jsp?whoami=&amp;SERVICE=WFS&amp;VERSION=1.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ens_platform&amp;OUTPUTFORMAT=XMLSCHEMA">
+      <gml:boundedBy>
+      	<gml:Box srsName="EPSG:4326">
+      		<gml:coordinates>4.179324,55.385323 5.412430,56.674771</gml:coordinates>
+      	</gml:Box>
+      </gml:boundedBy>
+<gml:featureMember>
+      <ms:ens_platform>
+        <gml:boundedBy>
+        	<gml:Box srsName="EPSG:4326">
+        		<gml:coordinates>4.228869,56.078353 4.228869,56.078353</gml:coordinates>
+        	</gml:Box>
+        </gml:boundedBy>
+        <ms:msGeometry>
+        <gml:Point srsName="EPSG:4326">
+          <gml:coordinates>4.228869,56.078353</gml:coordinates>
+        </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>1</ms:ogc_fid>
+        <ms:id>308</ms:id>
+        <ms:ospar_id>DK47</ms:ospar_id>
+        <ms:platform_name>SYD ARNE</ms:platform_name>
+        <ms:operator_name>INEOS E&amp;P A/S</ms:operator_name>
+        <ms:platform_type_name>process</ms:platform_type_name>
+        <ms:category_name>gravity based concrete</ms:category_name>
+        <ms:function_name>above water production</ms:function_name>
+        <ms:start_using_year>1999</ms:start_using_year>
+        <ms:primary_production>oil</ms:primary_production>
+        <ms:status_name>operational</ms:status_name>
+        <ms:ospar_remark>Substructure weigth includes sub sea tank</ms:ospar_remark>
+        <ms:water_depth>60.000</ms:water_depth>
+        <ms:weight_substructure>112800.000</ms:weight_substructure>
+        <ms:weight_topside>8955.000</ms:weight_topside>
+        <ms:max_elevation>119.500</ms:max_elevation>
+        <ms:max_elevation_date>2021-01-01</ms:max_elevation_date>
+        <ms:max_elevation_desc>Flare Tower</ms:max_elevation_desc>
+        <ms:max_elevation_lat>56.095750000</ms:max_elevation_lat>
+        <ms:max_elevation_long>4.219250000</ms:max_elevation_long>
+        <ms:helideck_elevation>51.300</ms:helideck_elevation>
+        <ms:helideck_elevation_date>2021-01-01</ms:helideck_elevation_date>
+        <ms:helideck_elevation_lat>56.095750000</ms:helideck_elevation_lat>
+        <ms:helideck_elevation_long>4.219250000</ms:helideck_elevation_long>
+        <ms:platform_lat>56.078352747</ms:platform_lat>
+        <ms:platform_long>4.228869297</ms:platform_long>
+      </ms:ens_platform>
+    </gml:featureMember>
+<gml:featureMember>
+      <ms:ens_platform>
+        <gml:boundedBy>
+        	<gml:Box srsName="EPSG:4326">
+        		<gml:coordinates>4.618248,55.576474 4.618248,55.576474</gml:coordinates>
+        	</gml:Box>
+        </gml:boundedBy>
+        <ms:msGeometry>
+        <gml:Point srsName="EPSG:4326">
+          <gml:coordinates>4.618248,55.576474</gml:coordinates>
+        </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>4</ms:ogc_fid>
+        <ms:id>302</ms:id>
+        <ms:ospar_id>DK01</ms:ospar_id>
+        <ms:platform_name>DAGMAR</ms:platform_name>
+        <ms:operator_name>TotalEnergies EP Danmark A/S</ms:operator_name>
+        <ms:platform_type_name>process</ms:platform_type_name>
+        <ms:category_name>fixed steel</ms:category_name>
+        <ms:function_name>above water production</ms:function_name>
+        <ms:start_using_year>1991</ms:start_using_year>
+        <ms:primary_production>oil</ms:primary_production>
+        <ms:status_name></ms:status_name>
+        <ms:ospar_remark>P.C. Wellhead</ms:ospar_remark>
+        <ms:water_depth>40.000</ms:water_depth>
+        <ms:weight_substructure>500.000</ms:weight_substructure>
+        <ms:weight_topside>532.000</ms:weight_topside>
+        <ms:max_elevation>36.400</ms:max_elevation>
+        <ms:max_elevation_date>2021-01-01</ms:max_elevation_date>
+        <ms:max_elevation_desc>Fog Horn</ms:max_elevation_desc>
+        <ms:max_elevation_lat>55.576496667</ms:max_elevation_lat>
+        <ms:max_elevation_long>4.618257500</ms:max_elevation_long>
+        <ms:helideck_elevation></ms:helideck_elevation>
+        <ms:helideck_elevation_date></ms:helideck_elevation_date>
+        <ms:helideck_elevation_lat></ms:helideck_elevation_lat>
+        <ms:helideck_elevation_long></ms:helideck_elevation_long>
+        <ms:platform_lat>55.576474322</ms:platform_lat>
+        <ms:platform_long>4.618248005</ms:platform_long>
+      </ms:ens_platform>
+    </gml:featureMember>
+<gml:featureMember>
+      <ms:ens_platform>
+        <gml:boundedBy>
+        	<gml:Box srsName="EPSG:4326">
+        		<gml:coordinates>4.800083,55.721198 4.800083,55.721198</gml:coordinates>
+        	</gml:Box>
+        </gml:boundedBy>
+        <ms:msGeometry>
+        <gml:Point srsName="EPSG:4326">
+          <gml:coordinates>4.800083,55.721198</gml:coordinates>
+        </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>63</ms:ogc_fid>
+        <ms:id>458</ms:id>
+        <ms:ospar_id>DK32</ms:ospar_id>
+        <ms:platform_name>TYRA EAST F</ms:platform_name>
+        <ms:operator_name>TotalEnergies EP Danmark A/S</ms:operator_name>
+        <ms:platform_type_name>wellhead</ms:platform_type_name>
+        <ms:category_name>fixed steel</ms:category_name>
+        <ms:function_name>above water production</ms:function_name>
+        <ms:start_using_year>1995</ms:start_using_year>
+        <ms:primary_production>gas</ms:primary_production>
+        <ms:status_name>removed</ms:status_name>
+        <ms:ospar_remark>Bridge module, processing</ms:ospar_remark>
+        <ms:water_depth>37.000</ms:water_depth>
+        <ms:weight_substructure>700.000</ms:weight_substructure>
+        <ms:weight_topside>3100.000</ms:weight_topside>
+        <ms:max_elevation></ms:max_elevation>
+        <ms:max_elevation_date></ms:max_elevation_date>
+        <ms:max_elevation_desc>Jacket removed 08.2020</ms:max_elevation_desc>
+        <ms:max_elevation_lat>55.721203889</ms:max_elevation_lat>
+        <ms:max_elevation_long>4.800086944</ms:max_elevation_long>
+        <ms:helideck_elevation></ms:helideck_elevation>
+        <ms:helideck_elevation_date></ms:helideck_elevation_date>
+        <ms:helideck_elevation_lat></ms:helideck_elevation_lat>
+        <ms:helideck_elevation_long></ms:helideck_elevation_long>
+        <ms:platform_lat>55.721197748</ms:platform_lat>
+        <ms:platform_long>4.800083331</ms:platform_long>
+      </ms:ens_platform>
+    </gml:featureMember>
+</wfs:FeatureCollection>

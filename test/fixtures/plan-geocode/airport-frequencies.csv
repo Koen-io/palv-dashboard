@@ -1,0 +1,13 @@
+"id","airport_ref","airport_ident","type","description","frequency_mhz"
+55743,2513,"EHAM","APP","Schiphol Approach",119.055
+352572,2513,"EHAM","APP","Schiphol Approach",121.205
+55744,2513,"EHAM","ARR","Schiphol Arrival",118.405
+352573,2513,"EHAM","ARR","Schiphol Arrival",126.68
+352563,2513,"EHAM","ATIS","Departure",122.2
+55745,2513,"EHAM","ATIS","Arrival",132.98
+352564,2513,"EHAM","CLD","Schiphol Planner",121.655
+55746,2513,"EHAM","CLD","CLNC DEL",121.98
+352574,2513,"EHAM","DEP","Schiphol Departure",119.055
+352575,2513,"EHAM","DEP","Schiphol Departure",121.205
+352579,2513,"EHAM","FIS","Amsterdam Information",124.3
+55747,2513,"EHAM","GND","RWY 18R",121.56

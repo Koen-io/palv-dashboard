@@ -14,7 +14,7 @@
   // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
   // same area stays in view on any screen resolution and in any window size.
   const REF_W = 939, REF_H = 1041;
-  const VERSION = 7;
+  const VERSION = 8;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -38,6 +38,7 @@
     runway: { name: 'Baangebruik Schiphol', defaults: {} },
     fleet: { name: 'In de lucht', defaults: { groups: ['police', 'hems', 'coastguard'], hide: [], ground: true } },
     note: { name: 'Notitie', defaults: { text: '' } },
+    plan: { name: 'Zoek & Plan', defaults: {} },
   };
 
   const DEFAULT_SETTINGS = {
@@ -96,6 +97,7 @@
             widget('metar', 62, 36, 34, 18, 1, { title: 'Eindhoven Airport', cfg: { icao: 'EHEH' } }),
           ],
         },
+        { id: uid(), name: 'Zoek & Plan', widgets: [widget('plan', 0, 0, 96, 54, 1)] },
       ],
     };
   }
@@ -143,6 +145,7 @@
     if (from < 4) migrateV4(loaded);
     if (from < 5) migrateV5(loaded);
     if (from < 6) migrateV6(loaded);
+    if (from < 8) migrateV8(loaded);
     loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
     return loaded;
   }
@@ -226,6 +229,12 @@
     }
   }
   // 1.14 (version 7) adds only settings with their defaults: keepAwake, oledCare, emergencyAlert, emergencySound.
+
+  // 1.17: the new tab Zoek & Plan, one widget over the whole page, behind the existing pages.
+  function migrateV8(st) {
+    if (st.pages.some((p) => p.widgets.some((w) => w.type === 'plan'))) return;
+    st.pages.push({ id: uid(), name: 'Zoek & Plan', widgets: [{ id: uid(), type: 'plan', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.plan.name, cfg: {} }] });
+  }
 
   return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };
 });

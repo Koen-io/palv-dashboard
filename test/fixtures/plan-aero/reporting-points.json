@@ -1,0 +1,1 @@
+{"limit":1000,"totalCount":1,"totalPages":1,"page":1,"items":[{"_id":"629cc0acf4b4089a578e0647","name":"ALPHA","compulsory":true,"country":"NL","airports":["62614e2acb27f42509459ab2"],"geometry":{"type":"Point","coordinates":[4.911666666666667,53.045]},"elevation":{"value":0,"unit":0,"referenceDatum":1},"remarks":"Sat Sun Hol Only 1st April - 31st October"}]}

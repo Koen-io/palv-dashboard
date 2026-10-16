@@ -10,7 +10,8 @@ test('standaardindeling blijft zichzelf na normaliseren', () => {
   const def = M.defaultState();
   const out = M.normalize(clone(def));
   assert.strictEqual(out.version, M.VERSION);
-  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Operationeel', 'Weer']);
+  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan']);
+  assert.deepStrictEqual(types(out.pages[2]), ['plan']);
   assert.deepStrictEqual(types(out.pages[0]), ['fleet', 'radar', 'runway', 'tile', 'tile', 'windy']);
   assert.strictEqual(out.settings.keepAwake, true);
   assert.strictEqual(out.settings.oledCare, true);
@@ -20,7 +21,7 @@ test('standaardindeling blijft zichzelf na normaliseren', () => {
 test('onbruikbare invoer geeft de standaardindeling', () => {
   for (const bad of [null, undefined, 42, 'x', {}, { pages: [] }, { pages: 'nee' }, { pages: [null, 7] }]) {
     const out = M.normalize(clone(bad === undefined ? null : bad));
-    assert.strictEqual(out.pages.length, 2, JSON.stringify(bad));
+    assert.strictEqual(out.pages.length, 3, JSON.stringify(bad));
   }
 });
 
@@ -30,7 +31,7 @@ test('onbekende widgets verdwijnen, ontbrekende instellingen worden aangevuld', 
   assert.deepStrictEqual(types(out.pages[0]), ['radar']);
   assert.strictEqual(out.settings.theme, 'dark', 'eigen keuze blijft');
   assert.strictEqual(out.settings.keepAwake, true, 'nieuwe instelling krijgt standaard');
-  assert.strictEqual(out.activePage, 0, 'actieve pagina binnen bereik');
+  assert.strictEqual(out.activePage, out.pages.length - 1, 'actieve pagina binnen bereik');
   assert.ok(out.pages[0].widgets[0].id, 'widget krijgt een id');
   assert.deepStrictEqual(out.pages[0].widgets[0].cfg.cats, ['all'], 'standaardinstellingen van de widget');
 });
@@ -70,6 +71,20 @@ test('1.0 → nu: oude standaardkaart naar de nieuwe, volledig scherm aan, baang
   assert.strictEqual(out.settings.startFullscreen, true);
   assert.ok(out.pages[0].widgets.some((x) => x.type === 'runway'));
   assert.ok(out.pages[0].widgets.some((x) => x.type === 'fleet'));
+});
+
+test('1.16 → nu: het tabblad Zoek & Plan komt er één keer bij, achteraan', () => {
+  const v7 = () => ({ version: 7, settings: {}, pages: [{ name: 'Eigen', widgets: [{ type: 'radar', x: 0, y: 0, w: 96, h: 54, cfg: {} }] }] });
+  const out = M.normalize(v7());
+  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Eigen', 'Zoek & Plan']);
+  const w = out.pages[1].widgets[0];
+  assert.deepStrictEqual([w.type, w.x, w.y, w.w, w.h], ['plan', 0, 0, M.COLS, M.ROWS]);
+  // Removed by hand afterwards: it does not come back.
+  out.pages.pop();
+  assert.strictEqual(M.normalize(clone(out)).pages.length, 1);
+  // Moved to another page: it is not added a second time.
+  const moved = M.normalize(v7());
+  assert.strictEqual(M.normalize(clone(moved)).pages.filter((p) => p.widgets.some((x) => x.type === 'plan')).length, 1);
 });
 
 test('migreren is idempotent', () => {

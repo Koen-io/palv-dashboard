@@ -1,0 +1,31 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 10660982010,
+    "osm_key": "office",
+    "osm_value": "government",
+    "type": "house",
+    "name": "Guichet logement - Huisvestingsloket",
+    "locality": "Quartier Saint-Géry - Sint-Gorikswijk",
+    "district": "Pentagone - Vijfhoek",
+    "city": "Bruxelles - Brussel",
+    "county": "Brussel-Hoofdstad - Bruxelles-Capitale",
+    "state": "Région de Bruxelles-Capitale - Brussels Hoofdstedelijk Gewest",
+    "country": "België / Belgique / Belgien",
+    "postcode": "1000",
+    "countrycode": "BE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     4.3499004,
+     50.8500196
+    ]
+   }
+  }
+ ]
+}

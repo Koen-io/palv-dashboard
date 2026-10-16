@@ -10,6 +10,7 @@ const screens = require('./main/screens');
 const data = require('./main/data');
 const share = require('./share');
 const traffic = require('./traffic');
+const plan = require('./main/plan');
 require('./main/tiles');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -22,6 +23,8 @@ const UPDATE_REPO = (pkg.palv && pkg.palv.updateRepo) || 'Koen-io/palv-dashboard
 // The Mac build is not signed with a developer certificate; without this macOS asks for the login
 // keychain password every time the app has been replaced by a newer version.
 if (isMac) app.commandLine.appendSwitch('use-mock-keychain');
+// The map tiles of Zoek & Plan come through a scheme of their own, which must be known before the app is ready.
+plan.registerScheme();
 
 let win = null;
 
@@ -235,10 +238,11 @@ app.whenReady().then(() => {
   createWindow();
   watchdog.attach(win);
   data.start(() => win);
+  const planOut = plan.start({ screens, share, getWin: () => win, test: !!shotPath });
   // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
   if (shotPath && !process.argv.includes('--shot-full')) return;
   if (!shotPath) updater.start({ repository: UPDATE_REPO, onStatus: (s) => send('update:status', s) });
-  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share });
+  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share, routes: planOut.routes });
   // A test window never fetches for others nor follows them: it keeps to itself.
   share.start({
     traffic, peers: screens.peers, disabled: !!shotPath,
@@ -379,6 +383,8 @@ function screenStatus() {
     update: { state: u.state, latest: u.latest },
     // Who fetches the live traffic, and who receives it from whom (share.js).
     share: share.info(),
+    // Fingerprints of the Zoek & Plan files, so the screens only fetch them from each other on a change.
+    plan: plan.status(),
   };
 }
 ipcMain.handle('screens:info', () => ({ name: screens.name(), port: screens.port(), addresses: screens.addresses(), list: screens.list() }));

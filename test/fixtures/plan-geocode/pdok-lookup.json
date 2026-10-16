@@ -1,0 +1,18 @@
+{
+ "response": {
+  "numFound": 1,
+  "start": 0,
+  "maxScore": 6.9881697,
+  "numFoundExact": true,
+  "docs": [
+   {
+    "type": "woonplaats",
+    "centroide_ll": "POINT(5.09520363 52.0886922)",
+    "weergavenaam": "Utrecht, Utrecht, Utrecht",
+    "centroide_rd": "POINT(134987.52 455643.648)",
+    "id": "wpl-d7676180b7f172bcb7356429b19563a5",
+    "geometrie_ll": "MULTIPOLYGON(((5.01514 52.11395,5.02888 52.10142,5.05329 52.08353,5.01871 52.06274,5.06365 52.0416,5.11126 52.05832,5.16044 52.07779,5.17065 52.09393,5.1404 52.12099,5.02931 52.11899,5.01514 52.11395)))"
+   }
+  ]
+ }
+}

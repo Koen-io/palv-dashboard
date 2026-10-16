@@ -1,0 +1,95 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 419203,
+    "osm_key": "place",
+    "osm_value": "city",
+    "type": "city",
+    "name": "Utrecht",
+    "state": "Utrecht",
+    "country": "Nederland",
+    "countrycode": "NL",
+    "extra": {
+     "admin_level": "8"
+    },
+    "extent": [
+     4.970096,
+     52.1420506,
+     5.195155,
+     52.026282
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     5.1215634,
+     52.0907006
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1433619,
+    "osm_key": "boundary",
+    "osm_value": "administrative",
+    "type": "district",
+    "name": "Utrecht",
+    "city": "Utrecht",
+    "state": "Utrecht",
+    "country": "Nederland",
+    "countrycode": "NL",
+    "extra": {
+     "admin_level": "10"
+    },
+    "extent": [
+     5.0041822,
+     52.1356715,
+     5.195155,
+     52.026282
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     5.127684,
+     52.0809856
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 47667,
+    "osm_key": "place",
+    "osm_value": "state",
+    "type": "state",
+    "name": "Utrecht",
+    "country": "Nederland",
+    "countrycode": "NL",
+    "extra": {
+     "admin_level": "4"
+    },
+    "extent": [
+     4.7920404,
+     52.3036767,
+     5.6273145,
+     51.8573607
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     5.1784277,
+     52.0485887
+    ]
+   }
+  }
+ ]
+}
