@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 1.20.0
+
+### In de lucht: waar vliegt de eenheid?
+- Bij elke eigen eenheid staat nu de plaats, met klein erboven "boven" als hij boven die woonplaats vliegt, of anders afstand en richting tot de dichtstbijzijnde woonplaats ("4 km NO van" Bunnik). Ook boven zee ("15 km W van" Den Helder). In een smalle widget staat de plaats onder de roepnaam
+- Werkt zonder internet: alle 2.503 Nederlandse woonplaatsen met hun grenzen zitten in het dashboard (PDOK, BAG)
+
 ## 1.19.0
 
 ### Zoek & Plan: eenvoudiger in gebruik

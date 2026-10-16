@@ -124,6 +124,8 @@ function snapshot(groups, now = Date.now()) {
       atLeast: up && !e.takeoff && e.firstPoll,
       msgAt: a.msgAt,
       posAt: a.posAt,
+      lat: a.lat,
+      lon: a.lon,
       src: a.src,
     });
   }

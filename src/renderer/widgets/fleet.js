@@ -8,16 +8,30 @@ function fleetHealth() {
   report('fleet', 'In de lucht', !!(d && d.ok), d && d.lastOk ? `laatst ${zulu(d.lastOk)}` : 'geen verbinding', 2 * 60000);
 }
 
+// Above which place a unit flies; looked up again only when it has moved a few hundred metres.
+const placeCache = new Map();
+function placeOf(a) {
+  if (a.lat == null || a.lon == null) return null;
+  const key = `${a.lat.toFixed(3)},${a.lon.toFixed(3)}`, c = placeCache.get(a.hex);
+  if (c && c.key === key) return c.place;
+  const place = PLACES.near(a.lat, a.lon);
+  placeCache.set(a.hex, { key, place });
+  return place;
+}
+
 const flightTime = (ms) => { const m = Math.max(0, Math.floor(ms / 60000)); return `${Math.floor(m / 60)}:${pad2(m % 60)}`; };
 // Which own units a widget shows: per category, and per unit within it.
 const fleetGroupsOf = (cfg) => (Array.isArray(cfg.groups) ? cfg.groups : Object.keys(FLEET_GROUPS));
 const fleetShows = (cfg, a) => fleetGroupsOf(cfg).includes(a.group) && !(cfg.hide || []).includes(a.hex) && (cfg.ground !== false || !a.onGround);
 
+const placeCell = (p) => (!p ? null : h('div', { class: 'fl-place', title: `Positie: ${PLACES.where(p)}` },
+  h('small', {}, p.above ? 'boven' : `${Math.max(1, Math.round(p.km))} km ${p.dir} van`), h('b', {}, p.name)));
+
 function renderFleet(root, w) {
   const d = trafficFeed.snap && trafficFeed.snap.fleet, now = Date.now();
   const list = d ? d.aircraft.filter((a) => fleetShows(w.cfg, a)) : [];
   // The rows are only rebuilt when something in them changes; the line below them follows every second.
-  const sig = JSON.stringify([!!d, list.map((a) => [a.hex, a.flight, a.alt, a.gs, a.vs != null && Math.abs(a.vs) >= 300 ? Math.sign(a.vs) : 0, a.onGround, a.squawk, emergency.watch.isConfirmed(a.hex), a.takeoff, a.approx, a.atLeast]), Math.floor(now / 60000)]);
+  const sig = JSON.stringify([!!d, list.map((a) => [a.hex, PLACES.where(placeOf(a)), a.flight, a.alt, a.gs, a.vs != null && Math.abs(a.vs) >= 300 ? Math.sign(a.vs) : 0, a.onGround, a.squawk, emergency.watch.isConfirmed(a.hex), a.takeoff, a.approx, a.atLeast]), Math.floor(now / 60000)]);
   if (root.dataset.sig !== sig || !root.firstChild) {
     root.dataset.sig = sig;
     const rows = list.map((a) => {
@@ -32,7 +46,9 @@ function renderFleet(root, w) {
           h('small', {}, a.atLeast ? 'vliegtijd' : `start ${zulu(a.takeoff)}`));
       return h('div', { class: 'fl-row ' + a.group + (a.onGround ? ' ground' : '') + (alert ? ' alert' : ''), 'data-hex': a.hex },
         h('i', { class: 'fl-bar' }),
-        h('div', { class: 'fl-id' }, h('b', {}, a.flight || reg || a.hex.toUpperCase()), h('small', {}, [a.flight && reg ? reg : null, type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · '))),
+        h('div', { class: 'fl-id' }, h('b', {}, a.flight || reg || a.hex.toUpperCase()),
+          h('small', {}, placeOf(a) ? h('span', { class: 'fl-id-place' }, PLACES.where(placeOf(a))) : null, h('span', { class: 'fl-id-meta' }, [a.flight && reg ? reg : null, type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · ')))),
+        placeCell(placeOf(a)),
         alert ? h('span', { class: 'fl-sq' }, a.squawk) : null,
         h('div', { class: 'fl-num' }, h('b', {}, a.alt == null ? '—' : a.alt.toLocaleString('nl-NL')), h('small', {}, 'ft' + climb)),
         h('div', { class: 'fl-num fl-gs' }, h('b', {}, a.gs == null ? '—' : a.gs), h('small', {}, 'kt')),
@@ -40,7 +56,7 @@ function renderFleet(root, w) {
     });
     root.replaceChildren(
       h('div', { class: 'fl-list' }, rows.length ? rows : h('div', { class: 'fl-empty' }, icon('shield'), h('span', {}, d ? 'Geen eigen toestellen in de lucht' : 'Gegevens worden opgehaald…'))),
-      h('div', { class: 'fl-src', title: 'Eigen eenheden uit de lijsten onder Instellingen › Eigen eenheden; kies met het tandwiel welke deze widget toont. Dezelfde live gegevens als de Vluchtradar: adsb.fi elke seconde, aangevuld met adsb.lol, met OpenSky als reserve. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' }, h('span', { class: 'dot' }), h('span', { class: 'fl-src-text' }), h('span', { class: 'fl-count' }))
+      h('div', { class: 'fl-src', title: 'Eigen eenheden uit de lijsten onder Instellingen › Eigen eenheden; kies met het tandwiel welke deze widget toont. Dezelfde live gegevens als de Vluchtradar: adsb.fi elke seconde, aangevuld met adsb.lol, met OpenSky als reserve. De plaats is de woonplaats waarboven de eenheid vliegt, of de dichtstbijzijnde met afstand en richting. De starttijd komt uit de gevlogen route bij ADS-B Exchange; ≈ betekent geteld vanaf de eerste waarneming.' }, h('span', { class: 'dot' }), h('span', { class: 'fl-src-text' }), h('span', { class: 'fl-count' }))
     );
   }
   // Every second: the age of each row's message, and whether the feed itself is live.
@@ -48,7 +64,8 @@ function renderFleet(root, w) {
     const a = list.find((x) => x.hex === row.dataset.hex);
     if (!a) continue;
     const unit = UNIT_NAMES(a.hex);
-    row.title = `${a.reg || (unit && unit.reg) || a.hex.toUpperCase()}${a.type ? ' · ' + a.type : ''} · ${FLEET_GROUPS[a.group] || ''}${a.squawk ? ' · squawk ' + a.squawk : ''} · laatste bericht ${Math.max(0, (now - a.msgAt) / 1000).toFixed(1).replace('.', ',')} s geleden via ${a.src || '—'}`;
+    const place = PLACES.where(placeOf(a));
+    row.title = `${a.reg || (unit && unit.reg) || a.hex.toUpperCase()}${a.type ? ' · ' + a.type : ''} · ${FLEET_GROUPS[a.group] || ''}${place ? ' · ' + place : ''}${a.squawk ? ' · squawk ' + a.squawk : ''} · laatste bericht ${Math.max(0, (now - a.msgAt) / 1000).toFixed(1).replace('.', ',')} s geleden via ${a.src || '—'}`;
     row.classList.toggle('stale', now - a.msgAt > 20000);
   }
   const dot = root.querySelector('.fl-src .dot'), text = root.querySelector('.fl-src-text'), count = root.querySelector('.fl-count');
@@ -62,7 +79,7 @@ function renderFleet(root, w) {
 }
 
 defineWidget('fleet', {
-  desc: 'Eigen eenheden die nu vliegen (politie, trauma, kustwacht), met hoogte, snelheid en vliegtijd — live, elke seconde.',
+  desc: 'Eigen eenheden die nu vliegen (politie, trauma, kustwacht), met plaats, hoogte, snelheid en vliegtijd — live, elke seconde.',
   icon: 'shield',
   size: [24, 18],
   mount(w, body, tools) {

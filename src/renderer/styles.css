@@ -432,6 +432,9 @@ html[data-theme="dark"] .rwy-map .osm { opacity: 0.3; filter: invert(1) hue-rota
 .fl-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .fl-id b { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; letter-spacing: 0.04em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fl-id small { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-place { flex: 0 1 auto; min-width: 0; max-width: 11rem; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.fl-place b { font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fl-place small { font-size: 0.68rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .fl-sq { flex: none; padding: 0.1rem 0.45rem; border-radius: 0.25rem; background: #ff5148; color: #fff; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; }
 .fl-num, .fl-time { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .fl-num { min-width: 3.4rem; }
@@ -445,8 +448,11 @@ html[data-theme="dark"] .rwy-map .osm { opacity: 0.3; filter: invert(1) hue-rota
 .fl-src { flex: none; display: flex; align-items: center; gap: 0.45rem; padding: 0.45rem 1.1rem 0.6rem; font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
 .fl-count { margin-left: auto; font-weight: 700; color: var(--text); }
 /* In a narrow widget the speed makes way first, then the callsign details. */
+/* The place moves under the callsign when the widget gets narrow. */
+.fl-id-place { display: none; color: var(--text); }
 @container (max-width: 25rem) { .fl-gs { display: none; } }
-@container (max-width: 19rem) { .fl-id small, .fl-src .fl-count { display: none; } }
+@container (max-width: 30rem) { .fl-place { display: none; } .fl-id-place { display: inline; } .fl-id-place + .fl-id-meta::before { content: ' · '; } }
+@container (max-width: 19rem) { .fl-id-meta, .fl-src .fl-count { display: none; } }
 
 /* edit mode */
 .w-edit { display: none; position: absolute; inset: 0.3rem; border-radius: var(--radius); z-index: 5; }
