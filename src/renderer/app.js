@@ -18,13 +18,16 @@ function onWinState(ws) {
 
 // Embedded sites that stay open for days slowly fill up memory. At 04:00 local time the dashboard starts
 // afresh, unless someone is busy with it; then it waits until they are done, up to 05:00.
+// Asked once: should the reload not come through, it is not asked again every second.
+let nightlyAsked = false;
 function nightlyReload() {
-  if (!state.settings.nightlyReload || editing || modalOpen() || upd.popup) return;
+  if (nightlyAsked || !state.settings.nightlyReload || editing || modalOpen() || upd.popup) return;
   const d = new Date();
   if (d.getHours() !== 4 || performance.now() < 3600e3) return;
+  nightlyAsked = true;
   flushSave();
   plog('info', 'nachtelijke verversing');
-  location.reload();
+  window.palv.app.reload().catch(() => location.reload());
 }
 
 let lastRotate = Date.now(), lastTheme = 0, lastUdp = 0, lastMoon = 0, lastBeat = 0;

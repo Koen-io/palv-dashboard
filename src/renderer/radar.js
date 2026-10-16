@@ -100,8 +100,9 @@ const VR_SHAPES = {
 for (const s of Object.values(VR_SHAPES)) s.path = new Path2D(s.p);
 const VR_HELI_TYPES = /^(EC\d\d|AS\d\d|AS3B|H1\d\d|H160|H175|H47|H53|H60|H64|H500|A1\d\d|B06|B4\d\d|R22|R44|R66|S61|S76|S92|NH90|LYNX|PUMA|TIGR|EH10|BK17|MI8|MI17|UH1|AW09|MD52|MD60|G2CA|CABR|EXPL)$/i;
 const VR_PROP_TYPES = /^(DH8|AT4|AT7|DO28|D228|D328|B350|BE20|BE9|BE30|C12|F50|JS3|JS4|SF34|SW4|PC12|C208|BN2|L410|P180|C130|A400|E120|AN26|AN32|P3|P8X|PC6|KODI|TBM)/i;
-// In distress: squawk 7500/7600/7700 or an emergency status; "lifeguard" is a medical flight, not an emergency.
-const vrAlert = (a) => (!!a.emergency && a.emergency !== 'lifeguard') || /^(7500|7600|7700)$/.test(a.squawk || '');
+// In distress: a squawk 7500/7600/7700 that the emergency watch has confirmed (squawk.js), so a single
+// garbled message never turns an aircraft red.
+const vrAlert = (a) => emergency.watch.isConfirmed(a.hex);
 const vrIsHeli = (a) => a.cat === 'A7' || VR_HELI_TYPES.test(a.type || '');
 function vrShape(a) {
   if (vrIsHeli(a)) return 'heli';

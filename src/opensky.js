@@ -152,7 +152,7 @@ async function fetchArea(area, now = Date.now()) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const tok = await getToken(Date.now());
       // Counted before it is sent: a request that goes wrong halfway may still have cost a credit.
-      rollDay(Date.now());
+      rollDay(now);
       ledger.used += 1;
       persist();
       const ctl = new AbortController();

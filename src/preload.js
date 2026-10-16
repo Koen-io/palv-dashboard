@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('palv', {
     health: () => ipcRenderer.invoke('app:health'),
     openLogs: () => ipcRenderer.invoke('app:openLogs'),
     openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+    reload: () => ipcRenderer.invoke('app:reload'),
   },
   status: {
     heartbeat: () => ipcRenderer.send('status:heartbeat'),

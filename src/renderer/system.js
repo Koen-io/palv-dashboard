@@ -254,6 +254,6 @@ function sendStatus() {
     editing,
     theme: document.documentElement.dataset.theme,
     health: dueSources().map((e) => e.label),
-    emergencies: [...emergency.active.values()].map((e) => `${e.code} ${e.a.flight || e.a.reg || e.a.hex}`),
+    emergencies: emergency.watch.active({ firOnly: true }).map((e) => `${e.code} ${emName(e.a)}`),
   });
 }

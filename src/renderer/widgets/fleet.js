@@ -17,11 +17,11 @@ function renderFleet(root, w) {
   const d = trafficFeed.snap && trafficFeed.snap.fleet, now = Date.now();
   const list = d ? d.aircraft.filter((a) => fleetShows(w.cfg, a)) : [];
   // The rows are only rebuilt when something in them changes; the line below them follows every second.
-  const sig = JSON.stringify([!!d, list.map((a) => [a.hex, a.flight, a.alt, a.gs, a.vs != null && Math.abs(a.vs) >= 300 ? Math.sign(a.vs) : 0, a.onGround, a.squawk, a.emergency, a.takeoff, a.approx, a.atLeast]), Math.floor(now / 60000)]);
+  const sig = JSON.stringify([!!d, list.map((a) => [a.hex, a.flight, a.alt, a.gs, a.vs != null && Math.abs(a.vs) >= 300 ? Math.sign(a.vs) : 0, a.onGround, a.squawk, emergency.watch.isConfirmed(a.hex), a.takeoff, a.approx, a.atLeast]), Math.floor(now / 60000)]);
   if (root.dataset.sig !== sig || !root.firstChild) {
     root.dataset.sig = sig;
     const rows = list.map((a) => {
-      const alert = a.emergency || /^(7500|7600|7700)$/.test(a.squawk || '');
+      const alert = emergency.watch.isConfirmed(a.hex);
       const climb = a.vs == null || Math.abs(a.vs) < 300 ? '' : a.vs > 0 ? ' ▲' : ' ▼';
       const unit = UNIT_NAMES(a.hex);
       const reg = a.reg || (unit && unit.reg), type = a.type || (unit && unit.type);
@@ -33,7 +33,7 @@ function renderFleet(root, w) {
       return h('div', { class: 'fl-row ' + a.group + (a.onGround ? ' ground' : '') + (alert ? ' alert' : ''), 'data-hex': a.hex },
         h('i', { class: 'fl-bar' }),
         h('div', { class: 'fl-id' }, h('b', {}, a.flight || reg || a.hex.toUpperCase()), h('small', {}, [a.flight && reg ? reg : null, type, FLEET_GROUPS[a.group]].filter(Boolean).join(' · '))),
-        alert ? h('span', { class: 'fl-sq' }, a.emergency ? a.emergency.toUpperCase() : a.squawk) : null,
+        alert ? h('span', { class: 'fl-sq' }, a.squawk) : null,
         h('div', { class: 'fl-num' }, h('b', {}, a.alt == null ? '—' : a.alt.toLocaleString('nl-NL')), h('small', {}, 'ft' + climb)),
         h('div', { class: 'fl-num fl-gs' }, h('b', {}, a.gs == null ? '—' : a.gs), h('small', {}, 'kt')),
         time);

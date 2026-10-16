@@ -151,8 +151,8 @@ function openSettings(startTab) {
       label: 'Meldingen', icon: 'alert',
       build: () => [
         h('h3', {}, 'Noodsquawk'),
-        h('p', {}, 'Het dashboard bewaakt al het vliegverkeer boven Nederland, ook als er geen Vluchtradar in beeld is. Zendt een toestel squawk 7500 (kaping), 7600 (radio-uitval) of 7700 (noodsituatie) uit, of meldt het een noodtoestand via ADS-B, dan verschijnt bovenaan een rode melding met het toestel, de hoogte, de afstand tot Schiphol en een knop om het op de Vluchtradar te tonen. Toestellen op de grond en verouderde posities tellen niet mee; een medische vlucht (lifeguard) is geen noodsituatie.'),
-        checkbox('Melding tonen bij een noodsquawk', s.emergencyAlert, changed((v) => { s.emergencyAlert = v; trafficWatch(); if (!v) { emergency.active.clear(); paintEmergency(); } })),
+        h('p', {}, 'Het dashboard bewaakt al het vliegverkeer in FIR Amsterdam (het Nederlandse luchtruim), ook als er geen Vluchtradar in beeld is. Zendt een toestel daar squawk 7500 (kaping), 7600 (radio-uitval) of 7700 (noodsituatie) uit, dan verschijnt bovenaan een rode melding met het toestel, de hoogte, de afstand tot Schiphol en een knop om het op de Vluchtradar te tonen. Om valse meldingen uit te sluiten moet de code minstens 30 seconden en in minstens 5 berichten gezien zijn, zonder gewone squawk ertussen; losse verminkte berichten en de losse noodstatus uit ADS-B tellen niet. Toestellen op de grond en verouderde posities tellen niet mee. Buiten FIR Amsterdam wordt een bevestigd toestel alleen op de Vluchtradar rood.'),
+        checkbox('Melding tonen bij een noodsquawk', s.emergencyAlert, changed((v) => { s.emergencyAlert = v; trafficWatch(); if (!v) { emergency.watch.clear(); paintEmergency(); } })),
         checkbox('Geluidssignaal bij een nieuwe melding', s.emergencySound, changed((v) => (s.emergencySound = v))),
         h('div', {}, h('button', { class: 'btn', onclick: () => chime() }, icon('alert'), 'Geluid testen')),
         h('div', { class: 'hint' }, 'Een bevestigde melding verdwijnt en komt terug zodra het toestel een andere noodcode uitzendt. Elke melding komt ook in het logboek.'),

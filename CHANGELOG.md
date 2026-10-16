@@ -1,5 +1,14 @@
 # Wijzigingen
 
+## 1.15.1
+
+### Opgelost
+- Noodsquawk: geen valse meldingen meer. Alleen squawk 7500, 7600 of 7700 telt, en pas als die minstens 30 seconden en in minstens 5 berichten is gezien, zonder gewone squawk ertussen. Losse verminkte berichten en de losse noodstatus uit ADS-B (zoals NORDO of DOWNED zonder squawk) geven geen melding meer
+- Noodsquawk: de melding bovenin geldt alleen nog voor toestellen in FIR Amsterdam (het Nederlandse luchtruim, volgens de AIP). Buiten de FIR wordt een bevestigd toestel alleen op de Vluchtradar rood
+- Noodsquawk: een melding verdwijnt zodra het toestel twee keer een gewone squawk uitzendt, in plaats van anderhalve minuut te blijven staan
+- Vluchtradar en "In de lucht" kleuren een toestel alleen nog rood bij een bevestigde noodsquawk
+- De nachtelijke verversing om 04:00 werd tegengehouden, waardoor het logboek een uur lang elke seconde een regel kreeg. De verversing gaat nu via het programma zelf en wordt maar één keer gevraagd
+
 ## 1.15.0
 
 ### Nieuw

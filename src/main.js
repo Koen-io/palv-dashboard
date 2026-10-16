@@ -310,6 +310,9 @@ ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('app:keepAwake', (_e, on) => watchdog.keepAwake(!!on && !shotPath));
 ipcMain.handle('app:health', () => ({ ...watchdog.stats, awake: watchdog.awake() }));
 ipcMain.handle('app:openLogs', () => shell.openPath(log.dir()));
+// The nightly fresh start. Done from here: location.reload() in the page counts as navigating away,
+// which will-navigate blocks for the dashboard window.
+ipcMain.handle('app:reload', (e) => { setTimeout(() => { if (!e.sender.isDestroyed()) e.sender.reloadIgnoringCache(); }, 200); });
 // Only the status pages of other dashboards: http on a private or Tailscale address.
 ipcMain.handle('app:openExternal', (_e, url) => {
   try {

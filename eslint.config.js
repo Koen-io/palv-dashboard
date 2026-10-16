@@ -16,9 +16,9 @@ for (const file of rendererFiles) {
   const src = fs.readFileSync(file, 'utf8');
   for (const m of src.matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)|^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) shared[m[1] || m[2]] = 'writable';
 }
-// Set on window by model.js, astro.js, wx.js and suntable.js, and by Leaflet.
+// Set on window by model.js, astro.js, wx.js, squawk.js and suntable.js, and by Leaflet.
 for (const name of Object.keys(require('./src/renderer/model.js'))) shared[name] = 'readonly';
-Object.assign(shared, { ASTRO: 'readonly', WX: 'readonly', SUN_TABLE: 'readonly', L: 'readonly' });
+Object.assign(shared, { ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', L: 'readonly' });
 
 module.exports = [
   { ignores: ['src/renderer/vendor/**', 'dist/**', 'node_modules/**'] },

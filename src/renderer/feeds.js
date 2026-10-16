@@ -135,24 +135,14 @@ async function refreshRunways() {
 }
 
 /* ============================================================
-   Noodsquawk: an aircraft in distress anywhere in view
+   Noodsquawk: an aircraft in distress in Dutch airspace
    ============================================================ */
-// Every aircraft in the feed is checked every round: squawk 7500 (unlawful interference), 7600 (radio
-// failure) or 7700 (emergency), or an emergency status in its ADS-B message. Aircraft on the ground and
-// positions older than a minute are left out; "lifeguard" (a medical flight) is not an emergency.
-// The feed always covers the whole of the Netherlands for this, also when no radar is on screen.
-const SQUAWK_MEANING = { 7500: 'Kaping / wederrechtelijke inmenging', 7600: 'Radioverbinding verloren', 7700: 'Noodsituatie' };
-const EMERGENCY_MEANING = { general: 'Noodsituatie', unlawful: 'Kaping / wederrechtelijke inmenging', nordo: 'Radioverbinding verloren', minfuel: 'Minimale brandstof', downed: 'Toestel neergekomen' };
-const NL_WATCH = { lat: 52.2, lon: 5.3, nm: 150 };
-const emergency = { active: new Map(), ack: new Map(), unwatch: null, audio: null };
-
-function emergencyOf(a, now) {
-  if (a.alt === 'ground' || a.lat == null || now - (a.posAt || 0) > 60000) return null;
-  const code = /^(7500|7600|7700)$/.test(a.squawk || '') ? a.squawk : null;
-  const em = a.emergency && EMERGENCY_MEANING[a.emergency] ? a.emergency : null;
-  if (!code && !em) return null;
-  return { code: code || em.toUpperCase(), meaning: code ? SQUAWK_MEANING[code] : EMERGENCY_MEANING[em] };
-}
+// Every round of the feed goes through SQUAWK (squawk.js): only squawk 7500 (unlawful interference),
+// 7600 (radio failure) or 7700 (emergency), seen for at least 30 s in several messages, counts, and the
+// alert bar only shows aircraft inside FIR Amsterdam. Single garbled messages never give an alert.
+// The feed always covers the whole FIR for this, also when no radar is on screen.
+const NL_WATCH = { lat: 52.9, lon: 4.6, nm: 150 };
+const emergency = { watch: SQUAWK.createWatch(), ack: new Map(), unwatch: null, audio: null };
 
 function distanceFromSchiphol(a) {
   const dLat = (a.lat - 52.3086) * 60, dLon = (a.lon - 4.7639) * 60 * Math.cos((52.3 * Math.PI) / 180);
@@ -162,36 +152,22 @@ function distanceFromSchiphol(a) {
   return { nm: Math.round(nm), dir: dirs[Math.round(((brg + 360) % 360) / 45) % 8] };
 }
 
+function emName(a) { return a.flight || a.reg || a.hex.toUpperCase(); }
+
 function checkEmergencies(snap) {
-  if (!state.settings.emergencyAlert || !snap || !snap.ac) { if (emergency.active.size) { emergency.active.clear(); paintEmergency(); } return; }
-  const now = Date.now();
-  const seen = new Set();
+  if (!state.settings.emergencyAlert || !snap || !snap.ac) { emergency.watch.clear(); emergency.ack.clear(); paintEmergency(); return; }
+  const { started, ended } = emergency.watch.update(snap.ac, Date.now());
   let fresh = false;
-  for (const a of snap.ac) {
-    const e = emergencyOf(a, now);
-    if (!e) continue;
-    seen.add(a.hex);
-    const prev = emergency.active.get(a.hex);
-    if (!prev || prev.code !== e.code) {
-      fresh = true;
-      const where = distanceFromSchiphol(a);
-      plog('warn', `NOODSQUAWK ${e.code} (${e.meaning}): ${a.flight || a.reg || a.hex.toUpperCase()} ${a.type || ''}, ${a.alt} ft, ${where.nm} NM ${where.dir} van Schiphol`);
-    }
-    emergency.active.set(a.hex, { ...e, a, since: prev && prev.code === e.code ? prev.since : now });
+  for (const t of started) {
+    const where = distanceFromSchiphol(t.a), inside = SQUAWK.inFir(t.a.lat, t.a.lon);
+    plog(inside ? 'warn' : 'info', `NOODSQUAWK ${t.code} (${SQUAWK.MEANING[t.code]}) bevestigd${inside ? '' : ' buiten FIR Amsterdam'}: ${emName(t.a)} ${t.a.type || ''}, ${t.a.alt} ft, ${where.nm} NM ${where.dir} van Schiphol, ${t.hits} berichten in ${Math.round((t.lastMsg - t.firstAt) / 1000)} s`);
+    if (inside) fresh = true;
   }
-  for (const hex of [...emergency.active.keys()]) {
-    if (seen.has(hex)) continue;
-    const old = emergency.active.get(hex);
-    if (now - old.a.posAt > 90000 || !snap.ac.some((x) => x.hex === hex)) {
-      plog('info', `noodsquawk beëindigd: ${old.a.flight || old.a.reg || hex.toUpperCase()}`);
-      emergency.active.delete(hex);
-      emergency.ack.delete(hex);
-      fresh = true;
-    }
-  }
+  for (const t of ended) plog('info', `noodsquawk beëindigd: ${emName(t.a)}`);
+  const shown = emergency.watch.active({ firOnly: true });
   // An acknowledged alert comes back when the code changes.
-  for (const [hex, code] of emergency.ack) if (!emergency.active.has(hex) || emergency.active.get(hex).code !== code) emergency.ack.delete(hex);
-  if (fresh && [...emergency.active.keys()].some((hex) => !emergency.ack.has(hex)) && state.settings.emergencySound) chime();
+  for (const [hex, code] of emergency.ack) if (!shown.some((e) => e.hex === hex && e.code === code)) emergency.ack.delete(hex);
+  if (fresh && shown.some((e) => !emergency.ack.has(e.hex)) && state.settings.emergencySound) chime();
   paintEmergency();
 }
 
@@ -216,7 +192,7 @@ function chime() {
 
 function paintEmergency() {
   const root = $('#emergency');
-  const list = [...emergency.active.entries()].filter(([hex]) => !emergency.ack.has(hex));
+  const list = state.settings.emergencyAlert ? emergency.watch.active({ firOnly: true }).filter((e) => !emergency.ack.has(e.hex)).map((e) => [e.hex, e]) : [];
   root.hidden = !list.length;
   document.body.classList.toggle('has-emergency', !!list.length);
   if (!list.length) return root.replaceChildren();
@@ -225,7 +201,7 @@ function paintEmergency() {
   root.dataset.sig = sig;
   root.replaceChildren(...list.map(([hex, e]) => {
     const a = e.a, where = distanceFromSchiphol(a);
-    const name = a.flight || a.reg || hex.toUpperCase();
+    const name = emName(a);
     return h('div', { class: 'em-row' },
       h('span', { class: 'em-icon' }, icon('alert')),
       h('span', { class: 'em-code' }, e.code),
@@ -233,13 +209,13 @@ function paintEmergency() {
         h('b', {}, `${e.meaning.toUpperCase()} · ${name}`),
         h('span', {}, [a.reg && a.reg !== name ? a.reg : null, a.type, a.alt != null ? `${Number(a.alt).toLocaleString('nl-NL')} ft` : null, a.gs != null ? `${Math.round(a.gs)} kt` : null, `${where.nm} NM ${where.dir} van Schiphol`, `sinds ${zulu(e.since)}`].filter(Boolean).join(' · '))),
       h('button', { class: 'em-btn', title: 'Toon het toestel op de Vluchtradar', onclick: () => showOnRadar(hex) }, icon('target'), 'Toon op radar'),
-      h('button', { class: 'em-btn ghost', title: 'Melding bevestigen; komt terug als de code verandert', onclick: () => { emergency.ack.set(hex, e.code); plog('info', `noodsquawk bevestigd: ${name}`); paintEmergency(); } }, icon('check'), 'Bevestigen'));
+      h('button', { class: 'em-btn ghost', title: 'Melding bevestigen; komt terug als de code verandert', onclick: () => { emergency.ack.set(hex, e.code); plog('info', `noodsquawkmelding weggeklikt: ${name}`); paintEmergency(); } }, icon('check'), 'Bevestigen'));
   }));
 }
 
 // To the first page with a Vluchtradar, centred on the aircraft and selected.
 function showOnRadar(hex) {
-  const e = emergency.active.get(hex);
+  const e = emergency.watch.active().find((x) => x.hex === hex);
   if (!e) return;
   const i = state.pages.findIndex((p) => p.widgets.some((w) => w.type === 'radar'));
   if (i < 0) return toast('Er staat geen Vluchtradar op het dashboard.', true);
