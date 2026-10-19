@@ -122,9 +122,11 @@ function watchWx(fn) {
   return () => { wxFeed.subs.delete(fn); if (!wxFeed.subs.size) { clearInterval(wxFeed.timer); wxFeed.timer = null; report('wx'); } };
 }
 
-/* ---------- runway use: observed from live traffic ---------- */
+/* ---------- runway use: per flight from Casper, live traffic as fallback ---------- */
 const runwayViews = new Set();
 async function refreshRunways() {
+  // Only asked while a runway widget is on screen: Casper is then asked once a minute, otherwise not at all.
+  if (!runwayViews.size) { report('runways'); return; }
   const res = await window.palv.data.runways().catch(() => null);
   if (res) eham.live = res;
   else if (eham.live) eham.live.ok = false;

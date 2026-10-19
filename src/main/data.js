@@ -104,9 +104,9 @@ ipcMain.handle('opensky:status', () => opensky.status());
 ipcMain.handle('opensky:setKey', (_e, id, secret) => opensky.setKey(id, secret));
 ipcMain.handle('traffic:route', (_e, hex) => fleet.route(hex).catch(() => []));
 
-// Runways actually in use, observed from live ADS-B traffic around the field.
+// Runways actually in use: per flight from Casper (the BAS flight tracker), live ADS-B as fallback.
 ipcMain.handle('data:runways', () => {
-  runways.start(traffic.request);
+  runways.start(traffic.request, async (url) => JSON.parse(await fetchText(url, 20000)));
   return runways.snapshot();
 });
 

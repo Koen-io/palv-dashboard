@@ -1,6 +1,6 @@
 'use strict';
 
-/* Baangebruik Schiphol: runways in use, observed from the live traffic around the field. */
+/* Baangebruik Schiphol: runways in use, per flight from Casper (BAS flight tracker), live ADS-B as fallback. */
 const RUNWAYS = [
   { name: 'Polderbaan', a: '18R', b: '36L', pa: [52.36025, 4.71183], pb: [52.32862, 4.70889] },
   { name: 'Zwanenburgbaan', a: '18C', b: '36C', pa: [52.33139, 4.74003], pb: [52.30186, 4.7375] },
@@ -81,11 +81,12 @@ function renderRunwayUse(root) {
   const col = (cls, label, items) =>
     h('div', { class: 'rwy-col' }, h('span', { class: 'rwy-kind ' + cls }, label),
       items.length
-        ? items.slice(0, 3).map((r) => h('div', { class: 'rwy-item ' + r.role, title: `${r.role === 'secondary' ? 'Secundaire baan' : 'Hoofdbaan'} — ${r.count} toestel(len) in het laatste kwartier, laatste om ${zulu(r.last)}` }, h('span', { class: 'rwy-num' }, r.rwy), h('span', { class: 'rwy-name' }, rwyName(r.rwy))))
+        ? items.slice(0, 3).map((r) => h('div', { class: 'rwy-item ' + r.role, title: `${r.role === 'secondary' ? 'Secundaire baan' : 'Hoofdbaan'} — ${r.count} vlucht(en) in het laatste kwartier${live.source === 'casper' ? ' (inclusief toestellen die nu voor deze baan in de rij staan of naderen)' : ''}, laatste om ${zulu(r.last)}` }, h('span', { class: 'rwy-num' }, r.rwy), h('span', { class: 'rwy-name' }, rwyName(r.rwy))))
         : h('div', { class: 'rwy-item' }, h('span', { class: 'rwy-name' }, starting ? '…' : connected ? 'geen verkeer' : '—')));
 
   let dot = '', srcText;
-  if (connected && (land.length || dep.length)) srcText = `Live waargenomen · ${zulu(live.lastOk)}`;
+  const viaCasper = live && live.source === 'casper';
+  if (connected && (land.length || dep.length)) srcText = viaCasper ? `Schiphol-radar (BAS) · ${zulu(live.lastOk)}` : `Live waargenomen (ADS-B) · ${zulu(live.lastOk)}`;
   else if (starting) { dot = 'warn'; srcText = 'Baangebruik wordt bepaald…'; }
   else if (connected) { dot = 'warn'; srcText = 'Geen start- of landingsverkeer'; }
   else { dot = 'bad'; srcText = live.lastOk ? `Geen verbinding · laatst ${zulu(live.lastOk)}` : 'Geen verbinding met live-bron'; }
@@ -94,12 +95,14 @@ function renderRunwayUse(root) {
     h('div', { class: 'rwy-grid' },
       h('div', { class: 'rwy-cols' }, col('land', 'LANDEN', land), col('dep', 'STARTEN', dep)),
       runwayMap(land, dep),
-      h('div', { class: 'rwy-src', title: 'Het baangebruik wordt afgeleid uit het live vliegverkeer (ADS-B): toestellen op eindnadering en net na de start, over het laatste kwartier.' }, h('span', { class: 'dot ' + dot }), srcText, h('span', { class: 'rwy-credit' }, '© OpenStreetMap')))
+      h('div', { class: 'rwy-src', title: viaCasper
+        ? 'Per vlucht de start- of landingsbaan volgens de radar, uit de flighttracker van het Bewoners Aanspreekpunt Schiphol (Casper), over het laatste kwartier. Valt die bron weg, dan neemt het live vliegverkeer (ADS-B) het over.'
+        : 'Afgeleid uit het live vliegverkeer (ADS-B): toestellen op eindnadering en net na de start, over het laatste kwartier. De flighttracker van het BAS (Casper) is nu niet bereikbaar.' }, h('span', { class: 'dot ' + dot }), srcText, h('span', { class: 'rwy-credit' }, '© OpenStreetMap')))
   );
 }
 
 defineWidget('runway', {
-  desc: 'Actuele start- en landingsbanen van Schiphol, live waargenomen uit het vliegverkeer.',
+  desc: 'Actuele start- en landingsbanen van Schiphol, per vlucht volgens de radar (BAS-flighttracker), met live ADS-B als terugval.',
   icon: 'plane',
   size: [24, 36],
   mount(w, body) {
@@ -111,7 +114,7 @@ defineWidget('runway', {
     return {
       fresh: () => {
         const live = eham.live;
-        return { t: live && live.lastOk, fail: !!live && !live.ok, loading: !live, warn: 30000, bad: 120000, seconds: true, label: 'Baangebruik (laatste waarneming)', note: 'Afgeleid uit het live vliegverkeer rond Schiphol, elke 12 seconden opgehaald.' };
+        return { t: live && live.lastOk, fail: !!live && !live.ok, loading: !live, warn: live && live.source === 'casper' ? 100000 : 30000, bad: live && live.source === 'casper' ? 240000 : 120000, seconds: true, label: 'Baangebruik (laatste waarneming)', note: live && live.source === 'casper' ? 'Per vlucht uit de BAS-flighttracker (Casper), elke minuut opgehaald.' : 'Afgeleid uit het live vliegverkeer rond Schiphol, elke 12 seconden opgehaald.' };
       },
       destroy: () => runwayViews.delete(paint),
     };

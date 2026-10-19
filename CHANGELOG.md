@@ -1,5 +1,14 @@
 # Wijzigingen
 
+## 1.23.0
+
+### Baangebruik Schiphol
+- Nooit meer "starten 36R": dat kwam van toestellen die van 36C vertrekken en meteen rechtsaf draaien. De Aalsmeerbaan (36R) en Polderbaan (18R) worden nooit meer als startbaan getoond, 18L en 36L nooit als landingsbaan
+- Het baangebruik komt nu per vlucht van de Schiphol-radar, via de flighttracker van het Bewoners Aanspreekpunt Schiphol (de bron waar Schiphol zelf naar verwijst). Toestellen die nu voor een baan naderen tellen mee, zodat een baanwissel sneller zichtbaar is
+- Valt die bron weg, dan neemt het live vliegverkeer (ADS-B) het over, met een strakkere herkenning: getoetst op een week aan radarsporen (ruim 1.500 vluchten), nog 3 kleine afwijkingen bij lichte toestellen op de Oostbaan
+- Onderaan de widget staat welke bron er gebruikt wordt: "Schiphol-radar (BAS)" of "Live waargenomen (ADS-B)"
+- Lichte toestellen en helikopters op de Oostbaan tellen niet mee
+
 ## 1.22.0
 
 ### Zoek & Plan
