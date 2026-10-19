@@ -233,7 +233,7 @@ body.editing .tab-add { color: var(--amber); }
 .hd-clocks { display: flex; align-items: stretch; gap: 0.8rem; flex: 1; min-height: 0; }
 /* UDP strip under the clocks: begin, daylight progress, end */
 .hd-udp {
-  flex: none; display: flex; align-items: center; gap: 0.8rem; height: 2.1rem; padding: 0 0.9rem;
+  flex: none; display: flex; align-items: center; gap: 0.8rem; height: 2.1rem; padding: 0 0.9rem; min-width: 0; overflow: hidden;
   background: rgba(8, 14, 24, 0.55); border: 1px solid #22334e; border-radius: var(--radius);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }

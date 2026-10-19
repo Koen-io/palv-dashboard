@@ -39,8 +39,9 @@
 
 /* ---------- main area ---------- */
 .zp-main { flex: 1; min-height: 0; display: flex; position: relative; }
-.zp-side { flex: none; width: 27rem; max-width: 42%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 2; }
-.zp.side-off .zp-side { margin-left: -27rem; }
+.zp-side { flex: none; width: 27rem; max-width: 42%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; }
+/* exactly its own width (27rem, or 42% of the area when that is less), so the edge tab stays in view */
+.zp.side-off .zp-side { margin-left: calc(-1 * min(27rem, 42%)); }
 .zp-mapbox { flex: 1; min-width: 0; position: relative; }
 .zp-map { position: absolute; inset: 0; }
 .zp-map[data-mode="route"], .zp-map[data-mode="route"] .leaflet-interactive,
@@ -331,3 +332,34 @@ html[data-theme="dark"] .zp-windnote { color: #8fd3ff !important; }
 .zp-profsearch { display: flex; align-items: center; gap: 0.45rem; height: 2.1rem; padding: 0 0.65rem; border: 1px solid var(--border-strong); border-radius: 99px; background: var(--surface); }
 .zp-profsearch svg { width: 0.95rem; height: 0.95rem; color: var(--accent); flex: none; }
 .zp-profq { flex: 1; height: 100%; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 0; }
+
+/* actieradius: one choice of what to show, buttons across the whole card */
+.zp-tool-body > .field > .seg { width: 100%; }
+.zp-tool-body > .field > .seg button { flex: 1; justify-content: center; height: 1.85rem; font-size: 0.74rem; }
+.zp-tool-body > .field > .hint { font-size: 0.7rem; line-height: 1.4; }
+
+/* the aircraft choice: a yellow frame that stands out on the toolbar */
+.zp-acft { flex: none; display: flex; align-items: center; gap: 0.4rem; padding: 0.18rem 0.3rem 0.18rem 0.55rem; border: 2px solid #ffd21f; border-radius: calc(var(--radius-sm) + 0.25rem); background: rgba(255, 210, 31, 0.1); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 0.7rem rgba(255, 210, 31, 0.35); }
+.zp-acft-label { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em; color: #ffd21f; }
+.zp-acft-label svg { width: 0.95rem; height: 0.95rem; }
+.zp-acft .zp-prof { background: rgba(0, 0, 0, 0.25); }
+.zp-acft .zp-prof button { font-size: 0.84rem; font-weight: 800; }
+.zp-acft .zp-prof button.on { background: #ffd21f; color: #1a1200; box-shadow: 0 0 0.45rem rgba(255, 210, 31, 0.6); }
+html[data-theme="light"] .zp-acft { border-color: #d9a800; background: rgba(255, 196, 0, 0.14); }
+html[data-theme="light"] .zp-acft-label { color: #8a6500; }
+html[data-theme="light"] .zp-acft .zp-prof { background: var(--surface-3); }
+
+/* popover head: title and a close button that cannot be missed */
+.zp-pop-head { position: sticky; top: -0.75rem; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: -0.75rem -0.85rem 0.6rem; padding: 0.5rem 0.55rem 0.5rem 0.85rem; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.zp-pop-head > b { display: inline-flex; align-items: center; gap: 0.45rem; font: 700 0.95rem var(--font-display); letter-spacing: 0.04em; }
+.zp-pop-head > b svg { width: 1rem; height: 1rem; color: var(--accent); }
+.zp-pop-close { display: inline-flex; align-items: center; gap: 0.35rem; height: 2rem; padding: 0 0.75rem 0 0.55rem; border: 1px solid var(--border-strong); border-radius: 99px; background: var(--surface-3); color: var(--text); font: 700 0.78rem var(--font-ui); cursor: pointer; }
+.zp-pop-close svg { width: 1.05rem; height: 1.05rem; }
+.zp-pop-close:hover { background: #d0342c; border-color: #d0342c; color: #fff; }
+
+/* the tab on the edge between the side panel and the map that folds the panel in and out */
+.zp-side-toggle { position: absolute; top: 50%; right: -1.65rem; width: 1.65rem; height: 5rem; margin-top: -2.5rem; padding: 0; display: grid; place-items: center; border: 1px solid var(--border-strong); border-left: 0; border-radius: 0 0.7rem 0.7rem 0; background: var(--surface); color: var(--text); cursor: pointer; box-shadow: 4px 0 10px rgba(0, 0, 0, 0.28); transition: background-color 0.15s ease, color 0.15s ease, width 0.15s ease, right 0.15s ease; }
+.zp-side-toggle svg { width: 1.15rem; height: 1.15rem; transition: transform 0.2s ease; }
+.zp-side-toggle:hover { width: 1.95rem; right: -1.95rem; background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.zp-side-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zp.side-off .zp-side-toggle svg { transform: rotate(180deg); }

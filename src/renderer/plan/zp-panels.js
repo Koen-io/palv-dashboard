@@ -38,7 +38,11 @@ function zpPanels(ctx) {
     modes.setValue(m);
     // The panel follows the tool: the route to Route, every other tool to Gereedschap.
     const tab = m === 'route' ? 'route' : ZP_TOOLS[m] ? 'tools' : null;
-    if (tab && cfg.sideTab !== tab) { cfg.sideTab = tab; ctx.save(); if (!cfg.side) { cfg.side = true; ctx.root.classList.remove('side-off'); setTimeout(() => map.invalidateSize(), 220); } paintTabs(); }
+    if (tab && cfg.sideTab !== tab) { cfg.sideTab = tab; ctx.save(); if (!cfg.side) setSide(true); paintTabs(); }
+    // Choosing another tool ends the typing in the panel, so its card always opens (a field that kept
+    // the focus would otherwise hold the panel as it was).
+    const a = document.activeElement;
+    if (a && ctx.side.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) a.blur();
     paintSoon();
   });
   const distSeg = segmented([{ value: 'nm', label: 'NM' }, { value: 'km', label: 'km' }], cfg.units.dist, (v) => { cfg.units.dist = v; ctx.save(); ctx.emit('units'); paintSoon(); });
@@ -46,9 +50,21 @@ function zpPanels(ctx) {
   ctx.on('units', () => distSeg.setValue(cfg.units.dist === 'km' ? 'km' : 'nm'));
   const layersBtn = h('button', { class: 'btn zp-btn', title: 'Kaarten en kaartlagen' }, icon('layers'), 'Lagen');
   const unitsBtn = h('button', { class: 'btn zp-btn', title: 'Eenheden' }, icon('gear'), 'Eenheden');
-  const sideBtn = h('button', { class: 'w-tool', title: 'Zijpaneel tonen of verbergen' }, icon('layout'));
-  sideBtn.addEventListener('click', () => { cfg.side = !cfg.side; ctx.root.classList.toggle('side-off', !cfg.side); ctx.save(); setTimeout(() => map.invalidateSize(), 220); });
-  ctx.bar.append(profSeg, regSel, modes, distSeg, h('span', { class: 'zp-spacer' }), layersBtn, unitsBtn, sideBtn);
+  // The side panel opens and closes with the tab on its edge, between the panel and the map.
+  const sideBtn = h('button', { class: 'zp-side-toggle', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>' });
+  const setSide = (on) => {
+    cfg.side = on; ctx.root.classList.toggle('side-off', !on); ctx.save();
+    sideBtn.title = on ? 'Zijpaneel inklappen' : 'Zijpaneel uitklappen';
+    sideBtn.setAttribute('aria-label', sideBtn.title); sideBtn.setAttribute('aria-expanded', String(on));
+    setTimeout(() => map.invalidateSize(), 220);
+  };
+  sideBtn.addEventListener('click', () => setSide(!cfg.side));
+  sideBtn.title = cfg.side ? 'Zijpaneel inklappen' : 'Zijpaneel uitklappen';
+  sideBtn.setAttribute('aria-expanded', String(!!cfg.side));
+  ctx.side.append(sideBtn);
+  // The aircraft in a yellow frame of its own: every number in this tab follows it.
+  const acft = h('div', { class: 'zp-acft', title: profSeg.title }, h('span', { class: 'zp-acft-label' }, icon('plane'), 'TOESTEL'), profSeg, regSel);
+  ctx.bar.append(acft, modes, distSeg, h('span', { class: 'zp-spacer' }), layersBtn, unitsBtn);
 
   /* ---------- popovers ---------- */
   const pop = h('div', { class: 'zp-pop', hidden: true });
@@ -60,10 +76,20 @@ function zpPanels(ctx) {
   const closePop = (e) => { if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target) && !unitsBtn.contains(e.target)) { pop.hidden = true; popKind = null; } };
   document.addEventListener('pointerdown', closePop, true);
   ctx.cleanups.push(() => document.removeEventListener('pointerdown', closePop, true));
+  const popEsc = (e) => { if (e.key === 'Escape' && !pop.hidden && onScreen(ctx.body)) { pop.hidden = true; popKind = null; e.stopPropagation(); } };
+  window.addEventListener('keydown', popEsc, true);
+  ctx.cleanups.push(() => window.removeEventListener('keydown', popEsc, true));
 
   const chk = (label, get, set, hint) => h('label', { class: 'check', title: hint || null }, h('input', { type: 'checkbox', checked: !!get(), onchange: (e) => set(e.target.checked) }), label);
   const changed = (what) => { ctx.save(); ctx.emit('layers', what); };
+  // Each popover opens with its title and a clear close button at the top right.
+  const closePopNow = () => { pop.hidden = true; popKind = null; };
   function paintPop() {
+    paintPopBody();
+    pop.prepend(h('div', { class: 'zp-pop-head' }, h('b', {}, icon(popKind === 'units' ? 'gear' : 'layers'), popKind === 'units' ? 'Eenheden' : 'Lagen'),
+      h('button', { class: 'zp-pop-close', title: 'Sluiten (Esc)', 'aria-label': 'Sluiten', onclick: closePopNow }, icon('close'), h('span', {}, 'Sluiten'))));
+  }
+  function paintPopBody() {
     if (popKind === 'units') return paintUnits();
     const A = cfg.aero, P = cfg.points, O = cfg.offshore, W = cfg.wind, F = cfg.fleet;
     const T = ctx.aeroTypes || {};
@@ -119,7 +145,7 @@ function zpPanels(ctx) {
   }
   function paintUnits() {
     const U = PlanUnits, u = cfg.units;
-    const set = (k) => (v) => { u[k] = v; ctx.save(); ctx.emit('units'); paintSoon(); paintUnits(); };
+    const set = (k) => (v) => { u[k] = v; ctx.save(); ctx.emit('units'); paintSoon(); paintPop(); };
     const opt = (tbl) => Object.entries(tbl).map(([k, d]) => ({ value: k, label: d.label }));
     pop.replaceChildren(h('div', { class: 'zp-pop-units' },
       h('h4', {}, 'Eenheden'),
@@ -131,7 +157,7 @@ function zpPanels(ctx) {
       field('Koersen', zpSelect([{ value: 'mag', label: 'Magnetisch (WMM2025)' }, { value: 'true', label: 'Waar noord' }], u.north, set('north')), `Magnetische variatie hier: ${(ctx.mag(map.getCenter().lat, map.getCenter().lng)).toFixed(1).replace('.', ',')}° oost`),
       field('Coördinaten', zpSelect([{ value: 'ddm', label: 'Graden, decimale minuten (N52°18,517\')' }, { value: 'dms', label: 'Graden, minuten, seconden' }, { value: 'dd', label: 'Decimale graden' }, { value: 'avi', label: 'Luchtvaart compact (N52 18.52)' }, { value: 'rd', label: 'Rijksdriehoek (RD)' }, { value: 'mgrs', label: 'MGRS' }, { value: 'utm', label: 'UTM' }], u.coord, set('coord'))),
       field('Tijd', zpSelect([{ value: 'utc', label: 'UTC (Z)' }, { value: 'lt', label: 'Lokale tijd' }], u.time, set('time'))),
-      h('button', { class: 'btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); paintSoon(); paintUnits(); } }, 'Standaard luchtvaart (NM, kt, ft, kg)'),
+      h('button', { class: 'btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); paintSoon(); paintPop(); } }, 'Standaard luchtvaart (NM, kt, ft, kg)'),
       h('button', { class: 'zp-linkbtn zp-deep', onclick: () => { pop.hidden = true; openSettings('zoekplan'); } }, icon('gear'), 'Bronnen, sleutels, offline kaarten en profielbestand…')));
   }
 
@@ -217,7 +243,11 @@ function zpPanels(ctx) {
     content.scrollTop = scroll;
   }
   const paintSoon = () => { if (!pending) { pending = true; requestAnimationFrame(paintSide); } };
-  ctx.side.addEventListener('focusout', () => { if (pending === 'focus') setTimeout(paintSoon, 50); });
+  // The paint held back for a field is done as soon as the field lets go (pending has to be cleared
+  // first, or paintSoon would think one is still on its way and the panel would stay as it was).
+  ctx.side.addEventListener('focusout', () => { if (pending === 'focus') { pending = false; setTimeout(paintSoon, 50); } });
+  // A click on the map ends the typing in the panel (Leaflet keeps the focus where it was otherwise).
+  map.on('mousedown', () => { const a = document.activeElement; if (a && ctx.side.contains(a) && a.blur) a.blur(); });
   const paintIf = (...tabsFor) => () => { if (tabsFor.includes(cfg.sideTab)) paintSoon(); };
   ctx.on('plan', paintIf('route', 'brief'));
   ctx.on('route', paintIf('route', 'brief'));

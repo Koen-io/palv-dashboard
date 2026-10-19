@@ -192,3 +192,25 @@ function zpTag(g, lines, x, y, { font, accent = '#ffb941', align = 'left', pad =
   });
   return { x: x0, y: y - hgt / 2, w: wid, h: hgt };
 }
+// A short label in a dark pill with a coloured edge, set beside a point along the normal (nx, ny): the
+// box carries its own background, so it reads the same on the light, dark and satellite maps.
+// With avoid (a list of {x, y, w, h}) it leaves out a label that would overlap one of them, and adds its own box.
+function zpPill(g, text, x, y, nx, ny, { font, accent = '#ffb941', gap = 9, avoid = null } = {}) {
+  g.font = font;
+  const px = +((/([\d.]+)px/.exec(font) || [])[1]) || 11;
+  const w = g.measureText(text).width + px, h = px * 1.55;
+  // From the point out along the normal, far enough that the nearest corner stays clear of the line.
+  const d = gap + Math.abs(nx) * w / 2 + Math.abs(ny) * h / 2;
+  const cx = x + nx * d, cy = y + ny * d;
+  const box = { x: cx - w / 2 - 2, y: cy - h / 2 - 2, w: w + 4, h: h + 4 };
+  if (avoid) {
+    if (avoid.some((r) => box.x < r.x + r.w && r.x < box.x + box.w && box.y < r.y + r.h && r.y < box.y + box.h)) return null;
+    avoid.push(box);
+  }
+  g.beginPath(); g.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
+  g.fillStyle = 'rgba(7,13,24,0.92)'; g.fill();
+  g.lineWidth = 1.6; g.strokeStyle = accent; g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#ffffff';
+  g.fillText(text, cx, cy + 0.5);
+  return box;
+}

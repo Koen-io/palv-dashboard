@@ -36,6 +36,7 @@ function zpFleet(ctx) {
       const p = c.P(pos[0], pos[1]);
       if (!c.inView(p, 80)) continue;
       const own = !!a.group;
+      let pills = null;
       // The route flown so far.
       if (F.trails && own) {
         const t = vrTrails.get(a.hex);
@@ -49,21 +50,39 @@ function zpFleet(ctx) {
         const mins = F.vectors === 1 ? [1] : F.vectors === 2 ? [1, 2, 5] : [1, 2, 5, 10];
         const far = PlanGeo.dest({ lat: pos[0], lon: pos[1] }, a.track, (a.gs * 1852 * mins[mins.length - 1]) / 60);
         const fp = c.P(far.lat, far.lon);
-        g.setLineDash([5, 4]); g.lineWidth = 1.6; g.strokeStyle = own ? VR_GROUP_COLOR[a.group] : '#c6d4e8';
-        g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(fp[0], fp[1]); g.stroke(); g.setLineDash([]);
+        const col = own ? VR_GROUP_COLOR[a.group] : '#c6d4e8';
+        // A dark edge under the dashes keeps the line visible on light maps and on the satellite photo.
+        g.lineCap = 'round';
+        g.lineWidth = 4; g.strokeStyle = 'rgba(5,9,16,0.6)';
+        g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(fp[0], fp[1]); g.stroke();
+        g.setLineDash([6, 4]); g.lineWidth = 2; g.strokeStyle = col;
+        g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(fp[0], fp[1]); g.stroke(); g.setLineDash([]); g.lineCap = 'butt';
+        // The minutes in a small dark box with the unit's colour round it, beside the line (right of the
+        // track), so they read the same on every base map.
+        const tr = ((a.track ?? 0) * Math.PI) / 180, nx = Math.cos(tr), ny = Math.sin(tr);
+        pills = [];
         for (const m of mins) {
           const q = PlanGeo.dest({ lat: pos[0], lon: pos[1] }, a.track, (a.gs * 1852 * m) / 60), qp = c.P(q.lat, q.lon);
-          g.beginPath(); g.arc(qp[0], qp[1], 2.6, 0, Math.PI * 2); g.fillStyle = g.strokeStyle; g.fill();
-          if (own) zpText(g, `${m}'`, qp[0] + 5, qp[1] - 5, { font: `700 ${(0.55 * rem()).toFixed(1)}px sans-serif`, color: g.strokeStyle });
+          g.beginPath(); g.arc(qp[0], qp[1], 3.6, 0, Math.PI * 2); g.fillStyle = col; g.fill(); g.lineWidth = 1.5; g.strokeStyle = '#0a0f18'; g.stroke();
+          if (own) pills.push({ text: `${m} min`, x: qp[0], y: qp[1], nx, ny, accent: col });
         }
       }
       const shape = vrShape(a);
       const px = 1.45 * rem() * VR_SHAPES[shape].s * (own ? 1.3 : 0.95);
       const sp = vrSprite(shape, own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt), 'contrast', px, own, dpr);
       g.save(); g.translate(p[0], p[1]); g.rotate(((a.track ?? 0) * Math.PI) / 180); g.drawImage(sp.c, -sp.size / 2, -sp.size / 2, sp.size, sp.size); g.restore();
+      let tagBox = null;
       if (F.labels && (own || c.zoom >= 10)) {
         const nm = UNIT_NAMES(a.hex);
-        zpTag(g, [a.flight || a.reg || (nm && nm.reg) || a.hex.toUpperCase(), `${vrAltText(a)} · ${a.gs == null ? '—' : Math.round(a.gs) + ' kt'}`], p[0] + px * 0.6, p[1], { font, accent: own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt) });
+        tagBox = zpTag(g, [a.flight || a.reg || (nm && nm.reg) || a.hex.toUpperCase(), `${vrAltText(a)} · ${a.gs == null ? '—' : Math.round(a.gs) + ' kt'}`], p[0] + px * 0.6, p[1], { font, accent: own ? VR_GROUP_COLOR[a.group] : vrAltColor(a.alt) });
+      }
+      // The minute labels last, each only where it overlaps neither the aircraft, its label nor another one;
+      // the farthest first, so a slow helicopter at a low zoom keeps its 5 min.
+      if (pills) {
+        const avoid = [{ x: p[0] - px * 0.5, y: p[1] - px * 0.5, w: px, h: px }];
+        if (tagBox) avoid.push(tagBox);
+        const tagFont = `700 ${(0.7 * rem()).toFixed(1)}px ${getComputedStyle(document.body).fontFamily}`;
+        for (const q of pills.reverse()) zpPill(g, q.text, q.x, q.y, q.nx, q.ny, { font: tagFont, accent: q.accent, avoid });
       }
       c.hit({ x: p[0], y: p[1], r: Math.max(12, px * 0.5), kind: 'aircraft', item: a, z: 8 });
     }

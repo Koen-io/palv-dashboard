@@ -386,9 +386,12 @@ function zpTools(ctx) {
     const reach = card('reach', () => {
       const pl = ctx.planning();
       const out = [h('div', { class: 'zp-grid4' },
-        field('Brandstof', zpNum(rch.fuelKg != null ? Math.round(PlanUnits.fuelIn(rch.fuelKg, cfg.units.fuel, pl.density)) : '', (v) => { rch.fuelKg = v == null ? null : PlanUnits.fuelKg(v, cfg.units.fuel, pl.density); changed(); }, { step: 10, placeholder: String(Math.round(PlanUnits.fuelIn(pl.fuelKg, cfg.units.fuel, pl.density))) }), `${PlanUnits.FUEL[cfg.units.fuel].name} aan boord`),
-        field('Heen en terug', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.roundTrip ? 'on' : 'off', (v) => { rch.roundTrip = v === 'on'; changed(); })),
-        field('Enkele reis', segmented([{ value: 'on', label: 'Aan' }, { value: 'off', label: 'Uit' }], rch.oneWay ? 'on' : 'off', (v) => { rch.oneWay = v === 'on'; changed(); })))];
+        field('Brandstof', zpNum(rch.fuelKg != null ? Math.round(PlanUnits.fuelIn(rch.fuelKg, cfg.units.fuel, pl.density)) : '', (v) => { rch.fuelKg = v == null ? null : PlanUnits.fuelKg(v, cfg.units.fuel, pl.density); changed(); }, { step: 10, placeholder: String(Math.round(PlanUnits.fuelIn(pl.fuelKg, cfg.units.fuel, pl.density))) }), `${PlanUnits.FUEL[cfg.units.fuel].name} aan boord`)),
+        // Two different lines, so one choice: "heen en terug" is how far out you can go and still get back to the
+        // start; "enkele reis" is how far you get when you land somewhere else (about twice as far).
+        field('Tonen', segmented([{ value: 'rt', label: 'Heen en terug' }, { value: 'ow', label: 'Enkele reis' }, { value: 'both', label: 'Beide' }],
+          rch.roundTrip && rch.oneWay ? 'both' : rch.oneWay ? 'ow' : 'rt', (v) => { rch.roundTrip = v !== 'ow'; rch.oneWay = v !== 'rt'; changed(); }),
+        h('span', {}, h('b', {}, 'Heen en terug'), ' (doorgetrokken lijn): zo ver kun je weg en nog terug naar het vertrekpunt. ', h('b', {}, 'Enkele reis'), ' (stippellijn): zo ver kom je als je ergens anders landt, ongeveer twee keer zo ver.'))];
       if (T.reach) {
         out.push(h('div', { class: 'zp-totals' },
           zpRow('Vliegtijd beschikbaar', ctx.fmt.dur(T.reach.minutes, true), `Brandstof min opstart/taxi (${ctx.fmt.fuel(pl.taxiKg)}) en eindreserve (${ctx.fmt.fuel(pl.reserveKg)}), bij ${Math.round(pl.flowKgh)} kg/u`),

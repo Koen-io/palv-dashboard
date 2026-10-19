@@ -1,5 +1,18 @@
 # Wijzigingen
 
+## 1.22.0
+
+### Zoek & Plan
+- Orbit en Actieradius klappen weer netjes open nadat je Zoekpatroon hebt gebruikt (een invoerveld hield het paneel vast)
+- Actieradius: één keuze Heen en terug, Enkele reis of Beide, met uitleg. Heen en terug is hoe ver je weg kunt en nog terugkomt bij het vertrekpunt; enkele reis is hoe ver je komt als je ergens anders landt
+- De keuze EC135 of AW139 staat in een geel kader met het label Toestel
+- Bij live eenheden staan de vooruitprojecties nu als 1 min, 2 min en 5 min in een donker label met gekleurde rand, leesbaar op elke kaart (licht, donker, grijs en luchtfoto); labels die zouden overlappen vallen weg
+- De vensters Lagen en Eenheden hebben bovenin een duidelijke knop Sluiten (ook met Esc)
+- Het zijpaneel klap je in en uit met een pijltje op de rand tussen paneel en kaart
+
+### Kopbalk
+- De maanbalk loopt niet meer over in het Schiphol-blok: hij is zo breed als de klokken, en als het krap is vallen eerst de Zulu-tijden van maan op en onder en daarna de fasenaam weg (beide staan in de tooltip). Het Schiphol-blok heeft daardoor ook meer ruimte
+
 ## 1.21.0
 
 ### Briefingmelding
