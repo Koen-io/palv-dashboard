@@ -3,15 +3,22 @@
 // Dashboards elsewhere, such as over Tailscale, are added once by address; the other side learns the
 // way back from the poll. A browser on any device in the network can open http://<address>:47800/.
 // Read-only: there is nothing to change through it, and it answers only private and Tailscale addresses.
+//
+// Between the dashboards themselves everything goes over TLS with the unit key (unit.js), on the port
+// next to the status page (47801): the status, the live traffic and the Zoek & Plan files. Only a screen
+// that proves it holds the key is trusted; what comes in over plain HTTP or UDP can make a screen known,
+// but never moves a trusted one to another address, and never gets more than the status page.
 const http = require('http');
+const tls = require('tls');
 const dgram = require('dgram');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const log = require('./log');
+const unit = require('./unit');
 
-const PORT = 47800;
+const PORT = +process.env.PALV_SCREENS_PORT || 47800; // another port only for the tests
 const POLL_MS = 10000;
 const ANNOUNCE_MS = 30000;
 const ONLINE_MS = 35000;   // a screen not heard from for this long is shown as not running
@@ -26,6 +33,7 @@ let peers = new Map(); // id or address -> peer
 let selfStatus = () => ({});
 let onChange = () => {};
 let server = null, udp = null, port = PORT;
+let rounds = 0, keyBusy = false, lastQuick = 0;
 let share = null; // live traffic between the screens (share.js): its two routes are served here
 let routes = {}; // more routes for the other screens (Zoek & Plan): path -> (req, res, caller, respond)
 
@@ -46,6 +54,7 @@ function load(userData) {
   file = path.join(userData, 'screens.json');
   let data = {};
   try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* first start */ }
+  unit.load(userData, { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) });
   self.id = data.id || crypto.randomUUID();
   if (data.name) self.name = data.name;
   peers = new Map();
@@ -60,13 +69,15 @@ function save() {
     fs.writeFileSync(file, JSON.stringify({
       id: self.id,
       name: self.name,
-      peers: [...peers.values()].map(({ id, name, address, port: pp, manual, lastSeen, firstSeen }) => ({ id, name, address, port: pp, manual, lastSeen, firstSeen })),
+      peers: [...peers.values()].map(({ id, name, address, port: pp, manual, lastSeen, firstSeen, secure }) => ({ id, name, address, port: pp, manual, lastSeen, firstSeen, secure: !!secure })),
     }, null, 2), 'utf8');
   } catch (err) { log.warn('screens', 'opslaan mislukt', err.message); }
 }
 
-// A peer heard of: by its own announcement, by calling us, or added by hand.
-function meet({ id, name, address, port: pp, manual }) {
+// A peer heard of: by its own announcement, by calling us, or added by hand. Only a `trusted` source
+// (a TLS connection with the unit key, or the user) may move a screen that proved itself to a new
+// address; anything else is kept aside and tried once the old address stops answering.
+function meet({ id, name, address, port: pp, manual, trusted = true }) {
   if (!address || (id && id === self.id)) return null;
   pp = +pp || PORT;
   let p = id ? peers.get(id) : null;
@@ -75,32 +86,97 @@ function meet({ id, name, address, port: pp, manual }) {
   if (!p) {
     p = { id: id || null, name: name || address, address, port: pp, manual: !!manual, firstSeen: Date.now(), lastSeen: 0, status: null, online: false };
     log.info('screens', `scherm gevonden: ${p.name} (${address}:${pp})`);
+  } else if (p.secure && !trusted && (p.address !== address || (p.port || PORT) !== pp)) {
+    p.alt = { address, port: pp };
+    return p;
   }
   p.address = address;
   p.port = pp;
-  if (name) p.name = name;
+  if (name && (trusted || !p.secure)) p.name = name;
   if (manual) p.manual = true;
   peers.set(key(p), p);
   save();
   return p;
 }
 
-async function poll(p) {
+// GET over TLS with the unit key, parsed as JSON. `tlsFailed` on an error: the screen answered, but
+// not with this key (an older version, another key, or none yet).
+function secureJson(p, pathname, timeoutMs = 4000) {
+  return new Promise((resolve, reject) => {
+    let secured = false;
+    const req = unit.request(p, { path: pathname, timeout: timeoutMs, headers: { 'X-Palv-Screen': JSON.stringify({ id: self.id, name: self.name, port, ephemeral }) } }, (res) => {
+      secured = true;
+      let buf = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { buf += c; if (buf.length > 2e6) req.destroy(new Error('te groot')); });
+      res.on('end', () => { if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`)); try { resolve(JSON.parse(buf)); } catch (e) { reject(e); } });
+      res.on('error', reject);
+    });
+    req.on('socket', (sock) => {
+      // A kept-alive connection was secured long ago; a new one says so when the handshake is done.
+      if (!sock.connecting && sock.encrypted) secured = true;
+      sock.once('secureConnect', () => { secured = true; });
+    });
+    req.on('timeout', () => req.destroy(Object.assign(new Error('geen antwoord'), { name: 'AbortError' })));
+    req.on('error', (err) => {
+      const code = String(err.code || '');
+      err.tlsFailed = !secured && err.name !== 'AbortError' && !/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)$/.test(code);
+      reject(err);
+    });
+  });
+}
+
+async function plainJson(p, pathname) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 4000);
-  const wasOnline = p.online;
   try {
     const host = p.address.includes(':') ? `[${p.address}]` : p.address;
-    const res = await fetch(`http://${host}:${p.port || PORT}/api/status`, {
+    const res = await fetch(`http://${host}:${p.port || PORT}${pathname}`, {
       signal: ctl.signal,
       headers: { 'X-Palv-Screen': JSON.stringify({ id: self.id, name: self.name, port, ephemeral }) },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const s = await res.json();
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+
+// The status of a screen: over TLS when this screen has the key. A screen that cannot do that (an older
+// version, or one still waiting for the key) is read over plain HTTP, and is not trusted.
+async function fetchStatus(p) {
+  if (unit.has()) {
+    try { return { s: await secureJson(p, '/api/status'), secure: true }; } catch (err) {
+      if (!err.tlsFailed) {
+        // Gone from its address: a newer address heard of must prove itself with the key as well.
+        if (p.alt) {
+          const alt = p.alt;
+          p.alt = null;
+          const s = await secureJson({ ...p, ...alt }, '/api/status').catch(() => null);
+          if (s) {
+            log.info('screens', `${p.name} gevonden op nieuw adres ${alt.address}`);
+            p.address = alt.address; p.port = alt.port;
+            return { s, secure: true };
+          }
+        }
+        throw err;
+      }
+    }
+  }
+  return { s: await plainJson(p, '/api/status'), secure: false };
+}
+
+async function poll(p) {
+  const wasOnline = p.online, wasSecure = !!p.secure;
+  try {
+    const { s, secure } = await fetchStatus(p);
     if (s.id === self.id) { peers.delete(key(p)); save(); return; } // that address is this screen itself
-    if (s.id && p.id !== s.id) { peers.delete(key(p)); p.id = s.id; peers.set(key(p), p); }
+    if (s.id && p.id !== s.id) {
+      // Over plain HTTP no screen takes the place of one that proved itself.
+      if (!secure && p.secure) throw new Error('ander scherm op dit adres');
+      peers.delete(key(p)); p.id = s.id; peers.set(key(p), p);
+    }
     // A test run of the dashboard is not a screen of its own.
     if (s.ephemeral && !p.manual) { peers.delete(key(p)); save(); return; }
+    p.secure = secure;
     p.status = s;
     p.name = s.name || p.name;
     p.lastSeen = Date.now();
@@ -110,13 +186,59 @@ async function poll(p) {
   } catch (err) {
     p.error = err.name === 'AbortError' ? 'geen antwoord' : String(err.cause && err.cause.code || err.message || err);
     p.online = !!p.lastSeen && Date.now() - p.lastSeen < ONLINE_MS;
-  } finally {
-    clearTimeout(t);
   }
   if (wasOnline !== p.online) {
     (p.online ? log.info : log.warn)('screens', `${p.name} (${p.address}) ${p.online ? 'draait weer' : 'niet meer bereikbaar: ' + p.error}`);
     save();
+  } else if (wasSecure !== !!p.secure) {
+    log.info('screens', `${p.name}: ${p.secure ? 'beveiligd verbonden met de eenheidssleutel' : 'geen beveiligde verbinding'}`);
+    save();
   }
+}
+
+// How another screen stands with the unit key, as seen from here.
+function lockOf(p) {
+  if (!p.online) return null;
+  if (p.secure) return 'ok';
+  const a = p.status && p.status.auth;
+  if (!a) return 'oud';
+  if (!a.fp) return 'wacht';
+  if (!unit.has()) return 'geen';
+  return a.fp === unit.fp() ? 'fout' : 'anders';
+}
+
+// Without anything to set (unit.js): get the key from a screen of the unit that has it, or make it when
+// this screen is the first. A screen with another key than its partners from before takes the oldest
+// one, as long as that is still handed out.
+const adoptTried = new Map();
+async function ensureKey() {
+  if (ephemeral || keyBusy || rounds < 1) return;
+  const online = [...peers.values()].filter((p) => p.online && p.status && !p.status.ephemeral);
+  const keyed = online.filter((p) => p.status.auth && p.status.auth.fp && p.status.auth.fp !== unit.fp())
+    .sort((a, b) => (a.status.auth.since || 0) - (b.status.auth.since || 0) || String(a.status.auth.fp).localeCompare(String(b.status.auth.fp)));
+  const me = { id: self.id, name: self.name, port };
+  keyBusy = true;
+  try {
+    for (const p of keyed) {
+      const theirs = p.status.auth;
+      if (unit.has()) {
+        const older = theirs.since < unit.createdAt() || (theirs.since === unit.createdAt() && theirs.fp < unit.fp());
+        if (!older || !theirs.handout) continue;
+      }
+      if (Date.now() - (adoptTried.get(p.id) || 0) < 10 * 60000) continue;
+      adoptTried.set(p.id, Date.now());
+      try {
+        await unit.adopt(p, me);
+        setTimeout(pollAll, 200);
+        return;
+      } catch (err) { log.info('sleutel', `${p.name} geeft de eenheidssleutel niet (${err.message})`); }
+    }
+    if (unit.has() || keyed.length) return; // the others have a key this screen does not get: pair by hand
+    // Two screens of this version that both start without a key: the lowest id makes it.
+    if (online.some((p) => p.status.auth && !p.status.auth.fp && String(p.id) < String(self.id))) return;
+    unit.generate([...peers.values()].filter((p) => p.id && (p.lastSeen || p.manual)).map((p) => ({ id: p.id, address: p.address })));
+    setTimeout(pollAll, 200);
+  } finally { keyBusy = false; }
 }
 
 async function pollAll() {
@@ -126,15 +248,17 @@ async function pollAll() {
     else if (!p.manual && p.lastSeen && now - p.lastSeen > BRIEF_GONE_MS && p.lastSeen - (p.firstSeen || p.lastSeen) < BRIEF_MS) peers.delete(k);
   }
   await Promise.all([...peers.values()].map(poll));
+  rounds += 1;
+  await ensureKey().catch((err) => log.warn('sleutel', 'eenheidssleutel', err.message));
   onChange(list());
 }
 
 function list() {
-  const me = { ...selfStatus(), self: true, online: true, address: addresses()[0] || '127.0.0.1', port };
+  const me = { ...selfStatus(), self: true, online: true, address: addresses()[0] || '127.0.0.1', port, lock: unit.has() ? 'ok' : 'wacht' };
   return [me, ...[...peers.values()].map((p) => ({
     ...(p.status || {}),
     id: p.id, name: p.name, address: p.address, port: p.port || PORT, manual: !!p.manual,
-    online: p.online, lastSeen: p.lastSeen, error: p.error, self: false,
+    online: p.online, lastSeen: p.lastSeen, error: p.error, self: false, secure: !!p.secure, lock: lockOf(p),
   }))];
 }
 
@@ -160,21 +284,32 @@ function handle(req, res) {
   const from = clean(req.socket.remoteAddress);
   if (!isPrivate(from)) { res.destroy(); return; }
   if (req.method !== 'GET') return respond(res, 405, 'text/plain', 'Alleen lezen');
+  // Over TLS the other side proved it holds the unit key; over plain HTTP anyone in the network can ask.
+  const secure = !!req.socket.encrypted;
   // A dashboard that polls us is a peer as well: that is how the way back is learned.
   const hdr = req.headers['x-palv-screen'];
-  let caller = null;
+  let caller = null, claimed = null;
   if (hdr) {
     try {
       const p = JSON.parse(hdr);
       if (p && typeof p.id === 'string' && p.id.length < 80 && !p.ephemeral) {
         const known = peers.get(p.id);
-        meet({ id: p.id, name: String(p.name || '').slice(0, 60), address: from, port: +p.port || PORT });
-        caller = { id: p.id, name: String(p.name || '').slice(0, 60) || from };
-        if (!known) setTimeout(pollAll, 500);
+        claimed = { id: p.id, name: String(p.name || '').slice(0, 60) || from, address: from };
+        meet({ id: p.id, name: claimed.name, address: from, port: +p.port || PORT, trusted: secure });
+        if (secure) caller = { id: p.id, name: claimed.name, secure: true };
+        // A new screen, one that just got the key, or one that may have just made it while this one has
+        // none: look now rather than at the next round.
+        if (!known || ((secure ? !known.secure : !unit.has()) && Date.now() - lastQuick > 1000)) { lastQuick = Date.now(); setTimeout(pollAll, 500); }
       }
     } catch { /* ignore a malformed header */ }
   }
   const url = (req.url || '/').split('?')[0];
+  if (url === '/api/pair') {
+    const got = claimed && unit.handout(claimed, req.headers['x-palv-pair']);
+    return got ? respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(got)) : respond(res, 403, 'text/plain', 'Niet toegestaan');
+  }
+  // The live traffic and the Zoek & Plan routes only for a dashboard with the unit key.
+  if (!secure && ((share && (url === share.STREAM || url === share.WANT)) || routes[url])) return respond(res, 403, 'text/plain; charset=utf-8', 'Alleen voor dashboards met de eenheidssleutel');
   if (share && url === share.STREAM) return share.handleStream(req, res, caller);
   if (share && url === share.WANT) return respond(res, share.handleWant(req, caller) ? 200 : 409, 'text/plain; charset=utf-8', '');
   if (routes[url]) return routes[url](req, res, caller, respond);
@@ -187,12 +322,28 @@ function handle(req, res) {
   respond(res, 404, 'text/plain', 'Niet gevonden');
 }
 
-function listen(p) {
+function listenOn(s, p) {
   return new Promise((resolve, reject) => {
-    const s = http.createServer(handle);
     s.once('error', reject);
-    s.listen(p, '0.0.0.0', () => resolve(s));
+    s.listen(p, '0.0.0.0', () => { s.removeListener('error', reject); resolve(s); });
   });
+}
+
+// The status page on `p`, and the TLS port for the dashboards right next to it; one handler for both.
+async function listen(p) {
+  const plain = http.createServer(handle);
+  plain.keepAliveTimeout = 30000; // longer than the 10 s between status rounds: no new handshake each time
+  plain.headersTimeout = 35000;
+  await listenOn(plain, p);
+  const secure = tls.createServer(unit.serverOptions());
+  secure.on('secureConnection', (sock) => plain.emit('connection', sock));
+  let refused = 0;
+  secure.on('tlsClientError', (err, sock) => {
+    // A screen without (this) key: noted now and then, not at every attempt.
+    if (refused++ % 50 === 0) log.info('screens', `verbinding zonder geldige eenheidssleutel geweigerd (${clean(sock && sock.remoteAddress)}: ${err.code || err.message})`);
+  });
+  try { await listenOn(secure, unit.securePort(p)); } catch (err) { plain.close(); throw err; }
+  return { plain, secure };
 }
 
 /* ---------- UDP discovery ---------- */
@@ -219,7 +370,7 @@ function startUdp() {
       const m = JSON.parse(buf.toString('utf8'));
       if (m.palv !== 1 || !m.id || m.id === self.id) return;
       const known = peers.get(m.id);
-      meet({ id: String(m.id).slice(0, 80), name: String(m.name || '').slice(0, 60), address: rinfo.address, port: +m.port || PORT });
+      meet({ id: String(m.id).slice(0, 80), name: String(m.name || '').slice(0, 60), address: rinfo.address, port: +m.port || PORT, trusted: false });
       if (!known) { announce(); setTimeout(pollAll, 300); }
     } catch { /* not ours */ }
   });
@@ -234,11 +385,14 @@ async function start({ userData, status, onUpdate, test, share: sh, routes: extr
   share = sh || null;
   routes = extra || {};
   load(userData);
-  selfStatus = () => ({ ...status(), id: self.id, name: self.name, port, ephemeral });
+  selfStatus = () => ({ ...status(), id: self.id, name: self.name, port, ephemeral, auth: unit.status() });
   onChange = onUpdate || (() => {});
+  // Another key: no screen is trusted until it proves it holds this one.
+  unit.onChange(() => { for (const p of peers.values()) p.secure = false; save(); onChange(list()); });
 
-  for (let p = PORT; p < PORT + 5; p += 1) {
-    try { server = await listen(p); port = p; break; } catch (err) { log.warn('screens', `poort ${p} bezet`, err.code); }
+  // 47800 + 47801; a second dashboard on the same computer 47802 + 47803 (the firewall allows 47800-47804).
+  for (let p = PORT; p < PORT + 5; p += 2) {
+    try { ({ plain: server } = await listen(p)); port = p; break; } catch (err) { log.warn('screens', `poort ${p} of ${p + 1} bezet`, err.code); }
   }
   if (server) log.info('screens', `statuspagina op http://${addresses()[0] || 'localhost'}:${port}/`);
   else log.error('screens', 'statusserver kon niet starten');
@@ -333,6 +487,18 @@ load();setInterval(load,5000);
 }
 
 // The other screens as last polled, for choosing who fetches the live traffic (share.js).
-const peerList = () => [...peers.values()].map((p) => ({ id: p.id, name: p.name, address: p.address, port: p.port || PORT, online: p.online, status: p.status }));
+// `secure`: that screen proved it holds the unit key; only those get the traffic and the files.
+const peerList = () => [...peers.values()].map((p) => ({ id: p.id, name: p.name, address: p.address, port: p.port || PORT, online: p.online, secure: !!p.secure, status: p.status }));
 
-module.exports = { start, list, rename, add, remove, addresses, isPrivate, pollAll, peers: peerList, id: () => self.id, name: () => self.name, port: () => port, PORT };
+// Pairing by hand: the code of this screen's key, and entering the code of another screen.
+function pair(code) {
+  const st = unit.pair(code);
+  setTimeout(pollAll, 200);
+  return st;
+}
+
+module.exports = {
+  start, list, rename, add, remove, addresses, isPrivate, pollAll, pair, peers: peerList,
+  request: (p, o, cb) => unit.request(p, o, cb), pairCode: () => unit.code(), auth: () => unit.status(),
+  id: () => self.id, name: () => self.name, port: () => port, PORT,
+};

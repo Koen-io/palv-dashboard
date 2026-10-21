@@ -63,9 +63,44 @@ function sendWinState(known = {}) {
   if (!win || win.isDestroyed()) return;
   win.webContents.send('win:state', {
     maximized: win.isMaximized(),
-    fullscreen: win.isFullScreen(),
+    fullscreen: isFull(),
     ...known,
   });
+}
+
+/* ---------- fullscreen ---------- */
+// macOS's own fullscreen keeps the system menu bar, which slides down over the dashboard's title bar as soon
+// as the mouse comes near the top of the screen. On a Mac the window therefore covers the whole screen
+// itself, above the menu bar and the Dock, as a presentation does. Only while the dashboard is the active
+// app: when another app (or a dialog) comes forward the window steps back to the normal level, and it
+// covers everything again when it is clicked. Windows keeps its own fullscreen.
+let macFull = false, macBefore = null;
+const isFull = () => !!win && !win.isDestroyed() && (isMac ? macFull : win.isFullScreen());
+
+function macCover() {
+  if (!macFull || !win || win.isDestroyed()) return;
+  const d = screen.getDisplayMatching(win.getBounds());
+  win.setBounds(d.bounds);
+  if (win.isFocused()) win.setAlwaysOnTop(true, 'status');
+}
+
+function setFull(on) {
+  if (!win || win.isDestroyed()) return;
+  if (!isMac) { win.setFullScreen(on); return; }
+  if (on === macFull) return;
+  if (on) {
+    if (win.isFullScreen()) win.setFullScreen(false);
+    macBefore = { bounds: win.getBounds(), maximized: win.isMaximized() };
+    macFull = true;
+    macCover();
+    log.info('app', 'volledig scherm (over de menubalk heen)');
+  } else {
+    macFull = false;
+    win.setAlwaysOnTop(false);
+    if (macBefore && !macBefore.maximized) win.setBounds(macBefore.bounds);
+    else win.maximize();
+  }
+  sendWinState({ fullscreen: on });
 }
 
 // macOS keeps its menu bar at the top of the screen and routes Cmd+Q, Cmd+C/V and the like through it.
@@ -91,7 +126,7 @@ function buildMenu() {
       { role: 'selectAll', label: 'Selecteer alles' },
     ] },
     { label: 'Weergave', submenu: [
-      { label: 'Volledig scherm', accelerator: 'Ctrl+Cmd+F', click: () => win && win.setFullScreen(!win.isFullScreen()) },
+      { label: 'Volledig scherm', accelerator: 'Ctrl+Cmd+F', click: () => setFull(!isFull()) },
     ] },
     { label: 'Venster', submenu: [
       { role: 'minimize', label: 'Minimaliseer' },
@@ -115,7 +150,9 @@ function createWindow() {
     backgroundColor: '#0b1320',
     title: 'P-ALV Dashboard',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    fullscreen: startFullscreen && !shotPath,
+    fullscreen: startFullscreen && !shotPath && !isMac,
+    // macOS: the window may cover the menu bar in fullscreen (setFull).
+    enableLargerThanScreen: isMac,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -137,11 +174,20 @@ function createWindow() {
     } else {
       if (!startFullscreen) win.maximize();
       win.show();
+      if (startFullscreen && isMac) setFull(true);
     }
     sendWinState();
   });
 
   for (const ev of ['maximize', 'unmaximize']) win.on(ev, () => sendWinState());
+  if (isMac) {
+    // Covering the menu bar only while the dashboard is the active app (setFull).
+    win.on('focus', () => { if (macFull) win.setAlwaysOnTop(true, 'status'); });
+    win.on('blur', () => { if (macFull) win.setAlwaysOnTop(false); });
+    screen.on('display-metrics-changed', macCover);
+    screen.on('display-added', macCover);
+    screen.on('display-removed', macCover);
+  }
   // On a frameless window isFullScreen() can still report the old state while these events fire,
   // which left the menu bar hidden after leaving fullscreen. The event itself is the truth;
   // a second reading shortly after settles the maximized state.
@@ -155,7 +201,7 @@ function createWindow() {
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F11') {
-      win.setFullScreen(!win.isFullScreen());
+      setFull(!isFull());
       event.preventDefault();
     } else if ((input.key === 'F12' && input.control && input.shift) || (isMac && input.meta && input.alt && input.code === 'KeyI')) {
       win.webContents.openDevTools({ mode: 'detach' });
@@ -245,7 +291,7 @@ app.whenReady().then(() => {
   screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share, routes: planOut.routes });
   // A test window never fetches for others nor follows them: it keeps to itself.
   share.start({
-    traffic, peers: screens.peers, disabled: !!shotPath,
+    traffic, peers: screens.peers, disabled: !!shotPath, request: screens.request,
     self: () => ({ id: screens.id(), name: screens.name(), port: screens.port() }),
     log: { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) },
   });
@@ -260,15 +306,15 @@ const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webConte
 ipcMain.on('win:minimize', () => win && win.minimize());
 ipcMain.on('win:toggleMaximize', () => {
   if (!win) return;
-  if (win.isFullScreen()) win.setFullScreen(false);
+  if (isFull()) setFull(false);
   else if (win.isMaximized()) win.unmaximize();
   else win.maximize();
 });
 ipcMain.on('win:close', () => win && win.close());
-ipcMain.on('win:setFullscreen', (_e, on) => win && win.setFullScreen(!!on));
+ipcMain.on('win:setFullscreen', (_e, on) => setFull(!!on));
 ipcMain.handle('win:getState', () => ({
   maximized: !!win && win.isMaximized(),
-  fullscreen: !!win && win.isFullScreen(),
+  fullscreen: isFull(),
 }));
 
 /* ---------- config ---------- */
@@ -401,7 +447,7 @@ function screenStatus() {
     arch: process.arch,
     now: Date.now(),
     startedAt: st.startedAt,
-    window: win && !win.isDestroyed() ? { visible: win.isVisible(), minimized: win.isMinimized(), fullscreen: win.isFullScreen(), focused: win.isFocused() } : null,
+    window: win && !win.isDestroyed() ? { visible: win.isVisible(), minimized: win.isMinimized(), fullscreen: isFull(), focused: win.isFocused() } : null,
     displays: displays.length,
     displayList: displays.map((d) => `${d.size.width}×${d.size.height}${d.internal ? ' intern' : ''}`),
     renderer: { heartbeat: st.heartbeat, alive: !!st.heartbeat && Date.now() - st.heartbeat < 20000, reloads: st.reloads, crashes: st.crashes, webviewCrashes: st.webviewCrashes },
@@ -422,3 +468,5 @@ ipcMain.handle('screens:info', () => ({ name: screens.name(), port: screens.port
 ipcMain.handle('screens:add', (_e, address) => screens.add(address));
 ipcMain.handle('screens:remove', (_e, id) => screens.remove(String(id)));
 ipcMain.handle('screens:rename', (_e, name) => screens.rename(name));
+ipcMain.handle('screens:pairCode', () => screens.pairCode());
+ipcMain.handle('screens:pair', (_e, code) => screens.pair(String(code || '')));

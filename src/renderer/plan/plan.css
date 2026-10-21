@@ -47,6 +47,7 @@
 .zp-map[data-mode="route"], .zp-map[data-mode="route"] .leaflet-interactive,
 .zp-map[data-mode="measure"], .zp-map[data-mode="rings"] { cursor: crosshair; }
 .zp-canvas, .zp-flow, .zp-wcolour { position: absolute; left: 0; top: 0; pointer-events: none; }
+.zp-canvas { transform-origin: 0 0; }
 .zp-wcolour { opacity: 0.5; image-rendering: auto; transform-origin: 0 0; }
 .zp-wcolour[hidden] { display: none; }
 .zp-canvas.zooming, .zp-flow.zooming { visibility: hidden; }

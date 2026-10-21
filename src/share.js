@@ -11,8 +11,8 @@
 //   makes the screens flip back and forth;
 // - a screen that follows never passes the traffic on, so there are no chains or circles.
 //
-// The link: the follower opens one HTTP request to the fetcher (GET /api/traffic/stream on the status
-// port) that stays open. The fetcher writes one line of JSON per round to it, with only the aircraft
+// The link: the follower opens one HTTP request to the fetcher (GET /api/traffic/stream, over TLS with the
+// unit key on the port next to the status page, screens.js) that stays open. The fetcher writes one line of JSON per round to it, with only the aircraft
 // that changed since the line before; on a local network that adds a few milliseconds at most. A line
 // comes at least every second, also when nothing changed. When the link breaks or stays silent for
 // 2.5 seconds, the follower fetches by itself straight away: the aircraft it has stay on the map, and the
@@ -34,7 +34,9 @@ const MAX_BUFFER = 4e6;      // a follower that cannot keep up is cut off rather
 const WANT_MS = 4000;
 
 let traffic = null, self = () => ({}), peers = () => [], log = { info() {}, warn() {} };
-let enabled = false, httpLib = http;
+let enabled = false;
+// How to reach another screen: screens.js passes its TLS requests with the unit key, the test plain HTTP.
+let request = (peer, { stream, ...o }, cb) => http.get({ host: peer.address.replace(/^\[|\]$/g, ''), port: peer.port, ...(stream ? { agent: false } : {}), ...o }, cb);
 let role = 'lead';           // 'lead': fetches by itself (also when alone); 'follow': receives
 const streams = new Set();   // followers of this screen: { id, name, res, rev }
 let link = null;             // the link to the fetcher this screen follows, or is setting up
@@ -67,7 +69,8 @@ function rank(list) {
 function candidates(now) {
   const out = [];
   for (const p of peers()) {
-    const sh = p.online && p.status && !p.status.ephemeral && p.status.share;
+    // Only a screen that proved it holds the unit key (screens.js) is followed.
+    const sh = p.online && p.secure !== false && p.status && !p.status.ephemeral && p.status.share;
     if (!sh || sh.v !== PROTO || !p.id) continue;
     let sc = +sh.score || 0, leading = sh.role === 'lead';
     // The fetcher this screen follows tells its score in every line: that is newer than its status.
@@ -112,9 +115,8 @@ function connect(peer) {
   const me = self();
   const l = { id: peer.id, name: peer.name || peer.address, peer, live: false, lastLine: Date.now(), score: peer.score, buf: '', req: null, closed: false };
   link = l;
-  const host = peer.address.replace(/^\[|\]$/g, '');
-  const req = httpLib.get({
-    host, port: peer.port, path: STREAM, agent: false,
+  const req = request(peer, {
+    path: STREAM, stream: true,
     headers: {
       'X-Palv-Screen': JSON.stringify({ id: me.id, name: me.name, port: me.port }),
       'X-Palv-Want': JSON.stringify(traffic.ownWant()),
@@ -223,8 +225,8 @@ function sendWant(want) {
   if (sig === wantSent.sig && now - wantSent.at < WANT_MS - 500) return;
   wantSent = { at: now, sig };
   const me = self();
-  const req = httpLib.get({
-    host: l.peer.address.replace(/^\[|\]$/g, ''), port: l.peer.port, path: WANT,
+  const req = request(l.peer, {
+    path: WANT,
     headers: { 'X-Palv-Screen': JSON.stringify({ id: me.id, name: me.name, port: me.port }), 'X-Palv-Want': sig },
     timeout: 3000,
   }, (res) => res.resume());
@@ -324,7 +326,7 @@ function start(opts) {
   self = opts.self;
   peers = opts.peers;
   if (opts.log) log = opts.log;
-  if (opts.http) httpLib = opts.http;
+  if (opts.request) request = opts.request;
   enabled = !opts.disabled;
   startedAt = Date.now();
   clearInterval(timer);

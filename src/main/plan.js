@@ -9,7 +9,6 @@
 //   tells a fingerprint of both in its status; a screen that sees a different one fetches the other's file
 //   and keeps the newest version of every item (store.js).
 const { app, ipcMain, dialog, BrowserWindow, protocol, net } = require('electron');
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const log = require('./log');
@@ -49,10 +48,12 @@ const fetchBuffer = async (url, opts) => Buffer.from(await (await request(url, o
 let screens = null, share = null, getWin = () => null;
 const send = (ch, payload) => { const w = getWin(); if (w && !w.isDestroyed()) w.webContents.send(ch, payload); };
 
+// Always over TLS with the unit key (screens.js), and only to a screen that proved it holds it.
 function peerGet(peer, pathname, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
-    const req = http.get({
-      host: peer.address.replace(/^\[|\]$/g, ''), port: peer.port, path: pathname, timeout: timeoutMs,
+    if (!peer.secure) return reject(new Error('geen beveiligde verbinding'));
+    const req = screens.request(peer, {
+      path: pathname, timeout: timeoutMs,
       headers: { 'X-Palv-Screen': JSON.stringify({ id: screens.id(), name: screens.name(), port: screens.port() }) },
     }, (res) => {
       let buf = '';
@@ -71,13 +72,13 @@ function leaderPeer() {
   return screens.peers().find((p) => p.id === info.leader.id && p.online) || null;
 }
 // Only the unit's own screens (peers this screen has found or was given) get the files.
-const isPeer = (caller) => !!caller && screens.peers().some((p) => p.id === caller.id);
+const isPeer = (caller) => !!caller && caller.secure === true && screens.peers().some((p) => p.id === caller.id);
 
 async function syncFiles() {
   const mine = store.digests();
   for (const p of screens.peers()) {
     const theirs = p.online && p.status && p.status.plan;
-    if (!theirs || p.status.ephemeral) continue;
+    if (!theirs || p.status.ephemeral || !p.secure) continue;
     for (const kind of Object.keys(store.KINDS)) {
       if (!theirs[kind] || theirs[kind] === mine[kind]) continue;
       try {

@@ -52,7 +52,7 @@ function zpPaneCanvas(map, pane, z, cls) {
 function zpCanvas(map) {
   const { cv, place } = zpPaneCanvas(map, 'zpSym', 450, 'zp-canvas');
   const steps = [];
-  let hits = [], queued = false, dpr = 1;
+  let hits = [], queued = false, dpr = 1, drawnAt = null, lastDraw = 0;
   const size = () => {
     const s = map.getSize();
     dpr = window.devicePixelRatio || 1;
@@ -61,6 +61,8 @@ function zpCanvas(map) {
   };
   const draw = () => {
     queued = false;
+    lastDraw = performance.now();
+    drawnAt = { nw: map.containerPointToLatLng([0, 0]), zoom: map.getZoom() };
     place();
     const g = cv.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -80,7 +82,15 @@ function zpCanvas(map) {
   const request = () => { if (!queued) { queued = true; requestAnimationFrame(draw); } };
   size();
   map.on('resize', () => { size(); request(); });
-  map.on('move zoomend viewreset', request);
+  // While the wheel glides the zoom, the last picture is moved and scaled with the map (as Leaflet does
+  // with its own canvas layers) and drawn anew only a few times per second: every symbol at every frame
+  // is too much for a slower computer on a 4K screen.
+  map.on('move', () => {
+    if (!map._wheelZooming || !drawnAt) return request();
+    L.DomUtil.setTransform(cv, map.latLngToLayerPoint(drawnAt.nw), map.getZoomScale(map.getZoom(), drawnAt.zoom));
+    if (performance.now() - lastDraw > 250) request();
+  });
+  map.on('zoomend viewreset', request);
   map.on('zoomanim', () => cv.classList.add('zooming'));
   map.on('zoomend', () => cv.classList.remove('zooming'));
   return {

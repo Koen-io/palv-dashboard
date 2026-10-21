@@ -1,5 +1,24 @@
 # Wijzigingen
 
+## 1.24.0
+
+### Beveiligde verbinding tussen de dashboards
+- Alles wat de dashboards elkaar sturen (live verkeer, wind, routes, profielen en dekken) gaat nu versleuteld met een eigen eenheidssleutel (TLS, ECDHE-PSK met ChaCha20-Poly1305). Beide kanten bewijzen dat ze de sleutel hebben; een apparaat zonder sleutel krijgt alleen de statuspagina
+- Niets in te stellen: het eerste scherm maakt de sleutel en de schermen die elkaar al kenden krijgen hem vanzelf, versleuteld. Een nieuw scherm koppel je één keer met de koppelcode onder Schermoverzicht › Eenheidssleutel
+- Gedicht: een apparaat in hetzelfde netwerk kon zich voordoen als dashboard en het profielbestand ophalen of verkeer doorsturen
+- Het Schermoverzicht toont per scherm of de verbinding beveiligd is. De beveiligde verbinding gebruikt poort 47801, naast de statuspagina op 47800
+
+### Vloeiend zoomen
+- Zoomen met het muiswiel en de trackpad gaat vloeiend en is op Windows en macOS even snel. Elke tik telt direct mee, ook als de kaart nog beweegt (eerst werd die genegeerd, en op de Mac kwam één tik veel zwakker binnen)
+- Tijdens het zoomen worden de kaartlagen alleen geschaald en pas daarna scherp opnieuw getekend. Op de Mac Mini gaat zoomen in Zoek & Plan daardoor veel soepeler, ook met veel lagen aan
+- Geldt voor de Vluchtradar en Zoek & Plan
+
+### Vluchtradar
+- In het detailvenster van een toestel staat rechtsboven de vlag van het land waar het geregistreerd is, met daaronder de naam van het land. Dat land volgt uit het ICAO-adres van de transponder (de toewijzing per land uit ICAO Annex 10), dus ook bij toestellen zonder registratie in de database
+
+### Mac
+- Volledig scherm bedekt nu het hele scherm, ook de menubalk en het Dock: de menubalk valt niet meer over de titelbalk van het dashboard. Kies je een ander programma, dan stapt het dashboard terug; klik je erop, dan is het weer volledig
+
 ## 1.23.0
 
 ### Baangebruik Schiphol

@@ -284,12 +284,51 @@ function vrKeyedTiles(url, opts) {
   return new VrKeyed(url, opts);
 }
 
+/* ---------- state of registry ---------- */
+// From the ICAO 24-bit address: every state has its own blocks of addresses (vendor/icao-landen.js), so
+// the address says where an aircraft is registered, also when the database knows nothing else about it.
+// A non-ICAO address (TIS-B, anonymised: starts with ~) has no state.
+const vrCountryCache = new Map();
+const vrRegionNames = (() => { try { return new Intl.DisplayNames(['nl'], { type: 'region' }); } catch { return null; } })();
+function vrCountry(hex) {
+  if (!/^[0-9a-f]{6}$/i.test(hex || '')) return null;
+  if (vrCountryCache.has(hex)) return vrCountryCache.get(hex);
+  const x = parseInt(hex, 16);
+  const b = ICAO_LANDEN.find((r) => x >= r[0] && x <= r[1]); // smallest blocks first: the most precise wins
+  let out = null;
+  if (b) {
+    let name = b[2];
+    try { name = (vrRegionNames && vrRegionNames.of(b[2])) || b[2]; } catch { /* keep the code */ }
+    out = { cc: b[2], name, block: `${b[0].toString(16).toUpperCase().padStart(6, '0')}–${b[1].toString(16).toUpperCase().padStart(6, '0')}` };
+  }
+  vrCountryCache.set(hex, out);
+  return out;
+}
+
+function vrFlag(a) {
+  const c = vrCountry(a.hex);
+  if (!c) return null;
+  const tip = `Geregistreerd in ${c.name} · ICAO-adres ${a.hex.toUpperCase()} (blok ${c.block})`;
+  return h('span', { class: 'vr-flag', role: 'img', 'aria-label': `Vlag van ${c.name}`, title: tip, style: `background-image:url("vendor/flags/${c.cc.toLowerCase()}.svg")` },
+    h('span', { class: 'vr-flag-cc' }, c.cc));
+}
+
+// The state of registry written out, across the full width of the card: the name in large type, with the
+// country code beside it as on the tail of the aircraft.
+function vrCountryRow(a) {
+  const c = vrCountry(a.hex);
+  if (!c) return null;
+  return h('div', { class: 'vr-card-country', title: `ICAO-adres ${a.hex.toUpperCase()} · blok ${c.block}` },
+    h('span', {}, 'REGISTRATIELAND'),
+    h('div', {}, h('b', {}, c.name), h('i', {}, c.cc)));
+}
+
 /* ---------- the map ---------- */
 function vrCreate(body, w) {
   const el = h('div', { class: 'vr-map no-fade' });
   body.append(el);
   const map = L.map(el, {
-    zoomControl: false, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
+    zoomControl: false, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, scrollWheelZoom: false, smoothWheel: true,
     minZoom: 4, maxZoom: 17, worldCopyJump: false, fadeAnimation: true, inertia: true, boxZoom: false,
   });
   map.attributionControl.setPrefix(false);
@@ -418,7 +457,7 @@ function vrCreate(body, w) {
 
   function draw() {
     const ctx = renderer._ctx, b = renderer._bounds;
-    if (!ctx || !b || map._animatingZoom) return;
+    if (!ctx || !b || map._animatingZoom || map._wheelZooming) return; // the renderer scales the last picture meanwhile
     const now = Date.now();
     const size = b.getSize();
     ctx.clearRect(b.min.x, b.min.y, size.x, size.y);
@@ -586,9 +625,11 @@ function vrCreate(body, w) {
       h('div', { class: 'vr-card-head' },
         h('b', {}, a.flight || a.reg || a.hex.toUpperCase()),
         h('span', {}, [a.reg || (unitName && unitName.reg), a.type || (unitName && unitName.type), a.group ? FLEET_GROUPS[a.group] : a.mil ? 'Militair' : null].filter(Boolean).join(' · ')),
+        vrFlag(a),
         h('button', { class: 'w-tool', title: 'Sluiten', onclick: () => select(null) }, icon('close'))),
       a.desc ? h('div', { class: 'vr-card-desc' }, a.desc) : null,
       h('div', { class: 'vr-card-grid' },
+        vrCountryRow(a),
         row('HOOGTE', vrAltText(a) + (a.vs != null && Math.abs(a.vs) >= 100 ? ` ${vrClimb(a.vs) || (a.vs > 0 ? '↗' : '↘')} ${Math.abs(Math.round(a.vs / 50) * 50)} ft/min` : '')),
         row('SNELHEID', a.gs == null ? '—' : `${Math.round(a.gs)} kt`),
         row('KOERS', a.track == null ? '—' : `${String(Math.round(a.track) % 360).padStart(3, '0')}°`),

@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('palv', {
     add: (address) => ipcRenderer.invoke('screens:add', address),
     remove: (id) => ipcRenderer.invoke('screens:remove', id),
     rename: (name) => ipcRenderer.invoke('screens:rename', name),
+    pairCode: () => ipcRenderer.invoke('screens:pairCode'),
+    pair: (code) => ipcRenderer.invoke('screens:pair', code),
     onUpdate: (cb) => on('screens:update', cb),
   },
   tile: {

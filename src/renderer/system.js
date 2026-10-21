@@ -178,6 +178,8 @@ function judgeScreen(s) {
   if (s.displays === 0) w.push('Geen beeldscherm aangesloten');
   if (s.locked) w.push('Computer vergrendeld');
   if (s.health && s.health.length) w.push('Geen verse gegevens: ' + s.health.join(', '));
+  if (s.lock === 'anders') w.push('Andere eenheidssleutel: koppel dit scherm met de koppelcode');
+  if (s.lock === 'fout') w.push(`Beveiligde verbinding mislukt (poort ${(+s.port || 47800) + 1} niet bereikbaar?)`);
   return w.length ? { level: 'warn', label: 'DRAAIT · LET OP', issues: w } : { level: 'ok', label: 'DRAAIT', issues: [] };
 }
 
@@ -188,6 +190,61 @@ function screensButton() {
   const up = counts.filter((c) => c.level !== 'bad').length;
   const level = counts.some((c) => c.level === 'bad') ? 'bad' : counts.some((c) => c.level === 'warn') ? 'warn' : 'ok';
   return h('button', { class: 'tb-btn tb-screens ' + level, title: 'Schermoverzicht: welke dashboards draaien', onclick: openScreens }, h('i', { class: 'fr-dot' }), icon('screens'), `${up}/${list.length}`);
+}
+
+const LOCK_TEXT = {
+  ok: 'Beveiligd met de eenheidssleutel',
+  oud: 'Oudere versie, nog niet beveiligd',
+  wacht: 'Wacht op de eenheidssleutel',
+  geen: 'Dit scherm wacht nog op de sleutel',
+  anders: 'Andere eenheidssleutel',
+  fout: 'Beveiligde verbinding mislukt',
+};
+
+// The unit key: every dashboard of the unit holds the same one; everything between them is encrypted with it.
+function unitKeyPane() {
+  const box = h('div', { class: 'sc-key' });
+  const code = textInput('', { placeholder: 'XXXX-XXXX-XXXX-…', spellcheck: 'false', autocomplete: 'off' });
+  const head = h('div', { class: 'sc-key-head' });
+  // Repainted with every round of the overview; the rest stays, so typing a code is never interrupted.
+  const paintHead = () => {
+    const a = (screensState.list.find((s) => s.self) || {}).auth || {};
+    head.replaceChildren(h('span', { class: 'sc-key-icon ' + (a.fp ? 'ok' : 'wait') }, icon('shield')),
+      h('div', {}, h('b', {}, a.fp ? 'Eenheidssleutel actief' : 'Nog geen eenheidssleutel'),
+        h('small', {}, a.fp ? `Vingerafdruk ${a.fp.toUpperCase().match(/.{1,4}/g).join('-')} · al het verkeer tussen de dashboards is versleuteld` : 'Wordt vanzelf gemaakt of opgehaald bij een scherm van de eenheid')));
+  };
+  const paint = () => {
+    paintHead();
+    const shown = h('div', { class: 'sc-code', hidden: true });
+    const show = h('button', { class: 'btn', onclick: async () => {
+      if (!shown.hidden) { shown.hidden = true; show.lastChild.textContent = 'Koppelcode tonen'; return; }
+      const c = await window.palv.screens.pairCode();
+      if (!c) return toast('Dit scherm heeft nog geen eenheidssleutel', true);
+      shown.replaceChildren(h('code', {}, c), h('button', { class: 'btn', onclick: async () => { try { await navigator.clipboard.writeText(c); toast('Koppelcode gekopieerd'); } catch { toast('Kopiëren lukte niet; selecteer de code', true); } } }, 'Kopiëren'));
+      shown.hidden = false;
+      show.lastChild.textContent = 'Koppelcode verbergen';
+    } }, icon('shield'), h('span', {}, 'Koppelcode tonen'));
+    const pairNow = async () => {
+      try {
+        await window.palv.screens.pair(code.value);
+        code.value = '';
+        toast('Gekoppeld: dit scherm gebruikt nu de eenheidssleutel');
+        setTimeout(async () => { screensState.list = (await window.palv.screens.info()).list; paintScreens(); }, 1500);
+      } catch (err) { toast(String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), true); }
+    };
+    code.onkeydown = (e) => e.key === 'Enter' && pairNow();
+    box.replaceChildren(
+      head,
+      h('p', { class: 'sc-intro' }, 'Schermen van de eenheid krijgen de sleutel vanzelf. Een nieuw scherm koppel je één keer: toon hier de koppelcode en voer die in op het nieuwe scherm. De code is geheim: wie hem heeft, hoort bij de eenheid.'),
+      h('div', { class: 'row' },
+        field('Koppelcode invoeren', code, 'De koppelcode van een ander scherm van de eenheid.'),
+        h('div', { class: 'field', style: 'flex:0 0 auto;align-self:flex-start;margin-top:1.45rem' }, h('button', { class: 'btn primary', onclick: pairNow }, 'Koppelen'))),
+      h('div', {}, show),
+      shown);
+  };
+  box.paint = paintHead;
+  paint();
+  return box;
 }
 
 function screenCard(s) {
@@ -205,7 +262,8 @@ function screenCard(s) {
       s.online && s.window ? row('Venster', (s.window.fullscreen ? 'Volledig scherm' : s.window.minimized ? 'Geminimaliseerd' : 'Venster') + (s.page ? ` · ${s.page}` : '')) : null,
       s.online && s.displays != null ? row('Beeldschermen', `${s.displays}${s.displayList && s.displayList.length ? ' · ' + s.displayList.join(', ') : ''}`) : null,
       s.online && s.renderer ? row('Hartslag', s.renderer.heartbeat ? ageText(s.now - s.renderer.heartbeat) + ' geleden' : '—') : null,
-      s.online && s.awake != null ? row('Slaapstand', s.awake ? 'Geblokkeerd (scherm blijft aan)' : 'Toegestaan') : null),
+      s.online && s.awake != null ? row('Slaapstand', s.awake ? 'Geblokkeerd (scherm blijft aan)' : 'Toegestaan') : null,
+      s.online && s.lock ? row('Verbinding', LOCK_TEXT[s.lock] || s.lock) : null),
     j.issues.length ? h('div', { class: 'sc-issues' }, j.issues.map((i) => h('div', {}, icon('alert'), i))) : null,
     !s.self ? h('button', { class: 'w-tool sc-remove', title: 'Uit de lijst verwijderen', onclick: async () => { screensState.list = await window.palv.screens.remove(s.id || `${s.address}:${s.port}`); paintScreens(); } }, icon('trash')) : null);
 }
@@ -214,6 +272,8 @@ function paintScreens() {
   renderTitlebar();
   const root = document.querySelector('.sc-list');
   if (root) root.replaceChildren(...screensState.list.map(screenCard));
+  const key = document.querySelector('.sc-key');
+  if (key && key.paint) key.paint();
 }
 
 async function openScreens() {
@@ -240,6 +300,8 @@ async function openScreens() {
       h('div', { class: 'row' },
         field('Scherm toevoegen via adres', addr, 'IP-adres of naam, eventueel met :poort (standaard 47800).'),
         h('div', { class: 'field', style: 'flex:0 0 auto;align-self:flex-start;margin-top:1.45rem' }, h('button', { class: 'btn primary', onclick: add }, icon('plus'), 'Toevoegen'))),
+      h('hr'),
+      unitKeyPane(),
       h('div', { class: 'hint' }, 'Statuspagina voor een browser (ook op een telefoon in hetzelfde netwerk of via Tailscale): ',
         ...urls.flatMap((u, i) => [i ? ' · ' : '', h('a', { href: '#', onclick: (e) => { e.preventDefault(); window.palv.app.openExternal(u); } }, u)])),
     ],

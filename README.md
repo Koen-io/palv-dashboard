@@ -14,7 +14,7 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 ## Beheer
 
 - **Updates:** elke 30 minuten wordt gekeken naar de [releases](../../releases). Een nieuwe versie wordt gedownload, met SHA-256 gecontroleerd en automatisch geïnstalleerd.
-- **Schermoverzicht:** dashboards in hetzelfde netwerk of via Tailscale zien elkaar. Elk dashboard heeft een statuspagina op `http://<adres>:47800/` (alleen-lezen, alleen bereikbaar vanaf privé- en Tailscale-adressen).
+- **Schermoverzicht:** dashboards in hetzelfde netwerk of via Tailscale zien elkaar. Elk dashboard heeft een statuspagina op `http://<adres>:47800/` (alleen-lezen, alleen bereikbaar vanaf privé- en Tailscale-adressen). Onderling praten de dashboards alleen versleuteld met de eenheidssleutel (TLS-PSK op poort 47801); een nieuw scherm koppel je met de koppelcode in het Schermoverzicht.
 - **Betrouwbaarheid:** het scherm blijft altijd aan, het dashboard herstelt zichzelf na een crash, de indeling heeft automatische reservekopieën, en er is een logboek van 14 dagen en OLED-bescherming.
 
 ## Ontwikkelen

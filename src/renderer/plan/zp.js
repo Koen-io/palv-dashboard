@@ -70,13 +70,14 @@ function zpCreate(body, w) {
   root.classList.toggle('side-off', !cfg.side);
 
   const map = L.map(mapEl, {
-    zoomControl: false, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, wheelPxPerZoomLevel: 90,
+    zoomControl: false, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, scrollWheelZoom: false, smoothWheel: true,
     minZoom: 2, maxZoom: 19, worldCopyJump: true, fadeAnimation: true, inertia: true, boxZoom: false, doubleClickZoom: false,
   });
   map.attributionControl.setPrefix(false);
   L.control.zoom({ position: 'bottomright', zoomInTitle: 'Inzoomen', zoomOutTitle: 'Uitzoomen' }).addTo(map);
   map.setView([cfg.lat, cfg.lon], cfg.zoom, { animate: false });
   ctx.map = map;
+  mapEl.zpMap = map; // for measuring the zoom in a --shot run (--shot-js)
   ctx.el = mapEl;
   ctx.cv = zpCanvas(map);
   ctx.base = zpBaseLayers(ctx);

@@ -637,10 +637,19 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .vr-card-head b { font-family: var(--font-display); font-size: 1.25rem; letter-spacing: 0.04em; }
 .vr-card-head span { flex: 1; color: #a9bad3; font-size: 0.78rem; }
 .vr-card-head .w-tool { color: #a9bad3; margin: -0.3rem -0.4rem 0 0; }
+/* The flag of the state of registry (from the ICAO address): a small 4:3 flag with a fine edge and a soft
+   sheen, so light flags stand out on the dark card as well. */
+.vr-card-head .vr-flag { position: relative; align-self: center; flex: none; width: 1.7rem; height: 1.275rem; margin: -0.15rem 0.05rem 0 0; border-radius: 3px; overflow: hidden; background: #1a2638 center / cover no-repeat; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 2px 6px rgba(0, 0, 0, 0.55); }
+.vr-card-head .vr-flag::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(160deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.04) 45%, rgba(0, 0, 0, 0.14) 100%); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18); pointer-events: none; }
+.vr-card-head .vr-flag-cc { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vr-card-desc { color: #8ea2bf; font-size: 0.72rem; margin-top: 0.1rem; }
 .vr-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem 0.8rem; margin-top: 0.55rem; }
 .vr-card-grid span { display: block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; color: #8ea2bf; }
 .vr-card-grid b { font-size: 0.86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vr-card-country { grid-column: 1 / -1; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(143, 183, 230, 0.14); }
+.vr-card-country > div { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.vr-card-country b { font-size: 1rem; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vr-card-country i { font-style: normal; text-transform: uppercase; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; padding: 0.08rem 0.38rem; border-radius: 3px; color: #c9d6ea; background: rgba(143, 183, 230, 0.12); border: 1px solid rgba(143, 183, 230, 0.22); }
 
 .vr-pop { position: absolute; right: 0.5rem; top: 0.5rem; z-index: 1100; width: 16rem; padding: 0.4rem 0.9rem 0.7rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); color: var(--text); display: flex; flex-direction: column; gap: 0.45rem; }
 .vr-pop[hidden] { display: none; }
@@ -656,3 +665,7 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .vr-dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-left: auto; }
 .vr-pop .seg { width: 100%; }
 .vr-pop .seg button { flex: 1; justify-content: center; height: 1.7rem; font-size: 0.74rem; }
+
+/* While the wheel glides the zoom (wheelzoom.js) the tile levels and canvas layers are only scaled, as
+   bitmaps on the GPU, instead of drawn anew at every frame; at rest they are drawn sharp again. */
+.vr-wheel .leaflet-tile-container, .vr-wheel .leaflet-zoom-animated, .vr-wheel .zp-canvas { will-change: transform; }
