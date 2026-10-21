@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.24.1
+
+### Schermoverzicht
+- Een scherm met een oudere versie blijft zichtbaar als "draait" terwijl de andere schermen al bijgewerkt zijn (het werd 10 minuten als niet bereikbaar getoond als een firewall de beveiligde poort stil liet)
+
 ## 1.24.0
 
 ### Beveiligde verbinding tussen de dashboards

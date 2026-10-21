@@ -142,26 +142,32 @@ async function plainJson(p, pathname) {
 
 // The status of a screen: over TLS when this screen has the key. A screen that cannot do that (an older
 // version, or one still waiting for the key) is read over plain HTTP, and is not trusted.
+// An older version has no TLS port at all, and a firewall may let a knock there go unanswered instead of
+// refusing it: such a screen is read over plain HTTP straight away, until its status says it can do TLS.
 async function fetchStatus(p) {
-  if (unit.has()) {
+  if (unit.has() && !p.oldVersion) {
     try { return { s: await secureJson(p, '/api/status'), secure: true }; } catch (err) {
-      if (!err.tlsFailed) {
-        // Gone from its address: a newer address heard of must prove itself with the key as well.
-        if (p.alt) {
-          const alt = p.alt;
-          p.alt = null;
-          const s = await secureJson({ ...p, ...alt }, '/api/status').catch(() => null);
-          if (s) {
-            log.info('screens', `${p.name} gevonden op nieuw adres ${alt.address}`);
-            p.address = alt.address; p.port = alt.port;
-            return { s, secure: true };
-          }
+      // Gone from its address: a newer address heard of must prove itself with the key as well.
+      if (!err.tlsFailed && p.alt) {
+        const alt = p.alt;
+        p.alt = null;
+        const s = await secureJson({ ...p, ...alt }, '/api/status').catch(() => null);
+        if (s) {
+          log.info('screens', `${p.name} gevonden op nieuw adres ${alt.address}`);
+          p.address = alt.address; p.port = alt.port;
+          return { s, secure: true };
         }
-        throw err;
       }
+      // An older version, a screen without this key, or a TLS port that does not answer: the status page.
+      const s = await plainJson(p, '/api/status').catch(() => null);
+      if (!s) throw err;
+      p.oldVersion = !s.auth;
+      return { s, secure: false };
     }
   }
-  return { s: await plainJson(p, '/api/status'), secure: false };
+  const s = await plainJson(p, '/api/status');
+  p.oldVersion = !s.auth;
+  return { s, secure: false };
 }
 
 async function poll(p) {

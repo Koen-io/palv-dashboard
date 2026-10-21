@@ -91,4 +91,17 @@ test('eenheidssleutel tussen drie dashboards', { timeout: 90000 }, async (t) => 
   const { code } = await a.ask({ code: true });
   await c.ask({ pair: code });
   await until(async () => (await secure(c, a)) && (await secure(a, c)), 25000, 'c gekoppeld');
+
+  // 6. A screen of an older version (status page only, nothing on the TLS port next to it, where a
+  //    firewall leaves the knock unanswered): still seen as running, never trusted.
+  const held = new Set();
+  const silent = require('net').createServer((sock) => { held.add(sock); sock.on('error', () => {}); }); // never answers
+  const old = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ id: 'oud', name: 'oud', now: Date.now() })); });
+  await new Promise((r) => old.listen(48830, '127.0.0.1', r));
+  await new Promise((r) => silent.listen(48831, '127.0.0.1', r));
+  t.after(() => { for (const sock of held) sock.destroy(); old.close(); silent.close(); });
+  await a.ask({ add: '127.0.0.1:48830' });
+  const seen = await until(async () => (await a.ask({ list: true })).list.find((x) => x.id === 'oud' && x.online), 15000, 'oude versie zichtbaar');
+  assert.strictEqual(seen.secure, false);
+  assert.strictEqual(seen.lock, 'oud');
 });
