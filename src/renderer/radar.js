@@ -549,7 +549,7 @@ function vrCreate(body, w) {
       ctx.rotate(((a.track ?? 0) * Math.PI) / 180);
       ctx.drawImage(sp.c, -sp.size / 2, -sp.size / 2, sp.size, sp.size);
       ctx.restore();
-      drawn.push({ hex: a.hex, x: p[0], y: p[1], r: Math.max(px * 0.55, 12) });
+      drawn.push({ hex: a.hex, x: p[0], y: p[1], r: Math.max(px * 0.55, TOUCH.on() ? 24 : 12) });
     }
     ctx.globalAlpha = 1;
 

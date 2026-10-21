@@ -67,6 +67,25 @@ function openSettings(startTab) {
         h('p', {}, `Volledig scherm: ${FS_KEY} of de knop in de menubalk. Verlaat het met Esc of ${FS_KEY}. ` + 'Beweeg in volledig scherm de muis naar de bovenrand om de menubalk tijdelijk te tonen.'),
       ],
     },
+    bediening: {
+      label: 'Bediening', icon: 'touch',
+      build: () => {
+        const tryField = textInput('', { placeholder: 'Tik hier om het toetsenbord te proberen', autocomplete: 'off', spellcheck: false });
+        const tryNum = h('input', { class: 'input', type: 'time', value: '08:15' });
+        const hasTouch = navigator.maxTouchPoints > 0;
+        return [
+          h('h3', {}, 'Touchscreen'),
+          checkbox('Touchscreenmodus', !!s.touchMode, changed((v) => { s.touchMode = v; applyTouch(); })),
+          h('div', { class: 'hint' }, 'Grotere knoppen en aanraakvlakken, overal direct reageren op een tik, lang indrukken voor de uitleg die een muis bij het aanwijzen geeft, en in volledig scherm een greep bovenaan (of omlaag vegen vanaf de bovenrand) voor de menubalk. In de bewerkmodus sleep en schaal je widgets met je vinger. Kaarten: met twee vingers knijpen om te zoomen.'),
+          h('div', { class: 'hint' }, hasTouch ? `Dit scherm heeft een touchscreen (${navigator.maxTouchPoints} aanraakpunten). Bij de eerste start gaat de modus hier vanzelf aan.` : 'Op dit scherm is geen touchscreen gevonden; de modus werkt ook met de muis.'),
+          h('hr'),
+          h('h3', {}, 'Schermtoetsenbord'),
+          checkbox('Schermtoetsenbord gebruiken', !!s.osk, changed((v) => { s.osk = v; if (!v) oskHide(); renderTitlebar(); })),
+          h('div', { class: 'hint' }, 'Verschijnt vanzelf zodra je met je vinger een tekstveld aanraakt, ook in ingesloten pagina\'s zoals Windy, en verdwijnt weer als je klaar bent. Bij tijden en getallen komt een cijferblok. Met de muis en een gewoon toetsenbord blijft het weg. In touchscreenmodus staat er ook een knop Toetsenbord in de menubalk om het zelf te openen.'),
+          h('div', { class: 'row' }, field('Proberen', tryField), h('div', { class: 'field', style: 'flex:0 0 9rem' }, h('label', {}, 'Cijferblok'), tryNum)),
+        ];
+      },
+    },
     klokken: {
       label: 'Klokken', icon: 'clock',
       build: () => [
@@ -152,11 +171,15 @@ function openSettings(startTab) {
     meldingen: {
       label: 'Meldingen', icon: 'alert',
       build: () => [
+        h('h3', {}, 'Dempen'),
+        checkbox('Alle geluiden van dit dashboard dempen', s.muted, (v) => setMuted(v, true)),
+        h('div', { class: 'hint' }, 'Ook met de knop Geluid / Gedempt in de menubalk. Gedempt zwijgen het noodsquawksignaal, het briefinggeluid en ingesloten pagina\'s; de meldingen, de gloed en de rode balk blijven gewoon verschijnen. In de tabbalk staat dan GEDEMPT; één tik daarop zet het geluid weer aan.'),
+        h('hr'),
         h('h3', {}, 'Noodsquawk'),
         h('p', {}, 'Het dashboard bewaakt al het vliegverkeer in FIR Amsterdam (het Nederlandse luchtruim), ook als er geen Vluchtradar in beeld is. Zendt een toestel daar squawk 7500 (kaping), 7600 (radio-uitval) of 7700 (noodsituatie) uit, dan verschijnt bovenaan een rode melding met het toestel, de hoogte, de afstand tot Schiphol en een knop om het op de Vluchtradar te tonen. Om valse meldingen uit te sluiten moet de code minstens 30 seconden en in minstens 5 berichten gezien zijn, zonder gewone squawk ertussen; losse verminkte berichten en de losse noodstatus uit ADS-B tellen niet. Toestellen op de grond en verouderde posities tellen niet mee. Buiten FIR Amsterdam wordt een bevestigd toestel alleen op de Vluchtradar rood.'),
         checkbox('Melding tonen bij een noodsquawk', s.emergencyAlert, changed((v) => { s.emergencyAlert = v; trafficWatch(); if (!v) { emergency.watch.clear(); paintEmergency(); } })),
         checkbox('Geluidssignaal bij een nieuwe melding', s.emergencySound, changed((v) => (s.emergencySound = v))),
-        h('div', {}, h('button', { class: 'btn', onclick: () => chime() }, icon('alert'), 'Geluid testen')),
+        h('div', {}, h('button', { class: 'btn', onclick: () => soundTest(chime) }, icon('alert'), 'Geluid testen')),
         h('div', { class: 'hint' }, 'Een bevestigde melding verdwijnt en komt terug zodra het toestel een andere noodcode uitzendt. Elke melding komt ook in het logboek.'),
         h('hr'),
         ...briefingSettings(s, changed),
@@ -331,7 +354,7 @@ function briefingSettings(s, changed) {
     h('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' },
       h('button', { class: 'btn', onclick: async () => { const r = await window.palv.briefing.chooseSound(); if (r && r.error) return toast(r.error, true); paintInfo(r); await loadBriefingSound(); } }, icon('folder'), 'Eigen geluid kiezen…'),
       h('button', { class: 'btn', onclick: async () => { paintInfo(await window.palv.briefing.clearSound()); await loadBriefingSound(); } }, icon('trash'), 'Ingebouwde gong gebruiken'),
-      h('button', { class: 'btn', onclick: () => briefingSound() }, icon('alert'), 'Geluid testen'),
+      h('button', { class: 'btn', onclick: () => soundTest(briefingSound) }, icon('alert'), 'Geluid testen'),
       h('button', { class: 'btn primary', onclick: () => startBriefingTest() }, icon('clock'), 'Melding testen (20 s)'),
       h('button', { class: 'btn', onclick: changed(() => { s.briefings = DEFAULT_BRIEFINGS.map((b) => ({ ...b })); closeModalTop(); openSettings('meldingen'); }) }, icon('refresh'), 'Standaardtijden herstellen')),
     h('div', { class: 'hint' }, 'Het eigen geluid staat alleen op dit scherm (briefing-geluid in de gebruikersgegevens) en gaat niet mee in een export of naar andere schermen.'),

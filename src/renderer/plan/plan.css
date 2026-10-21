@@ -364,3 +364,22 @@ html[data-theme="light"] .zp-acft .zp-prof { background: var(--surface-3); }
 .zp-side-toggle:hover { width: 1.95rem; right: -1.95rem; background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .zp-side-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .zp.side-off .zp-side-toggle svg { transform: rotate(180deg); }
+
+/* recent searches: remove one (bin, or swipe left on a touchscreen) or clear them all */
+.zp-res-tools { display: flex; align-items: center; gap: 0.15rem; }
+.zp-res .w-tool.zp-bin { opacity: 0.8; }
+.zp-res-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.35rem 0.35rem 0.55rem; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.zp-res-clear { display: inline-flex; align-items: center; gap: 0.35rem; height: 1.7rem; padding: 0 0.65rem; border: 1px solid var(--border-strong); border-radius: 99px; background: transparent; color: var(--muted); font: 700 0.7rem var(--font-ui); letter-spacing: 0.02em; text-transform: none; cursor: pointer; }
+.zp-res-clear svg { width: 0.85rem; height: 0.85rem; }
+.zp-res-clear:hover { color: #ff6b62; border-color: #ff6b62; }
+.zp-res-clear.armed { background: #d0342c; border-color: #d0342c; color: #fff; }
+.zp-swipe { position: relative; overflow: hidden; border-radius: var(--radius-sm); transition: max-height 0.18s ease, opacity 0.18s ease; max-height: 6rem; }
+.zp-swipe > .zp-res { position: relative; background: var(--surface); touch-action: pan-y; transition: transform 0.18s ease; }
+.zp-swipe > .zp-res.on { background: var(--surface-3); }
+.zp-swipe.swiping > .zp-res { transition: none; }
+.zp-swipe-bg { position: absolute; inset: 0; display: none; align-items: center; justify-content: flex-end; gap: 0.45rem; padding-right: 1rem; background: #8f2a24; color: #fff; font-size: 0.78rem; font-weight: 700; }
+.zp-swipe-bg svg { width: 1rem; height: 1rem; }
+.zp-swipe.swiping .zp-swipe-bg, .zp-swipe.gone .zp-swipe-bg { display: flex; }
+.zp-swipe.past .zp-swipe-bg, .zp-swipe.gone .zp-swipe-bg { background: #d0342c; }
+.zp-swipe.gone { max-height: 0; opacity: 0; }
+body.touch .zp-res-clear { height: 2.3rem; padding: 0 0.9rem; font-size: 0.78rem; }

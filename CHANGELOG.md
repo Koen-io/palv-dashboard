@@ -1,5 +1,29 @@
 # Wijzigingen
 
+## 1.25.0
+
+### Dempen
+- Nieuwe knop **Geluid / Gedempt** in de menubalk, naast licht/donker. Eén tik en het dashboard is stil: het noodsquawksignaal, het briefinggeluid en het geluid van ingesloten pagina's (zoals Windy)
+- Meldingen, de oranje en rode gloed en de rode noodbalk blijven gewoon verschijnen, alleen zonder geluid
+- Gedempt staat er een oranje **GEDEMPT** in de tabbalk, ook in volledig scherm; één tik daarop zet het geluid weer aan. De keuze blijft bewaard, ook na een herstart. Ook onder Instellingen › Meldingen
+
+### Touchscreen
+- Nieuwe instellingen onder Instellingen › **Bediening**. Op een scherm met touchscreen staat de touchscreenmodus bij de eerste start vanzelf aan; daarna blijft bewaard wat je kiest
+- Grotere knoppen en aanraakvlakken in de menubalk, tabbladen, widgets, dialogen en Zoek & Plan, en alles reageert direct op een tik
+- Lang indrukken toont de uitleg die je met de muis bij het aanwijzen krijgt. Op de kaart is lang indrukken hetzelfde als rechtsklikken (bijvoorbeeld een routepunt verwijderen)
+- Volledig scherm: tik op de greep **MENU** bovenaan, of veeg omlaag vanaf de bovenrand, voor de menubalk
+- Bewerkmodus: widgets slepen en schalen met je vinger, met grote bolletjes
+- Vliegtuigen op de Vluchtradar zijn met een vinger makkelijker aan te tikken
+
+### Schermtoetsenbord
+- Een eigen toetsenbord op het scherm verschijnt zodra je met je vinger een tekstveld aanraakt, ook in ingesloten pagina's, en verdwijnt als je klaar bent. Met muis en gewoon toetsenbord blijft het weg
+- Bij tijden en getallen komt een cijferblok; letters, hoofdletters, cijfers, leestekens en é, ë, ü en °. Wissen en de pijltjes herhalen als je ze vasthoudt
+- Een venster schuift omhoog boven het toetsenbord; met Verplaatsen zet je het toetsenbord boven of onder in beeld
+- In- en uitschakelen onder Instellingen › Bediening; in touchscreenmodus staat er ook een knop **Toetsenbord** in de menubalk
+
+### Zoek & Plan
+- Recent gezochte plaatsen hebben een prullenbakje om ze een voor een te verwijderen, en bovenaan staat **Alles wissen** (tik twee keer, zodat het niet per ongeluk gebeurt). Op een touchscreen veeg je een item naar links om het te verwijderen. Er wordt nooit iets vanzelf gewist
+
 ## 1.24.1
 
 ### Schermoverzicht

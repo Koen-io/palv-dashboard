@@ -73,6 +73,18 @@ const ICONS = {
   alert: '<path d="M12 3 2 20h20Z"/><path d="M12 10v4.5M12 17.5v.3"/>',
   system: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 1.5V4M15 1.5V4M9 20v2.5M15 20v2.5M1.5 9H4M1.5 15H4M20 9h2.5M20 15h2.5"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7.5V12l3 2"/>',
+  volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11"/>',
+  volumeOff: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+  keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7.5 14h9"/>',
+  keyboardDown: '<rect x="3" y="3" width="18" height="11" rx="2"/><path d="M7 7h.01M10.5 7h.01M14 7h.01M17 7h.01M8 10.5h8M9 18l3 3 3-3"/>',
+  touch: '<path d="M9 11.5V5a1.6 1.6 0 0 1 3.2 0v6"/><path d="M12.2 10.5V9a1.6 1.6 0 0 1 3.2 0v2"/><path d="M15.4 10.5a1.6 1.6 0 0 1 3.2 0v4.2A6.3 6.3 0 0 1 12.3 21h-.8a6.3 6.3 0 0 1-4.9-2.4L3.9 15a1.6 1.6 0 0 1 2.4-2.1L9 15.5"/>',
+  backspace: '<path d="M21 5H8.5L2.5 12l6 7H21Z"/><path d="m11.5 9 6 6M17.5 9l-6 6"/>',
+  enter: '<path d="M20 5v7a3 3 0 0 1-3 3H5"/><path d="m9 11-4 4 4 4"/>',
+  shift: '<path d="M12 3.5 3.5 12H8v8h8v-8h4.5Z"/>',
+  left: '<path d="m15 6-6 6 6 6"/>',
+  right: '<path d="m9 6 6 6-6 6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  swap: '<path d="M7 4v14M3.5 14.5 7 18l3.5-3.5M17 20V6M13.5 9.5 17 6l3.5 3.5"/>',
 };
 const icon = (name, cls) =>
   h('span', { class: cls || '', style: 'display:contents', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${cls || ''}">${ICONS[name] || ''}</svg>` }).firstChild;

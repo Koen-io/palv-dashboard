@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('palv', {
     openLogs: () => ipcRenderer.invoke('app:openLogs'),
     openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
     reload: () => ipcRenderer.invoke('app:reload'),
+    setMuted: (on) => ipcRenderer.invoke('app:setMuted', on),
+  },
+  osk: {
+    key: (guestId, events) => ipcRenderer.send('osk:key', guestId || 0, events),
   },
   briefing: {
     sound: () => ipcRenderer.invoke('briefing:sound'),

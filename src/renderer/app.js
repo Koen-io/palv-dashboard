@@ -59,6 +59,10 @@ async function boot() {
   applyTheme(false);
   onWinState(await window.palv.win.getState());
   window.palv.win.onState(onWinState);
+  initTouch();
+  oskInit();
+  applyMuted();
+  $('#mute-flag').addEventListener('click', () => setMuted(false));
   window.palv.app.keepAwake(state.settings.keepAwake !== false);
   // The start-up entry points at the program itself; renewed so it follows a new install location.
   if (state.settings.autoStart) window.palv.app.setAutoStart(true);
@@ -96,7 +100,8 @@ async function boot() {
   window.addEventListener('keydown', (e) => {
     oledPointer();
     if (e.key === 'Escape') {
-      if (modalOpen()) $('#modal-root').lastChild.remove();
+      if (osk.open) oskHide();
+      else if (modalOpen()) $('#modal-root').lastChild.remove();
       else if (editing) setEditing(false);
       else if (winState.fullscreen) window.palv.win.setFullscreen(false);
     } else if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'e') {
@@ -110,7 +115,8 @@ async function boot() {
   let hideTimer = null;
   window.addEventListener('mousemove', (e) => {
     oledPointer();
-    if (!winState.fullscreen) return;
+    // A finger sends a mouse move along with each tap; the touch handling (touch.js) has the menu bar then.
+    if (!winState.fullscreen || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents)) return;
     const bar = $('#titlebar');
     if (e.clientY <= 2) { clearTimeout(hideTimer); hideTimer = null; document.body.classList.add('tb-reveal'); }
     else if (e.clientY > bar.offsetHeight + 12 && document.body.classList.contains('tb-reveal') && !hideTimer) {

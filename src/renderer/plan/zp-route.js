@@ -95,7 +95,7 @@ function zpRoute(ctx) {
       line = L.polyline(geo, { renderer: ctx.lines, color: ZP_ROUTE_COLOR, weight: 3.6, opacity: 1, interactive: false }).addTo(map);
     }
     list.forEach((wp, i) => {
-      const m = L.marker([wp.lat, wp.lon], { icon: wpIcon(i, wp), draggable: true, autoPan: true, keyboard: false, zIndexOffset: 1000, title: `${wp.name} — sleep om te verplaatsen, rechtsklik om te verwijderen` }).addTo(map);
+      const m = L.marker([wp.lat, wp.lon], { icon: wpIcon(i, wp), draggable: true, autoPan: true, keyboard: false, zIndexOffset: 1000, title: `${wp.name} — sleep om te verplaatsen, ${RCLICK()} om te verwijderen` }).addTo(map);
       m.on('dragstart', () => { ctx.dragging = true; });
       m.on('drag', (e) => { wp.lat = e.latlng.lat; wp.lon = e.latlng.lng; recompute(); redrawLine(); ctx.cv.request(); });
       m.on('dragend', (e) => { ctx.dragging = false; wp.named = false; move(i, e.target.getLatLng()); nameFor(wp); });
@@ -207,7 +207,7 @@ function zpRoute(ctx) {
           zpBtn('', () => ctx.setMode('route'), { icon: 'route', title: 'Routemodus (R): klik op de kaart om punten toe te voegen', cls: ctx.mode === 'route' ? 'on' : '' }),
           zpBtn('', reverse, { icon: 'refresh', title: 'Route omdraaien', disabled: list.length < 2 }),
           zpBtn('', () => list.length && confirmDialog('Route wissen', 'Alle routepunten verwijderen?', 'Wissen', clear), { icon: 'trash', title: 'Route wissen', disabled: !list.length }))),
-      list.length ? null : h('p', { class: 'zp-hint' }, 'Klik op ', h('b', {}, 'Route'), ' (of druk R) en klik op de kaart om punten te zetten. Sleep een punt om het te verplaatsen, sleep een + om een punt in te voegen, rechtsklik om te verwijderen. Zoekresultaten en platforms kun je ook direct aan de route toevoegen.'));
+      list.length ? null : h('p', { class: 'zp-hint' }, 'Klik op ', h('b', {}, 'Route'), ' (of druk R) en klik op de kaart om punten te zetten. Sleep een punt om het te verplaatsen, sleep een + om een punt in te voegen, ' + RCLICK() + ' om te verwijderen. Zoekresultaten en platforms kun je ook direct aan de route toevoegen.'));
     // Flight settings for this route.
     const settings = h('div', { class: 'zp-grid4' },
       field('Hoogte', zpNum(route.altFt != null ? Math.round(PlanUnits.altIn(route.altFt, cfg.units.alt)) : '', (v) => { route.altFt = v == null ? null : PlanUnits.altFt(v, cfg.units.alt); changed('alt'); }, { placeholder: String(Math.round(PlanUnits.altIn(PlanProfiles.planning(ctx.profile()).altFt, cfg.units.alt))), step: 100 }), PlanUnits.ALT[cfg.units.alt].name),

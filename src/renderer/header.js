@@ -49,6 +49,8 @@ function renderTitlebar() {
     h('button', { class: 'tb-btn' + (editing ? ' on' : ''), title: `Indeling bewerken (${MOD}E)`, onclick: () => setEditing(!editing) }, icon('edit'), editing ? 'Gereed' : 'Bewerken'),
     h('button', { class: 'tb-btn', title: 'Widget of app-tegel toevoegen', onclick: openAddWidget }, icon('plus'), 'Toevoegen'),
     h('button', { class: 'tb-btn', title: 'Thema wisselen: automatisch / licht / donker', onclick: cycleTheme }, icon(THEME_META[state.settings.theme].icon), THEME_META[state.settings.theme].label),
+    muteButton(),
+    oskButton(),
     h('button', { class: 'tb-btn', title: 'Instellingen', onclick: () => openSettings() }, icon('gear'), 'Instellingen'),
     h('button', { class: 'tb-btn', title: `Volledig scherm zonder randen en menubalk (${FS_KEY})`, onclick: () => window.palv.win.setFullscreen(!winState.fullscreen) }, icon(winState.fullscreen ? 'shrink' : 'expand'), winState.fullscreen ? 'Venster' : 'Volledig scherm'),
   ].filter(Boolean));
@@ -57,6 +59,39 @@ function renderTitlebar() {
     h('button', { class: 'tb-win', title: winState.maximized || winState.fullscreen ? 'Verkleinen' : 'Maximaliseren', onclick: () => window.palv.win.toggleMaximize() }, icon(winState.maximized || winState.fullscreen ? 'restore' : 'max')),
     h('button', { class: 'tb-win close', title: 'Afsluiten', onclick: () => window.palv.win.close() }, icon('close'))
   );
+}
+
+/* ---------- dempen ---------- */
+// One switch for every sound of this screen: the emergency chime, the briefing sound and the embedded pages.
+// The pop-ups, the glow and the red alert bar stay; only the sound goes. Kept with the other settings.
+const isMuted = () => !!(state && state.settings.muted);
+function muteButton() {
+  const m = isMuted();
+  return h('button', {
+    class: 'tb-btn tb-mute' + (m ? ' muted' : ''), 'aria-pressed': String(m), onclick: () => setMuted(!m),
+    title: m ? 'Gedempt: het dashboard maakt geen geluid. Tik om het geluid weer aan te zetten.' : 'Alle geluiden van dit dashboard dempen: noodsquawk, briefing en ingesloten pagina\'s. Meldingen blijven zichtbaar.',
+  }, icon(m ? 'volumeOff' : 'volume'), m ? 'Gedempt' : 'Geluid');
+}
+function setMuted(on, quiet) {
+  state.settings.muted = !!on;
+  applyMuted();
+  renderTitlebar();
+  save();
+  plog('info', on ? 'geluid gedempt' : 'geluid weer aan');
+  if (!quiet) toast(on ? 'Gedempt — meldingen blijven zichtbaar, maar zonder geluid' : 'Geluid staat weer aan');
+}
+function applyMuted() {
+  const m = isMuted();
+  window.palv.app.setMuted(m).catch(() => {});
+  if (m && brief.audio) brief.audio.pause();
+  const flag = $('#mute-flag');
+  if (flag && !flag.firstChild) flag.append(icon('volumeOff'), 'GEDEMPT');
+  if (flag) flag.hidden = !m;
+}
+// The test buttons in the settings say why they stay silent rather than seeming broken.
+function soundTest(play) {
+  if (isMuted()) toast('Het dashboard is gedempt. Zet het geluid aan met de knop in de menubalk om te testen.', true);
+  else play();
 }
 
 function cycleTheme() {

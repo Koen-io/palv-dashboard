@@ -16,6 +16,7 @@ const onScreen = (el) => el.isConnected && !!el.closest('.page.active') && docum
 function makeWebview(body, getUrl) {
   const wv = document.createElement('webview');
   wv.setAttribute('partition', WEB_PARTITION);
+  oskWatchWebview(wv);
   wv.setAttribute('src', getUrl());
   const stateEl = h('div', { class: 'w-state' }, h('div', {}, h('strong', {}, 'Laden…')));
   body.append(wv, stateEl);

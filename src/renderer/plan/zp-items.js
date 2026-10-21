@@ -96,7 +96,7 @@ function zpItems(ctx) {
   ctx.mapBox.append(bar);
   function paintMode() {
     const m = ctx.mode;
-    const tl = m === 'route' ? { name: 'Route bouwen', icon: 'route', color: ZP_ROUTE_COLOR, click: 'Klik op de kaart om punten toe te voegen. Sleep een punt om het te verplaatsen, sleep een + om ertussen te voegen, rechtsklik om te verwijderen.' } : ZP_TOOLS[m];
+    const tl = m === 'route' ? { name: 'Route bouwen', icon: 'route', color: ZP_ROUTE_COLOR, click: 'Klik op de kaart om punten toe te voegen. Sleep een punt om het te verplaatsen, sleep een + om ertussen te voegen, ' + RCLICK() + ' om te verwijderen.' } : ZP_TOOLS[m];
     bar.hidden = !tl;
     if (!tl) return;
     bar.style.setProperty('--zp-c', tl.color);

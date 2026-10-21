@@ -1,0 +1,194 @@
+/* ============================================================
+   Bediening: dempen, touchscreenmodus en het schermtoetsenbord
+   ============================================================ */
+
+/* ---------- dempen ---------- */
+.tb-btn.tb-mute.muted { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--amber-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 55%, transparent); }
+.tb-btn.tb-mute.muted:hover { background: var(--amber); color: #1a1200; }
+/* Also in fullscreen, where the menu bar is out of sight: a pill in the tab bar, one tap turns the sound back on. */
+#mute-flag {
+  position: relative; z-index: 2; margin-left: auto; align-self: center; flex: none;
+  display: flex; align-items: center; gap: 0.45rem; height: 1.85rem; padding: 0 0.85rem 0 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--amber) 60%, transparent); border-radius: 99px;
+  background: color-mix(in srgb, var(--amber) 16%, var(--hd-to)); color: var(--amber-soft);
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; white-space: nowrap;
+}
+#mute-flag[hidden] { display: none; }
+#mute-flag svg { width: 1rem; height: 1rem; }
+#mute-flag:hover { background: var(--amber); color: #1a1200; }
+#mute-flag:not([hidden]) ~ #health { margin-left: 0.6rem; }
+
+/* ---------- touchscreen mode ---------- */
+/* No grey flash, no double-tap delay, and a tap shows at once: everything reacts on touch, not after it. */
+body.touch { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+body.touch :is(.tb-btn, .tb-win, .btn, .w-tool, .tab, .seg button, .switch, .settings-nav button, .pick, .zp-btn, .zp-tab, .zp-tool-head, .zp-linkbtn, .zp-item-main, .zp-res, .w-edit-actions button, .leaflet-bar a, #mute-flag) {
+  transition: transform 0.06s ease-out, background-color 0.1s ease, color 0.1s ease;
+}
+body.touch :is(.tb-btn, .tb-win, .btn, .w-tool, .tab, .seg button, .switch, .settings-nav button, .pick, .zp-btn, .zp-tab, .zp-tool-head, .zp-item-main, .w-edit-actions button, #mute-flag):active { transform: scale(0.95); }
+body.touch :is(.btn, .w-tool, .tb-btn, .settings-nav button, .pick, .zp-tool-head, .zp-res):active { background: var(--surface-3); }
+body.touch .btn.primary:active { filter: brightness(0.92); background: var(--accent); }
+/* A finger leaves hover behind on what it touched; tiles would otherwise stay lifted. */
+body.touch:not(.editing) .widget.tile:hover .w-panel { transform: none; border-color: var(--border); background: var(--surface); }
+body.touch:not(.editing) .widget.tile:active .w-panel { transform: scale(0.97); border-color: var(--accent); background: var(--surface-2); }
+
+/* menu bar and tabs */
+body.touch #titlebar { height: 3.1rem; }
+body.touch .tb-btn { height: 2.45rem; padding: 0 0.8rem; font-size: 0.82rem; }
+body.touch .tb-btn svg { width: 1.2rem; height: 1.2rem; }
+body.touch .tb-win { width: 3.6rem; }
+body.touch .tb-win svg { width: 1.1rem; height: 1.1rem; }
+body.touch #page-bar { height: 2.9rem; }
+body.touch .tab { height: 2.45rem; padding: 0 1.3rem; }
+body.touch .tab.active { height: 2.7rem; }
+body.touch .tab .tab-tool { width: 1.9rem; height: 1.9rem; padding: 0.4rem; }
+body.touch .tab-add { width: 2.6rem; }
+body.touch #mute-flag, body.touch #health { height: 2.25rem; }
+
+/* widget title bars: bigger controls, and a hit area that reaches past the drawing */
+body.touch .w-head { height: 2.65rem; }
+body.touch .w-tools { gap: 0.4rem; }
+body.touch .w-tool { width: 2.2rem; height: 2.2rem; position: relative; }
+body.touch .w-tool svg { width: 1.15rem; height: 1.15rem; }
+body.touch .w-tool::after { content: ""; position: absolute; inset: -0.25rem; }
+body.touch .seg button { height: 2.05rem; padding: 0 0.8rem; }
+body.touch .w-head .seg button { padding: 0 0.65rem; }
+body.touch .switch { height: 2.2rem; }
+body.touch .switch-track { width: 2.5rem; height: 1.4rem; }
+body.touch .switch-track::after { width: 1.1rem; height: 1.1rem; }
+body.touch .switch.on .switch-track::after { transform: translateX(1.1rem); }
+body.touch select.input.wxm-prof, body.touch .vr-drop { height: 2.2rem; }
+
+/* dialogs and forms */
+body.touch .btn { height: 2.75rem; padding: 0 1.15rem; font-size: 0.9rem; }
+body.touch .input, body.touch select.input { height: 2.75rem; font-size: 0.95rem; }
+body.touch textarea.input { height: auto; }
+body.touch .check { min-height: 2.5rem; gap: 0.75rem; font-size: 0.92rem; }
+body.touch .check input { width: 1.45rem; height: 1.45rem; flex: none; }
+body.touch .modal-head .w-tool { width: 2.75rem; height: 2.75rem; }
+body.touch .modal .seg button { height: 2.5rem; padding: 0 1.1rem; }
+body.touch .settings { grid-template-columns: 12.5rem 1fr; }
+body.touch .settings-nav button { height: 2.85rem; font-size: 0.9rem; }
+body.touch .settings-pane { max-height: 70vh; }
+body.touch .pick { padding: 1.05rem; }
+body.touch .bf-set-row .input { width: 8rem; }
+body.touch .w-edit-actions button { width: 3.1rem; height: 3.1rem; }
+body.touch .w-edit-actions button svg { width: 1.35rem; height: 1.35rem; }
+body.touch #edit-bar { padding: 0.6rem 0.65rem 0.6rem 1.3rem; }
+body.touch ::-webkit-scrollbar { width: 0.9rem; height: 0.9rem; }
+
+/* edit mode: drag and pull with a finger; the round handles are bigger and grab well beyond their edge */
+body.touch .w-edit, body.touch .handle { touch-action: none; }
+body.touch .handle { width: 1.5rem; height: 1.5rem; border-width: 3px; }
+body.touch .handle::before { content: ""; position: absolute; inset: -0.8rem; border-radius: 50%; }
+body.touch .handle.n { top: -0.75rem; left: calc(50% - 0.75rem); }
+body.touch .handle.s { bottom: -0.75rem; left: calc(50% - 0.75rem); }
+body.touch .handle.e { right: -0.75rem; top: calc(50% - 0.75rem); }
+body.touch .handle.w { left: -0.75rem; top: calc(50% - 0.75rem); }
+body.touch .handle.ne { top: -0.75rem; right: -0.75rem; }
+body.touch .handle.sw { bottom: -0.75rem; left: -0.75rem; }
+body.touch .handle.nw { top: -0.75rem; left: -0.75rem; }
+body.touch .handle.se { bottom: -0.75rem; right: -0.75rem; }
+
+/* maps: zoom buttons a finger can hit */
+body.touch .leaflet-touch .leaflet-bar a, body.touch .leaflet-bar a { width: 2.75rem; height: 2.75rem; line-height: 2.75rem; font-size: 1.35rem; }
+body.touch .vr-follow { height: 2.5rem; font-size: 0.86rem; }
+
+/* Zoek & Plan */
+body.touch .zp-bar .seg button, body.touch .zp-btn, body.touch .zp-sel, body.touch .zp-num { height: 2.5rem; }
+body.touch .zp-btn { padding: 0 0.9rem; font-size: 0.82rem; }
+body.touch .zp-search, body.touch .zp-profsearch { height: 2.6rem; }
+body.touch .zp-q { font-size: 0.95rem; }
+body.touch .zp-res { padding: 0.6rem 0.55rem; }
+body.touch .zp-res .w-tool { opacity: 1; }
+body.touch .zp-tab { padding: 0.65rem 0.1rem 0.6rem; font-size: 0.66rem; }
+body.touch .zp-tab svg { width: 1.25rem; height: 1.25rem; }
+body.touch .zp-tool-head { padding: 0.8rem 0.8rem; }
+body.touch .zp-linkbtn { padding: 0.55rem 0; }
+body.touch .zp-item-main { padding: 0.55rem 0; }
+body.touch .zp-items-toggle { padding: 0.55rem 0.5rem; }
+body.touch .zp-undo { height: 2.2rem; padding: 0 0.8rem; }
+body.touch .zp-pop-close { height: 2.6rem; padding: 0 1rem 0 0.75rem; }
+body.touch .zp-pop .check { min-height: 2.2rem; }
+body.touch .zp-pop .check input { width: 1.3rem; height: 1.3rem; }
+body.touch .zp-card-actions .zp-btn { height: 2.3rem; }
+body.touch .zp-grid4 .seg button, body.touch .zp-tool-body > .field > .seg button { height: 2.3rem; }
+body.touch .zp-btnrow .input, body.touch .zp-wpr .input { height: 2.5rem; }
+body.touch .zp-modebar .btn { height: 2.4rem; }
+body.touch .zp-side-toggle { width: 2.4rem; right: -2.4rem; height: 6rem; margin-top: -3rem; }
+body.touch .zp-side-toggle:hover { width: 2.4rem; right: -2.4rem; }
+body.touch .zp-mapbin span { width: 34px; height: 34px; }
+
+/* Fullscreen without a mouse: a grip at the top edge brings the menu bar down (or swipe down from the edge). */
+#tb-grip {
+  position: fixed; top: 0; left: 50%; z-index: 49; transform: translateX(-50%);
+  display: none; align-items: center; justify-content: center; gap: 0.4rem;
+  width: 7.5rem; height: 1.7rem; padding: 0; border: 1px solid #2a3f61; border-top: 0; border-radius: 0 0 0.9rem 0.9rem;
+  background: rgba(13, 22, 38, 0.82); color: #b9c7dc; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.16em;
+  box-shadow: 0 0.3rem 1rem rgba(0, 0, 0, 0.45); touch-action: none;
+}
+#tb-grip svg { width: 1rem; height: 1rem; }
+body.touch.fullscreen:not(.tb-reveal) #tb-grip { display: flex; }
+body.mac.fullscreen #tb-grip { top: 24px; }
+
+/* Long press shows what a control is for: the tooltip a mouse would give. */
+.touch-tip {
+  position: fixed; z-index: 400; max-width: min(28rem, 90vw); padding: 0.6rem 0.85rem;
+  border-radius: 0.6rem; background: var(--navy-800); color: #fff; border: 1px solid #2a3f61;
+  box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.55); font-size: 0.86rem; line-height: 1.45; white-space: pre-line;
+  pointer-events: none; animation: pop 0.14s ease;
+}
+
+/* ---------- on-screen keyboard ---------- */
+:root { --osk-h: 0px; }
+/* A dialog moves up into the room above the keyboard. */
+body.osk-open:not(.osk-top) .modal-backdrop { padding-bottom: var(--osk-h); }
+body.osk-open:not(.osk-top) .modal { max-height: calc(100vh - var(--osk-h) - 2rem); }
+body.osk-open.osk-top .modal-backdrop { padding-top: var(--osk-h); }
+
+#osk {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
+  display: flex; justify-content: center; padding: 0 0.6rem;
+  pointer-events: none; transform: translateY(105%); transition: transform 0.14s ease-out; touch-action: none;
+}
+#osk.top { top: 0; bottom: auto; transform: translateY(-105%); }
+#osk.open { transform: none; }
+#osk.top.open { transform: none; }
+#osk[hidden] { display: none; }
+.osk-panel {
+  pointer-events: auto; width: min(76rem, 100%);
+  padding: 0.55rem 0.6rem 0.65rem; border-radius: 1rem 1rem 0 0;
+  background: #0b1424; border: 1px solid #2a3f61; border-bottom: 0;
+  box-shadow: 0 -0.6rem 2.4rem rgba(0, 0, 0, 0.6);
+  display: flex; flex-direction: column; gap: 0.45rem;
+  user-select: none; -webkit-user-select: none;
+}
+#osk.top .osk-panel { border-radius: 0 0 1rem 1rem; border-top: 0; border-bottom: 1px solid #2a3f61; box-shadow: 0 0.6rem 2.4rem rgba(0, 0, 0, 0.6); }
+#osk.num .osk-panel { width: min(30rem, 100%); }
+.osk-bar { display: flex; align-items: center; gap: 0.5rem; height: 2rem; padding: 0 0.15rem 0 0.4rem; color: #8ea2bf; font-size: 0.78rem; }
+.osk-bar b { color: #dfe7f3; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.osk-bar .osk-preview { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.45rem; }
+.osk-bar .osk-preview svg { width: 1rem; height: 1rem; flex: none; color: var(--amber); }
+.osk-bar button { display: flex; align-items: center; gap: 0.35rem; height: 2rem; padding: 0 0.7rem; border: 0; border-radius: 0.45rem; background: transparent; color: #b9c7dc; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; }
+.osk-bar button svg { width: 1.05rem; height: 1.05rem; }
+.osk-bar button:active { background: #1f3050; }
+.osk-rows { display: flex; flex-direction: column; gap: 0.42rem; }
+.osk-row { display: flex; gap: 0.42rem; justify-content: center; }
+.osk-key {
+  flex: 1 1 0; min-width: 0; height: 3.55rem; display: grid; place-items: center;
+  border: 0; border-radius: 0.55rem; background: #1c2b45; color: #f1f5fb;
+  font-size: 1.35rem; font-weight: 500; font-family: var(--font-ui);
+  box-shadow: 0 2px 0 #060b14; touch-action: none;
+}
+.osk-key svg { width: 1.45rem; height: 1.45rem; }
+.osk-key small { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em; }
+.osk-key.fn { background: #2a3d5e; color: #cfdbec; }
+.osk-key.wide { flex-grow: 1.55; }
+.osk-key.wider { flex-grow: 2.1; }
+.osk-key.space { flex-grow: 5.5; }
+.osk-key.enter { background: var(--amber); color: #1a1200; flex-grow: 1.9; }
+.osk-key.on { background: var(--owl-500); color: #fff; }
+.osk-key.lock { background: #fff; color: #0b1424; }
+.osk-key.down { background: #3f78c4; color: #fff; transform: translateY(1px); box-shadow: 0 1px 0 #060b14; }
+.osk-key.enter.down { background: #ffb941; color: #1a1200; }
+.osk-row.indent { padding: 0 0.4rem 0 2rem; }
+#osk.num .osk-key { height: 3.9rem; font-size: 1.55rem; }

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="system.css">
   <link rel="stylesheet" href="plan/plan.css">
+  <link rel="stylesheet" href="touch.css">
 </head>
 <body>
   <div id="app">
@@ -38,7 +39,7 @@
       <section class="hd-eham" id="eham" aria-label="Schiphol luchtvaartweer en baangebruik"></section>
     </header>
 
-    <nav id="page-bar" aria-label="Pagina's"><div id="page-tabs" role="tablist"></div><div id="health" role="alert" hidden></div></nav>
+    <nav id="page-bar" aria-label="Pagina's"><div id="page-tabs" role="tablist"></div><button id="mute-flag" type="button" title="Het dashboard is gedempt. Tik om het geluid weer aan te zetten." hidden></button><div id="health" role="alert" hidden></div></nav>
 
     <div id="emergency" role="alert" hidden></div>
 
@@ -58,6 +59,8 @@
   <script src="squawk.js"></script>
   <script src="core.js"></script>
   <script src="state.js"></script>
+  <script src="touch.js"></script>
+  <script src="osk.js"></script>
   <script src="header.js"></script>
   <script src="feeds.js"></script>
   <script src="vendor/leaflet/leaflet.js"></script>

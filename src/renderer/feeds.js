@@ -175,6 +175,7 @@ function checkEmergencies(snap) {
 
 // Two soft tones, made on the spot; no sound files needed.
 function chime() {
+  if (isMuted()) return;
   try {
     const ctx = emergency.audio || (emergency.audio = new AudioContext());
     const t0 = ctx.currentTime + 0.02;

@@ -13,6 +13,7 @@ async function loadBriefingSound() {
 }
 
 function briefingSound() {
+  if (isMuted()) return;
   if (brief.sound) {
     try {
       if (brief.audio) brief.audio.pause();
@@ -26,6 +27,7 @@ function briefingSound() {
 
 // An announcement gong, four rising bell tones; deliberately unlike the emergency chime.
 function gong() {
+  if (isMuted()) return;
   try {
     const ctx = emergency.audio || (emergency.audio = new AudioContext());
     const t0 = ctx.currentTime + 0.03;

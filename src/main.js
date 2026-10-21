@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu, screen, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session, Menu, screen, powerMonitor, webContents } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -257,6 +257,8 @@ app.on('web-contents-created', (_e, contents) => {
     webPreferences.contextIsolation = true;
     params.partition = WEB_PARTITION;
   });
+  // Dempen: a page embedded later stays silent too.
+  if (muted) contents.setAudioMuted(true);
   if (contents.getType() === 'webview') {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     watchdog.guardWebview(contents);
@@ -397,6 +399,28 @@ ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('app:keepAwake', (_e, on) => watchdog.keepAwake(!!on && !shotPath));
 ipcMain.handle('app:health', () => ({ ...watchdog.stats, awake: watchdog.awake() }));
 ipcMain.handle('app:openLogs', () => shell.openPath(log.dir()));
+// Dempen in the menu bar: the dashboard itself and every embedded page, at once and for pages opened later.
+let muted = false;
+ipcMain.handle('app:setMuted', (_e, on) => {
+  muted = !!on;
+  for (const wc of webContents.getAllWebContents()) if (!wc.isDestroyed()) wc.setAudioMuted(muted);
+  return muted;
+});
+// The on-screen keyboard types as a real keyboard would: into the dashboard itself, or into the embedded
+// page that has the focus. Only into the window that asks, or one of its own webviews.
+ipcMain.on('osk:key', (e, guestId, events) => {
+  let target = e.sender;
+  if (guestId) {
+    const wc = webContents.fromId(guestId);
+    if (!wc || wc.isDestroyed() || wc.getType() !== 'webview' || wc.hostWebContents !== e.sender) return;
+    target = wc;
+  }
+  if (!Array.isArray(events)) return;
+  for (const ev of events.slice(0, 8)) {
+    if (!ev || !['keyDown', 'char', 'keyUp'].includes(ev.type) || typeof ev.keyCode !== 'string' || ev.keyCode.length > 12) continue;
+    target.sendInputEvent({ type: ev.type, keyCode: ev.keyCode, modifiers: ev.shift ? ['shift'] : [] });
+  }
+});
 // The nightly fresh start. Done from here: location.reload() in the page counts as navigating away,
 // which will-navigate blocks for the dashboard window.
 ipcMain.handle('app:reload', (e) => { setTimeout(() => { if (!e.sender.isDestroyed()) e.sender.reloadIgnoringCache(); }, 200); });

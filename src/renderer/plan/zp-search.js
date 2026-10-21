@@ -56,13 +56,76 @@ function zpSearch(ctx) {
     items = list2;
     active = items.length ? 0 : -1;
     list.hidden = !items.length && !partial;
-    list.replaceChildren(...items.map((it, i) => h('div', { class: 'zp-res' + (i === active ? ' on' : ''), role: 'option', onmousedown: (e) => { e.preventDefault(); choose(it); }, onmouseenter: () => { active = i; paint(); } },
-      icon(ZP_KIND_ICON[it.kind] || 'globe'),
-      h('div', {}, h('b', {}, it.label), h('small', {}, it.sub || it.kind)),
-      h('button', { class: 'w-tool', title: 'Aan de route toevoegen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); choose(it, true); } }, icon('plus')))));
+    const recent = items.length && items.every((it) => it.kind === 'recent');
+    const rows = items.map((it, i) => {
+      const row = h('div', { class: 'zp-res' + (i === active ? ' on' : ''), role: 'option', onmousedown: (e) => { e.preventDefault(); choose(it); }, onmouseenter: () => { active = i; paint(); } },
+        icon(ZP_KIND_ICON[it.kind] || 'globe'),
+        h('div', {}, h('b', {}, it.label), h('small', {}, it.sub || it.kind)),
+        h('span', { class: 'zp-res-tools' },
+          h('button', { class: 'w-tool', title: 'Aan de route toevoegen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); choose(it, true); } }, icon('plus')),
+          recent ? h('button', { class: 'w-tool zp-bin', title: 'Uit de zoekgeschiedenis verwijderen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); forget(it.id); } }, icon('trash')) : null));
+      return recent ? swipeAway(row, () => forget(it.id)) : row;
+    });
+    // Recent searches: a head with "Alles wissen", which asks once more before it clears everything.
+    const head = recent ? h('div', { class: 'zp-res-head' }, h('span', {}, 'Recent gezocht'), clearAllButton()) : null;
+    list.replaceChildren(...[head, ...rows].filter(Boolean));
     if (!items.length && partial) list.hidden = true;
   }
-  const paint = () => [...list.children].forEach((el, i) => el.classList.toggle('on', i === active));
+  // Only on request, never by itself: one search from the history, or all of them.
+  function forget(id) {
+    cfg.recent = cfg.recent.filter((r) => r.id !== id);
+    ctx.save();
+    if (!input.value.trim()) run();
+    if (!cfg.recent.length) list.hidden = true;
+  }
+  function clearAllButton() {
+    let armed = null;
+    const b = h('button', { class: 'zp-res-clear', title: 'De hele zoekgeschiedenis wissen', onmousedown: (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!armed) { b.classList.add('armed'); b.lastChild.textContent = 'Zeker? Tik nog eens'; armed = setTimeout(() => { armed = null; b.classList.remove('armed'); b.lastChild.textContent = 'Alles wissen'; }, 3000); return; }
+      clearTimeout(armed);
+      cfg.recent = [];
+      ctx.save();
+      list.hidden = true;
+      toast('Zoekgeschiedenis gewist');
+    } }, icon('trash'), h('span', {}, 'Alles wissen'));
+    return b;
+  }
+  // Touchscreen: a row swiped to the left is removed; a short swipe springs back.
+  function swipeAway(row, onGone) {
+    const wrap = h('div', { class: 'zp-swipe' }, h('div', { class: 'zp-swipe-bg' }, icon('trash'), 'Verwijderen'), row);
+    let start = null;
+    row.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || e.target.closest('button')) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId, dx: 0, on: false };
+    });
+    row.addEventListener('pointermove', (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!start.on) {
+        if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start = null; return; } // scrolling the list
+        if (dx > -12) return;
+        start.on = true;
+        row.setPointerCapture(e.pointerId);
+        wrap.classList.add('swiping');
+      }
+      start.dx = Math.min(0, dx);
+      row.style.transform = `translateX(${start.dx}px)`;
+      wrap.classList.toggle('past', start.dx < -wrap.offsetWidth * 0.35);
+    });
+    const done = () => {
+      if (!start) return;
+      const gone = start.on && start.dx < -wrap.offsetWidth * 0.35;
+      start = null;
+      wrap.classList.remove('swiping');
+      row.style.transform = gone ? 'translateX(-105%)' : '';
+      if (gone) { wrap.classList.add('gone'); setTimeout(onGone, 180); }
+    };
+    row.addEventListener('pointerup', done);
+    row.addEventListener('pointercancel', done);
+    return wrap;
+  }
+  const paint = () => [...list.querySelectorAll('.zp-res')].forEach((el, i) => el.classList.toggle('on', i === active));
   async function choose(it, toRoute) {
     list.hidden = true;
     let p = it;

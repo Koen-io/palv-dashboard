@@ -68,6 +68,10 @@
     emergencySound: true,
     briefingAlert: true,
     briefingSound: true,
+    // 1.25: Dempen in the menu bar; touchscreen mode (null: not chosen yet, follows whether the screen has touch) and the on-screen keyboard.
+    muted: false,
+    touchMode: null,
+    osk: true,
     briefings: DEFAULT_BRIEFINGS.map((b) => ({ ...b })),
     snap: true,
     rotate: 0,

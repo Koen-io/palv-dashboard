@@ -166,7 +166,7 @@ function setEditing(on) {
   if (on) {
     bar.replaceChildren(
       h('b', {}, 'BEWERKMODUS'),
-      h('span', {}, 'Sleep widgets om ze te verplaatsen, trek aan de punten om de grootte te wijzigen.'),
+      h('span', {}, TOUCH.on() ? 'Sleep widgets met je vinger om ze te verplaatsen, trek aan de bolletjes om de grootte te wijzigen.' : 'Sleep widgets om ze te verplaatsen, trek aan de punten om de grootte te wijzigen.'),
       h('button', { class: 'btn pill', onclick: openAddWidget }, icon('plus'), 'Toevoegen'),
       h('button', { class: 'btn pill primary', onclick: () => setEditing(false) }, 'Gereed')
     );
