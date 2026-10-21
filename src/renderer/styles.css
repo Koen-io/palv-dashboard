@@ -319,8 +319,14 @@ body.editing .page.active {
 }
 .w-head-icon { width: 1rem; height: 1rem; color: var(--accent); flex: none; }
 .w-title { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-/* The controls keep their room; in a narrow widget the title gives way first. */
-.w-tools { margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex: none; }
+/* The controls keep their room; in a narrow widget the title gives way first, then a drop-down with a long
+   text (categories, weather profile) shortens. Buttons and switches never shrink, so the last button (reload)
+   stays inside the widget instead of running under its neighbour. */
+.w-tools { margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex: 0 1 auto; min-width: 0; }
+.w-tools > * { flex: none; }
+.w-tools > .vr-drop { flex: 0 1 auto; min-width: 0; }
+.w-tools > select.input { flex: 0 1 auto; min-width: 5rem; text-overflow: ellipsis; }
+.w-age { flex: none; }
 /* A touch tighter than elsewhere, so the full ADS-B bar leaves room for its title in the standard layout. */
 .w-head .seg button { padding: 0 0.55rem; }
 .w-head .switch { padding: 0 0.2rem; }

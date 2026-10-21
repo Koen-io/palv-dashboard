@@ -197,6 +197,28 @@
     return t;
   }
 
+  // The same straight leg, with what the wind does on it: minutes with wind and without, mean groundspeed,
+  // the mean wind along the line (as a vector), its mean head- and crosswind (head > 0 is headwind) and how
+  // much of the line has a known wind (`known`, 0..1; pieces without one count as calm). `minutes` is null
+  // when the wind is too strong to hold the course.
+  function directLeg(a, b, tasKt, windAt, atMs = Date.now()) {
+    const len = G.dist(a, b), calm = (len / NM / tasKt) * 60;
+    if (len < 1) return { minutes: 0, calm: 0, gs: tasKt, wind: null, head: 0, cross: 0, known: 1, course: null };
+    const n = Math.max(1, Math.ceil(len / (5 * NM)));
+    let t = 0, head = 0, cross = 0, got = 0;
+    const winds = [];
+    for (let k = 0; k < n; k += 1) {
+      const p0 = G.interp(a, b, k / n), p1 = G.interp(a, b, (k + 1) / n), mid = G.interp(a, b, (k + 0.5) / n);
+      const w = windAt ? windAt(mid.lat, mid.lon, atMs + t * 60000) : null;
+      if (w && w.speedKt != null) { got += 1; winds.push(w); }
+      const tri = triangle(G.bearing(p0, p1), tasKt, w ? w.dirDeg : 0, w ? w.speedKt : 0);
+      if (!tri) return { minutes: null, calm, gs: null, wind: meanWind(winds), head: null, cross: null, known: got / n, course: G.bearing(a, b) };
+      head += tri.head / n; cross += tri.cross / n;
+      t += (len / n / NM / tri.gs) * 60;
+    }
+    return { minutes: t, calm, gs: (len / NM) / (t / 60), wind: meanWind(winds), head, cross, known: got / n, course: G.bearing(a, b) };
+  }
+
   // Point of no return (back to `home` on the fuel there is, down to `keepKg`) along a planned route:
   // the furthest distance from which the way back still fits. Returns { m, lat, lon, tMin } or null
   // (the whole route is within reach: m = total, reached:false means even the start is out of reach).
@@ -326,5 +348,5 @@
     return { taxiKg, tripKg, contingencyKg, alternateKg, finalReserveKg, extraKg, requiredKg, onBoardKg, marginKg: onBoardKg == null ? null : onBoardKg - requiredKg };
   }
 
-  return { NM, KT, isaTemp, pressureRatio, densityRatio, densityAltitude, tasFromIas, iasFromTas, components, triangle, meanWind, vneAt, flowAt, planRoute, sampleAt, directTime, pointOfReturn, reach, finalReserve, fuelPlan, turnRadius, bankFor, orbit, driftOrbit, expandingSquare, sectorSearch, ladder, lengthOf, clamp };
+  return { NM, KT, isaTemp, pressureRatio, densityRatio, densityAltitude, tasFromIas, iasFromTas, components, triangle, meanWind, vneAt, flowAt, planRoute, sampleAt, directTime, directLeg, pointOfReturn, reach, finalReserve, fuelPlan, turnRadius, bankFor, orbit, driftOrbit, expandingSquare, sectorSearch, ladder, lengthOf, clamp };
 });

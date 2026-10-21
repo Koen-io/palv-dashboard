@@ -1,5 +1,19 @@
 # Wijzigingen
 
+## 1.25.1
+
+### Zoek & Plan: wie is er het snelst?
+- **Wind meerekenen** laat nu per toestel de wind zien die het onderweg krijgt: richting en sterkte op de eigen vlieghoogte, gemiddeld over de hele lijn naar het doel
+- Daaronder wat die wind op deze lijn doet: tegenwind of meewind, zijwind van links of rechts, en de grondsnelheid
+- Plus de vergelijking: de tijd zonder wind (of met wind, als de schakelaar uit staat) en hoeveel minuten de wind kost of scheelt, in oranje of groen
+- Bovenin staat of de wind al binnen is. Zolang hij wordt opgehaald staat er *Wind ophalen…*, en is Open-Meteo niet bereikbaar dan zegt het paneel eerlijk dat er windstil is gerekend
+- Het misleidende woord windstil bij elke regel is weg; onder de tijd staat nu *met wind* of *windstil*, afhankelijk van de schakelaar
+- De lijst werkt zich direct bij zodra de wind binnenkomt, in plaats van na een paar seconden
+
+### Titelbalk van de widgets
+- De knoppen rechts in een titelbalk lopen niet meer onder het venster ernaast door. Bij de Vluchtradar op een smaller of touchscreen-scherm wordt de categorieknop (Politie · Trauma · …) korter, zodat de knop voor opnieuw laden altijd helemaal zichtbaar blijft
+- De titel van een widget verdwijnt netjes als hij niet past, in plaats van half afgekapt te blijven staan
+
 ## 1.25.0
 
 ### Dempen

@@ -42,7 +42,7 @@ function zpWind(ctx) {
   // to Open-Meteo few (each point costs two calls).
   const STEP = 0.25;
   const key = (lat, lon, ms, ft) => `${Math.round(lat / STEP)}|${Math.round(lon / STEP)}|${Math.floor(ms / 3600e3)}|${Math.round(Math.max(0, ft) / 250)}`;
-  let queue = new Map(), flushTimer = null, waiters = [];
+  let queue = new Map(), flushTimer = null, waiters = [], asking = 0;
   function queuePoint(lat, lon, ms, ft) {
     const k = key(lat, lon, ms, ft);
     if (zpWindPoints.has(k) || queue.has(k)) return;
@@ -58,6 +58,7 @@ function zpWind(ctx) {
     for (const [k] of batch) queue.delete(k);
     if (!batch.length) return;
     let got = false;
+    asking += 1;
     try {
       const res = await window.palv.plan.windPoints(batch.map(([, q]) => q));
       const list = res && Array.isArray(res.list) ? res.list : [];
@@ -68,6 +69,7 @@ function zpWind(ctx) {
       });
       if (res && res.error) gridErr = res.error;
     } catch { for (const [k] of batch) zpWindMiss.set(k, Date.now()); }
+    asking -= 1;
     if (zpWindPoints.size > 20000) for (const k of [...zpWindPoints.keys()].slice(0, 5000)) zpWindPoints.delete(k);
     if (queue.size) flushTimer = setTimeout(flush, 300);
     const ws = waiters.splice(0);
@@ -84,6 +86,8 @@ function zpWind(ctx) {
     queuePoint(lat, lon, ms, ft);
     return fromGrid;
   };
+  // Whether point winds are still on their way (so a screen can say "wind ophalen…" instead of calm).
+  ctx.windBusy = () => queue.size > 0 || asking > 0;
   // Ask everything a route needs in one go; resolves true when new winds came in.
   function ensureRoute(points, ft, departMs, durMin) {
     if (points.length < 2) return Promise.resolve(false);

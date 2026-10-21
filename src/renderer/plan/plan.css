@@ -320,8 +320,6 @@ html[data-theme="light"] .zp-side { background: var(--surface); }
 .zp-windswitch.on { border-color: #8fd3ff; background: color-mix(in srgb, #8fd3ff 12%, transparent); }
 .zp-windswitch > span { color: var(--muted); }
 .zp-windswitch.on > span { color: var(--text); }
-.zp-windnote { color: #2f8fd0 !important; }
-html[data-theme="dark"] .zp-windnote { color: #8fd3ff !important; }
 
 /* profile: folded sections and search */
 .zp-fold > summary { list-style: none; cursor: pointer; }
@@ -383,3 +381,14 @@ html[data-theme="light"] .zp-acft .zp-prof { background: var(--surface-3); }
 .zp-swipe.past .zp-swipe-bg, .zp-swipe.gone .zp-swipe-bg { background: #d0342c; }
 .zp-swipe.gone { max-height: 0; opacity: 0; }
 body.touch .zp-res-clear { height: 2.3rem; padding: 0 0.9rem; font-size: 0.78rem; }
+/* who gets there first: the wind on each unit's line */
+.zp-first-wind { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.15rem; padding: 0.3rem 0.45rem; border-radius: var(--radius-sm); background: color-mix(in srgb, #8fd3ff 9%, transparent); border-left: 2px solid #2f8fd0; font-size: 0.7rem; line-height: 1.35; color: var(--muted); }
+.zp-first-wind.none { border-left-color: var(--border-strong); background: var(--surface-2); }
+.zp-first-wind b { display: inline; font-size: inherit; color: var(--text); }
+.zp-first-wdir { color: var(--text); }
+.zp-first-wdir i { display: inline-block; width: 1em; margin-right: 0.3rem; font-style: normal; font-weight: 800; color: #2f8fd0; text-align: center; }
+html[data-theme="dark"] .zp-first-wdir i { color: #8fd3ff; }
+.zp-first-wind b.slower { color: var(--amber); }
+.zp-first-wind b.faster { color: #2fa35a; }
+html[data-theme="dark"] .zp-first-wind b.faster { color: #3ecf6e; }
+.zp-first-wind .warn { color: var(--amber); font-weight: 700; }

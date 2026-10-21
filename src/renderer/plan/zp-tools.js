@@ -261,10 +261,11 @@ function zpTools(ctx) {
     const snap = trafficFeed.snap;
     const useWind = cfg.firstWind !== false;
     const own = cfg.fleet.groups || ['police'];
-    const time = (from, tas, alt) => {
-      const calm = PlanPerf.directTime(from, d, tas, null);
-      const windy = PlanPerf.directTime(from, d, tas, (la, lo, ms) => ctx.windAt(la, lo, ms, alt));
-      return { calm, windy, use: useWind ? windy : calm };
+    // The wind on the whole line at the height it is flown, at the time each piece is passed.
+    const leg = (from, tas, alt, startMin) => {
+      const r = PlanPerf.directLeg(from, d, tas, (la, lo, ms) => ctx.windAt(la, lo, ms, alt), Date.now() + startMin * 60000);
+      const add = (m) => (m == null ? null : m + startMin);
+      return { calm: add(r.calm), windy: add(r.minutes), minutes: add(useWind ? r.minutes : r.calm), wind: r.wind, head: r.head, cross: r.cross, gs: r.gs, known: r.known, course: r.course, alt };
     };
     for (const a of (snap && snap.ac) || []) {
       if (!a.group || !own.includes(a.group) || a.lat == null || a.alt === 'ground') continue;
@@ -273,16 +274,14 @@ function zpTools(ctx) {
       const pl = prof ? PlanProfiles.planning(prof) : null;
       const alt = typeof a.alt === 'number' ? a.alt : 1000;
       const tas = pl ? PlanPerf.tasFromIas(pl.ias, alt) : Math.max(90, a.gs || 0);
-      const t = time({ lat: a.lat, lon: a.lon }, tas, alt);
-      out.push({ kind: 'air', name: a.flight || a.reg || nm.reg || a.hex.toUpperCase(), sub: `${nm.reg || a.reg || ''} ${nm.type || a.type || ''} · in de lucht · ${Math.round(tas)} KTAS`, from: { lat: a.lat, lon: a.lon }, tas, minutes: t.use, calm: t.calm, windy: t.windy, dist: PlanGeo.dist(a, d) });
+      out.push({ kind: 'air', name: a.flight || a.reg || nm.reg || a.hex.toUpperCase(), sub: `${nm.reg || a.reg || ''} ${nm.type || a.type || ''} · in de lucht · ${Math.round(tas)} KTAS`, from: { lat: a.lat, lon: a.lon }, tas, dist: PlanGeo.dist(a, d), ...leg({ lat: a.lat, lon: a.lon }, tas, alt, 0) });
     }
     for (const b of ctx.bases()) {
       for (const id of ['ec135', 'aw139']) {
         const pl = PlanProfiles.planning(profiles[id]);
         const tas = PlanPerf.tasFromIas(pl.ias, pl.altFt);
-        const t = time(b, tas, pl.altFt);
         const start = b.startMin || 0;
-        out.push({ kind: 'base', name: `${profiles[id].name} vanaf ${b.name}`, sub: `+${start} min opstarten · ${Math.round(tas)} KTAS`, from: b, tas, minutes: t.use == null ? null : t.use + start, calm: t.calm == null ? null : t.calm + start, windy: t.windy == null ? null : t.windy + start, dist: PlanGeo.dist(b, d) });
+        out.push({ kind: 'base', name: `${profiles[id].name} vanaf ${b.name}`, sub: `+${start} min opstarten · ${Math.round(tas)} KTAS`, from: b, tas, dist: PlanGeo.dist(b, d), ...leg(b, tas, pl.altFt, start) });
       }
     }
     out.sort((x, y) => (x.minutes ?? 1e9) - (y.minutes ?? 1e9));
@@ -302,7 +301,7 @@ function zpTools(ctx) {
     });
   });
 
-  const rebuild = () => { buildPattern(); buildOrbit(); buildReach(); buildFirst(); ctx.cv.request(); ctx.emit('tools'); };
+  const rebuild = () => { buildPattern(); buildOrbit(); buildReach(); buildFirst(); ctx.cv.request(); ctx.emit('tools'); ctx.emit('first'); };
   for (const ev of ['select', 'profile', 'units', 'wind', 'ready']) ctx.on(ev, rebuild);
   ctx.timers.push(setInterval(() => { if (cfg.firstShow || ctx.cfg.sideTab === 'fleet') { buildFirst(); ctx.cv.request(); ctx.emit('first'); } }, 5000));
 
@@ -404,25 +403,51 @@ function zpTools(ctx) {
     return h('div', { class: 'zp-panel' }, h('p', { class: 'zp-hint' }, 'Kies een gereedschap en klik op de kaart. Er is steeds één gereedschap actief; Esc of nog een klik op de knop stopt het. Wat je plaatst blijft staan tot je het weggooit.'), measure, rings, pattern, orbit, reach);
   }
 
-  // Who gets there first, for the fleet panel.
+  // Who gets there first, for the fleet panel. Per unit the wind on its line (mean over the whole line, at
+  // its height), what that means along the line (head- or tailwind, crosswind), the groundspeed, and the
+  // time with and without wind, so the switch shows plainly what it changes.
   function firstPanel() {
     if (!ctx.selected) return h('p', { class: 'zp-hint warn' }, 'Klik een punt op de kaart (of zoek een adres): hier zie je dan welk toestel er het snelst kan zijn.');
     if (!T.first) buildFirst();
     const useWind = cfg.firstWind !== false;
+    const list = T.first.list;
+    const busy = ctx.windBusy();
+    const known = list.length ? Math.min(...list.map((r) => r.known)) : 1;
+    const status = known >= 1 ? 'Wind op vlieghoogte (Open-Meteo), langs de hele lijn en op het moment dat je er bent.'
+      : busy ? 'Wind ophalen bij Open-Meteo… de tijden worden zo bijgewerkt.'
+      : known > 0 ? 'Wind nog niet overal bekend: waar hij ontbreekt is windstil gerekend.'
+      : 'Wind nu niet beschikbaar (Open-Meteo onbereikbaar of tegoed op): windstil gerekend. Over twee minuten opnieuw.';
+    const kt = (v) => ctx.fmt.windSpeed(Math.abs(v));
+    // The difference as the two shown times differ (both rounded to the minute), "< 1 min" when they round the same.
+    const mins = (r) => { const d = Math.abs(Math.round(r.windy) - Math.round(r.calm)); return d < 1 ? '< 1 min' : `${d} min`; };
+    // The wind block under each unit: the wind itself, what it does on this line, and the time it costs or saves.
+    const windBlock = (r) => {
+      if (!(r.known > 0)) return h('div', { class: 'zp-first-wind none' }, h('span', {}, busy ? 'Wind ophalen…' : 'Wind onbekend: windstil gerekend'));
+      const w = r.wind;
+      const along = r.head == null ? null : Math.abs(r.head) < 0.5 ? 'geen tegen- of meewind' : `${kt(r.head)} ${r.head > 0 ? 'tegenwind' : 'meewind'}`;
+      const side = r.cross != null && Math.abs(r.cross) >= 3 ? `${kt(r.cross)} zijwind van ${r.cross > 0 ? 'rechts' : 'links'}` : null;
+      let effect = null;
+      if (r.windy == null) effect = h('span', { class: 'warn' }, 'Wind te sterk om deze koers te houden');
+      else {
+        const diff = r.windy - r.calm;
+        effect = h('span', {}, `${useWind ? 'zonder wind' : 'met wind'} ${ctx.fmt.dur(useWind ? r.calm : r.windy)} · `, h('b', { class: Math.abs(diff) < 0.5 ? '' : diff > 0 ? 'slower' : 'faster' }, Math.abs(diff) < 0.5 ? 'wind maakt geen verschil' : `wind ${diff > 0 ? 'kost' : 'scheelt'} ${mins(r)}`));
+      }
+      return h('div', { class: 'zp-first-wind' + (useWind ? ' on' : '') },
+        h('span', { class: 'zp-first-wdir' }, w ? h('i', { style: `transform: rotate(${Math.round(w.dirDeg + 180)}deg)`, title: 'Waar de wind naartoe waait' }, '↑') : null, h('b', {}, w ? ctx.fmt.wind(w.dirDeg, w.speedKt) : '—'), ` op ${ctx.fmt.alt(r.alt)}${r.known < 1 ? ' (deels bekend)' : ''}`),
+        h('span', {}, [along, side, r.gs ? `GS ${Math.round(r.gs)} kt` : null].filter(Boolean).join(' · ')),
+        effect);
+    };
     return h('div', { class: 'zp-sec open' },
       h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Wie is er het snelst?'), switchTool('LIJNEN', 'Lijnen naar het doel op de kaart tonen', () => cfg.firstShow, () => { cfg.firstShow = !cfg.firstShow; ctx.save(); ctx.cv.request(); })),
       h('div', { class: 'zp-windswitch' + (useWind ? ' on' : '') },
         switchTool('WIND MEEREKENEN', 'Wind op vlieghoogte meerekenen of windstil rekenen', () => cfg.firstWind !== false, () => { cfg.firstWind = cfg.firstWind === false; ctx.save(); buildFirst(); ctx.cv.request(); ctx.emit('first'); }),
-        h('span', {}, useWind ? 'Met de wind op vlieghoogte (Open-Meteo), langs de hele lijn' : 'Windstil gerekend: alleen afstand en snelheid')),
+        h('span', {}, useWind ? status : 'Uit: tijden windstil gerekend, alleen afstand en snelheid. De wind staat er ter vergelijking onder.')),
       h('p', { class: 'zp-hint' }, 'Naar ', h('b', {}, ctx.selected.label || ctx.fmt.coord(ctx.selected.lat, ctx.selected.lon)), ': rechtstreeks, op de planningssnelheid van het profiel. Vanaf de basis met de opstarttijd erbij.'),
-      h('div', { class: 'zp-first' }, T.first.list.map((r, i) => {
-        const diff = r.windy != null && r.calm != null ? r.windy - r.calm : null;
-        const windNote = diff == null ? '' : Math.abs(diff) < 0.5 ? 'wind maakt geen verschil' : `${useWind ? 'windstil' : 'met wind'} ${ctx.fmt.dur(useWind ? r.calm : r.windy)}`;
-        return h('div', { class: 'zp-first-row' + (i === 0 ? ' best' : '') },
-          h('span', { class: 'zp-first-n' }, String(i + 1)),
-          h('div', {}, h('b', {}, r.name), h('small', {}, r.sub)),
-          h('div', { class: 'zp-first-t' }, h('b', {}, r.minutes == null ? '—' : ctx.fmt.dur(r.minutes)), h('small', {}, `${ctx.fmt.dist(r.dist)} · ETA ${r.minutes == null ? '—' : ctx.fmt.time(Date.now() + r.minutes * 60000)}`), windNote ? h('small', { class: 'zp-windnote' }, windNote) : null));
-      })));
+      h('div', { class: 'zp-first' }, list.map((r, i) => h('div', { class: 'zp-first-row' + (i === 0 ? ' best' : '') },
+        h('span', { class: 'zp-first-n' }, String(i + 1)),
+        h('div', {}, h('b', {}, r.name), h('small', {}, r.sub)),
+        h('div', { class: 'zp-first-t' }, h('b', {}, r.minutes == null ? '—' : ctx.fmt.dur(r.minutes)), h('small', {}, `${ctx.fmt.dist(r.dist)} · ETA ${r.minutes == null ? '—' : ctx.fmt.time(Date.now() + r.minutes * 60000)}`), h('small', {}, useWind && r.known > 0 ? 'met wind' : 'windstil')),
+        windBlock(r)))));
   }
 
   return { panel, firstPanel, addRings, place, items, remove, state: T, setTape: (a) => { if (cfg.tapes.length >= 8) cfg.tapes.shift(); tapeOpen = { id: uid(), a, b: null, at: Date.now() }; cfg.tapes.push(tapeOpen); changed(); } };

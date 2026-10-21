@@ -23,9 +23,15 @@ function mountWidget(page, w) {
   const age = h('span', { class: 'w-age' });
   const panel = h('div', { class: 'w-panel' }, def.chromeless ? null : h('div', { class: 'w-head' }, icon(def.icon, 'w-head-icon'), title, age, tools), body);
   // The title shows whenever it fits in full beside the controls; rather than cut off, it leaves the icon to stand for it.
-  const titleFit = new ResizeObserver(() => { title.style.display = ''; if (title.scrollWidth > title.clientWidth + 1) title.style.display = 'none'; });
+  // Measured in the next frame: showing or hiding the title resizes the controls, which this observer also watches.
+  let fitFrame = 0;
+  const titleFit = new ResizeObserver(() => {
+    if (fitFrame) return;
+    fitFrame = requestAnimationFrame(() => { fitFrame = 0; title.style.display = ''; if (title.scrollWidth > title.clientWidth + 1) title.style.display = 'none'; });
+  });
   titleFit.observe(panel);
   titleFit.observe(tools);
+  titleFit.observe(age); // the age text changes width as the data comes in
   const edit = h(
     'div',
     { class: 'w-edit' },

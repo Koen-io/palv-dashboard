@@ -177,3 +177,29 @@ test('fuel policy: required fuel and final reserve', () => {
   const f = P.fuelPlan({ taxiKg: 30, tripKg: 400, alternateKg: 100, contingencyPct: 5, finalReserveKg: 200, extraKg: 0, onBoardKg: 800 });
   near(f.contingencyKg, 25, 1e-9); near(f.requiredKg, 755, 1e-9); near(f.marginKg, 45, 1e-9);
 });
+
+test('directLeg: wind along a straight line, with head/tail and the calm time beside it', () => {
+  // Schiphol → Rotterdam, course ≈210°, 24.3 NM at 120 KTAS: 12.2 min calm.
+  const calm = P.directLeg(EHAM, EHRD, 120, null);
+  near(calm.minutes, 12.15, 0.1, 'windstil');
+  assert.equal(calm.known, 0);
+  // 20 kt straight on the nose (from 210°): GS ≈100 kt, about 2.4 min slower.
+  const head = P.directLeg(EHAM, EHRD, 120, () => ({ dirDeg: 210, speedKt: 20 }));
+  near(head.calm, calm.minutes, 1e-9);
+  near(head.head, 20, 0.6, 'tegenwind');
+  near(head.gs, 100, 0.8, 'GS');
+  near(head.minutes - head.calm, 2.43, 0.15, 'wind kost');
+  near(head.wind.dirDeg, 210, 0.01); near(head.wind.speedKt, 20, 0.01);
+  assert.equal(head.known, 1);
+  // From behind: faster, head negative.
+  const tail = P.directLeg(EHAM, EHRD, 120, () => ({ dirDeg: 30, speedKt: 20 }));
+  assert.ok(tail.head < -19 && tail.minutes < tail.calm);
+  // Wind known on part of the line only: says so.
+  let n = 0;
+  const half = P.directLeg(EHAM, EHRD, 120, () => (n++ % 2 ? null : { dirDeg: 210, speedKt: 20 }));
+  assert.ok(half.known > 0.3 && half.known < 0.7);
+  // Too strong to hold the course: no time, the calm one stays.
+  const storm = P.directLeg(EHAM, EHRD, 60, () => ({ dirDeg: 300, speedKt: 80 }));
+  assert.equal(storm.minutes, null);
+  assert.ok(storm.calm > 0);
+});

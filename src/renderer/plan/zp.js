@@ -176,7 +176,7 @@ function zpCreate(body, w) {
   };
 
   /* ---------- wind lookups (filled by zp-wind.js) ---------- */
-  ctx.windAt = () => null;
+  ctx.windAt = () => null; ctx.windBusy = () => false;
 
   /* ---------- the store: private and shared files ---------- */
   ctx.loadStore = async () => {
