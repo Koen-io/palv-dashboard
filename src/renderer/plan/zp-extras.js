@@ -152,6 +152,13 @@ function zpExtras(ctx) {
     const sigHits = (sig || []).filter((s) => s.coords && s.to > Date.now() && PlanGeo.crossings(route, { type: 'Polygon', coordinates: [s.coords.concat([s.coords[0]])] }, 1000).length);
     const warns = zpRouteWarnings(ctx, plan);
     return h('div', { class: 'zp-panel' },
+      // What goes along to the aircraft first: one big button for the kneeboard, the files next to it.
+      h('div', { class: 'zp-sec zp-export' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Exporteren')),
+        h('div', { class: 'zp-export-grid' },
+          zpBtn('Kniebord (PDF)', () => exportPdf(), { icon: 'download', primary: true, cls: 'zp-export-main', title: 'Navigatielog met brandstof en waarschuwingen op één A4, om te printen of op de EFB' }),
+          zpBtn('GPX', () => exportGpx(), { icon: 'route', title: 'GPX-route voor tablet of GPS (ForeFlight, SkyDemon, Garmin)' }),
+          zpBtn('KML', () => exportKml(), { icon: 'globe', title: 'Route voor Google Earth' }),
+          zpBtn('Navlog', () => zpCopy(navText()), { icon: 'note', title: 'Navigatielog als tekst naar het klembord kopiëren' }))),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Samenvatting')),
         h('div', { class: 'zp-totals' },
           zpRow('Route', `${pts[0].name} → ${pts[pts.length - 1].name} · ${ctx.fmt.dist(plan.total.distM)}`),
@@ -162,21 +169,16 @@ function zpExtras(ctx) {
           zpRow('Brandstof na landing', plan.total.landingFuelKg == null ? '—' : ctx.fmt.fuel(plan.total.landingFuelKg)),
           zpRow('PNR / PSR', `${plan.pnr && plan.pnr.beyond ? ctx.fmt.dist(plan.pnr.m) : 'n.v.t.'} / ${plan.psr && plan.psr.beyond ? ctx.fmt.dist(plan.psr.m) : 'n.v.t.'}`))),
       warns.length ? h('div', { class: 'zp-warns' }, warns) : h('div', { class: 'zp-warn ok' }, icon('check'), 'Geen waarschuwingen voor snelheid, gewicht, brandstof en wind.'),
-      h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Verticaal profiel')), zpProfileCanvas(ctx, plan, crossed)),
-      h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, `Luchtruim langs de route (${crossed.length})`)), tbl,
+      // Both folded in to start with: with many layers they are long, and they are there when wanted.
+      zpFold('brief-vprof', 'Verticaal profiel', () => zpProfileCanvas(ctx, plan, crossed)),
+      zpFold('brief-air', 'Luchtruim langs de route', () => [tbl,
         h('p', { class: 'zp-hint' }, 'Bron openAIP. Niet voor navigatie: controleer altijd de AIP, NOTAM\'s en actuele activatie van TRA/TSA en EHR/EHD-gebieden.'),
-        h('div', { class: 'zp-btnrow' }, zpAipBtn(zpAipUrl(), 'eAIP Nederland (geldende cyclus)'), zpBtn('ICAO-kaart 1:500.000', () => zpOpenAip(ZP_AIP_CHART.front), { icon: 'globe', title: 'Officiële VFR-kaart van LVNL (PDF, voorzijde)' }))),
+        h('div', { class: 'zp-btnrow' }, zpAipBtn(zpAipUrl(), 'eAIP Nederland (geldende cyclus)'), zpBtn('ICAO-kaart 1:500.000', () => zpOpenAip(ZP_AIP_CHART.front), { icon: 'globe', title: 'Officiële VFR-kaart van LVNL (PDF, voorzijde)' }))], { badge: crossed.length }),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Weer langs de route'), switchTool('STATIONS', 'Weerstations op de kaart', () => cfg.wx.metar, () => { cfg.wx.metar = !cfg.wx.metar; ctx.save(); applyWx(); ctx.emit('layers'); })),
         !cfg.wx.metar ? h('p', { class: 'zp-hint' }, 'Zet de weerstations aan om METAR en TAF langs de route te zien, getoetst aan de BOM-minima (profiel zoals op de weerradar).')
           : near.length ? h('div', { class: 'zp-metars' }, near.map(({ st, n, a }) => h('div', { class: 'zp-metar ' + a.status }, h('b', {}, `${st.icao} · ${ctx.fmt.dist(n.m)} langs de route, ${ctx.fmt.dist(n.off)} ernaast`), h('code', {}, st.raw), st.tafRaw ? h('code', { class: 'taf' }, st.tafRaw) : null)))
             : h('p', { class: 'zp-hint' }, 'Geen weerstations binnen 15 NM van de route.'),
-        sigHits.length ? h('div', { class: 'zp-warns' }, sigHits.map((s) => h('div', { class: 'zp-warn bad' }, icon('alert'), `SIGMET ${s.fir || ''} ${s.hazard || ''} ${s.qualifier || ''} tot ${zulu(s.to)}`))) : null),
-      h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Exporteren')),
-        h('div', { class: 'zp-btnrow' },
-          zpBtn('Kniebord (PDF)', () => exportPdf(), { icon: 'download', primary: true }),
-          zpBtn('GPX', () => exportGpx(), { icon: 'download', title: 'GPX-route voor tablet of GPS (ForeFlight, SkyDemon, Garmin)' }),
-          zpBtn('KML', () => exportKml(), { icon: 'download', title: 'Google Earth' }),
-          zpBtn('Navlog kopiëren', () => zpCopy(navText()), { icon: 'note' }))));
+        sigHits.length ? h('div', { class: 'zp-warns' }, sigHits.map((s) => h('div', { class: 'zp-warn bad' }, icon('alert'), `SIGMET ${s.fir || ''} ${s.hazard || ''} ${s.qualifier || ''} tot ${zulu(s.to)}`))) : null));
   }
 
   /* ---------- exports ---------- */

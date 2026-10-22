@@ -313,6 +313,20 @@ const zpSelect = (options, value, onChange, attrs = {}) => {
   el.addEventListener('change', () => onChange(el.value));
   return el;
 };
+// A section that folds in and out with a click on its head. It remembers open or closed (by `key`) while
+// the dashboard runs, also when the panel is drawn again; `build` makes the contents the first time it opens.
+const ZP_FOLDS = new Map();
+function zpFold(key, title, build, opts = {}) {
+  const open = ZP_FOLDS.has(key) ? ZP_FOLDS.get(key) : !!opts.open;
+  const body = h('div', { class: 'zp-fold-body' });
+  let built = false;
+  const fill = () => { if (built) return; built = true; const kids = build(); body.append(...(Array.isArray(kids) ? kids : [kids]).filter(Boolean)); };
+  const el = h('details', { class: (opts.cls || 'zp-sec') + ' zp-fold', open: open || null },
+    h('summary', { class: 'zp-sec-head' }, h('h3', {}, title), opts.badge != null ? h('span', { class: 'zp-fold-badge' }, String(opts.badge)) : null, h('i', { class: 'zp-chev' })), body);
+  if (open) fill();
+  el.addEventListener('toggle', () => { ZP_FOLDS.set(key, el.open); if (el.open) fill(); });
+  return el;
+}
 // Source of a profile value, shown in a tooltip and as a small tag.
 const zpSrc = (field) => (field && field.src ? `${field.src}${field.note ? ' — ' + field.note : ''}` : '');
 async function zpCopy(text) {

@@ -157,7 +157,7 @@
 .zp-navlog.brief tr.hot td { background: color-mix(in srgb, #ff9f1c 12%, transparent); }
 .zp-navlog.brief .zp-dot { margin-right: 0.3rem; }
 .zp-wps { display: flex; flex-direction: column; gap: 0.25rem; }
-.zp-wpr { display: grid; grid-template-columns: 1.6rem 1fr auto auto; gap: 0.3rem; align-items: center; padding: 0.15rem; border-radius: var(--radius-sm); cursor: grab; }
+.zp-wpr { display: grid; grid-template-columns: auto 1.6rem 1fr auto auto; gap: 0.3rem; align-items: center; padding: 0.15rem; border-radius: var(--radius-sm); background: var(--surface-2); position: relative; }
 .zp-wpr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .zp-wpr .input { height: 1.75rem; font-size: 0.78rem; }
 .zp-wpn { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #ff9f1c; color: #0a0f18; font-size: 0.68rem; font-weight: 800; }
@@ -392,3 +392,75 @@ html[data-theme="dark"] .zp-first-wdir i { color: #8fd3ff; }
 .zp-first-wind b.faster { color: #2fa35a; }
 html[data-theme="dark"] .zp-first-wind b.faster { color: #3ecf6e; }
 .zp-first-wind .warn { color: var(--amber); font-weight: 700; }
+
+/* ---------- route: the name bar with Opslaan, and the points right under it ---------- */
+.zp-routecard { gap: 0.45rem; }
+.zp-rhead { display: flex; align-items: center; gap: 0.4rem; }
+.zp-rname { flex: 1; min-width: 0; height: 2.1rem; padding: 0 0.45rem; margin-left: -0.3rem; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text); font: 600 1rem var(--font-display); letter-spacing: 0.01em; text-overflow: ellipsis; }
+.zp-rname::placeholder { color: var(--text); opacity: 0.55; }
+.zp-rname:hover { border-color: var(--border); background: var(--surface); }
+.zp-rname:focus { outline: 0; border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.zp-rhead .zp-save { flex: none; font-weight: 700; padding: 0 0.85rem; }
+.zp-rhead .zp-save.done { background: color-mix(in srgb, #3ecf6e 14%, transparent); border-color: color-mix(in srgb, #3ecf6e 55%, transparent); color: var(--text); }
+.zp-rhead .zp-save.done svg { color: #3ecf6e; }
+.zp-rhead .zp-sec-tools { padding-left: 0.4rem; border-left: 1px solid var(--border); }
+
+/* the grip: six dots in a small frame, hold and drag up or down */
+.zp-grip { display: grid; place-items: center; width: 1.55rem; height: 2rem; padding: 0; border: 1px solid var(--border-strong); border-radius: 0.4rem; background: var(--surface); color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.zp-grip svg { width: 0.55rem; height: 0.9rem; pointer-events: none; }
+.zp-grip:hover, .zp-grip:focus-visible { color: var(--accent); border-color: var(--accent); outline: 0; }
+.zp-wps.sorting .zp-wpr { transition: transform 0.16s ease; }
+.zp-wps.sorting .zp-wpr.dragging { transition: none; z-index: 2; background: var(--surface-3); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1.5px var(--accent); }
+.zp-wps.sorting, .zp-wps.sorting * { cursor: grabbing !important; }
+.zp-wpr.dragging .zp-grip { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+.zp-wpr .zp-bin:hover { color: #ff6b62; }
+body.touch .zp-grip { width: 2.3rem; height: 2.5rem; border-radius: 0.5rem; }
+body.touch .zp-grip svg { width: 0.7rem; height: 1.15rem; }
+body.touch .zp-wpr .input { height: 2.3rem; font-size: 0.86rem; }
+body.touch .zp-wps { gap: 0.35rem; }
+body.touch .zp-rname { height: 2.5rem; }
+
+/* folded sections: the number in the head says how much is inside */
+.zp-fold-badge { flex: none; min-width: 1.5rem; height: 1.3rem; padding: 0 0.45rem; display: inline-grid; place-items: center; border-radius: 99px; background: var(--surface-3); color: var(--muted); font-size: 0.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.zp-fold > summary .zp-chev { margin-left: 0.35rem; flex: none; }
+.zp-fold:not([open]) > .zp-fold-body { display: none; }
+.zp-sec.zp-fold > summary:hover h3 { color: var(--accent); }
+body.touch .zp-fold > summary { min-height: 2.2rem; }
+
+/* briefing: export at the top */
+.zp-export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+.zp-export-grid .zp-btn { justify-content: center; }
+.zp-export-grid .zp-export-main { grid-column: 1 / -1; height: 2.4rem; font-size: 0.86rem; font-weight: 700; }
+.zp-export-grid .zp-export-main svg { width: 1.05rem; height: 1.05rem; }
+body.touch .zp-export-grid .zp-btn { height: 2.4rem; }
+body.touch .zp-export-grid .zp-export-main { height: 2.8rem; }
+
+/* tools: the card of the tool chosen last stays open */
+.zp-tool.open { border-color: color-mix(in srgb, var(--zp-c) 55%, var(--border)); }
+
+/* point card: one coordinate, the others behind the arrow at the right of its bar */
+.zp-coord-main { display: flex; align-items: stretch; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px; background: rgba(255, 255, 255, 0.04); overflow: hidden; }
+.zp-coord-main .zp-coord { flex: 1; min-width: 0; border: 0; border-radius: 0; background: transparent; padding: 0.4rem 0.5rem; }
+.zp-coord-main .zp-coord b { font-size: 0.8rem; }
+.zp-coord-main .zp-coord:hover { background: rgba(255, 255, 255, 0.08); }
+.zp-coord-more { flex: none; width: 2.3rem; display: grid; place-items: center; padding: 0; border: 0; border-left: 1px solid rgba(255, 255, 255, 0.12); background: transparent; color: #8ea2bf; cursor: pointer; }
+.zp-coord-more .zp-chev { margin: 0; transform: rotate(45deg) translate(-0.1rem, -0.1rem); }
+.zp-coord-more .zp-chev.up { transform: rotate(-135deg) translate(-0.1rem, -0.1rem); }
+.zp-coord-more:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.zp-coords-rest { display: grid; gap: 0.2rem; margin-top: 0.2rem; }
+.zp-coords-rest[hidden] { display: none; }
+body.touch .zp-coord-more { width: 2.9rem; }
+body.touch .zp-coord-main .zp-coord { padding: 0.55rem 0.6rem; }
+
+/* point card: a folded section on the dark card */
+.zp-cfold { border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 0.35rem; }
+.zp-cfold > summary { padding: 0.25rem 0; }
+.zp-cfold > summary h3 { margin: 0; flex: 1; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8ea2bf; }
+.zp-cfold > summary:hover h3 { color: #e9eff8; }
+.zp-cfold .zp-fold-badge { background: rgba(255, 255, 255, 0.08); color: #c6d4e8; }
+.zp-cfold .zp-chev { color: #8ea2bf; }
+.zp-cfold > .zp-fold-body { margin-top: 0.3rem; }
+.zp-rhead .zp-sec-tools { gap: 0.2rem; padding-left: 0.3rem; }
+.zp-rhead .zp-sec-tools .zp-btn { width: 1.95rem; padding: 0; justify-content: center; }
+body.touch .zp-rhead .zp-sec-tools .zp-btn { width: 2.4rem; height: 2.4rem; }
+body.touch .zp-rhead .zp-save { height: 2.4rem; }

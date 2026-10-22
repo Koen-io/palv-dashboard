@@ -198,16 +198,96 @@ function zpRoute(ctx) {
   const tick = setInterval(() => { if (!route.departAt && plan) { recompute(); ctx.cv.request(); } }, 60000);
   ctx.timers.push(tick);
 
-  /* ---------- the panel: points and navigation log ---------- */
+  /* ---------- saving ---------- */
+  // What makes a saved route: compared with what was saved last, so the button can say "Opgeslagen".
+  const sig = () => JSON.stringify([route.name || '', pts().map((p) => [+p.lat.toFixed(6), +p.lon.toFixed(6), p.name]), route.altFt ?? null, route.ias ?? null, cfg.profile]);
+  const autoName = () => (pts().length > 1 ? `${pts()[0].name} – ${pts()[pts().length - 1].name}` : '');
+  function save() {
+    if (pts().length < 2) { toast('Een route heeft minstens twee punten', true); return; }
+    const name = (route.name || '').trim() || autoName();
+    route.name = name;
+    const saved = Object.entries(ctx.store.shared.routes || {});
+    const existing = saved.find(([, r]) => r.name === name);
+    const id = existing ? existing[0] : Math.random().toString(36).slice(2, 10);
+    ctx.put('shared', 'routes', id, { name, points: pts().map(({ lat, lon, name: n }) => ({ lat, lon, name: n })), profile: cfg.profile, altFt: route.altFt, ias: route.ias })
+      .then(() => { route.savedSig = sig(); ctx.save(); ctx.emit('route', 'saved'); toast(`Route "${name}" opgeslagen${existing ? ' (bijgewerkt)' : ''}`); });
+  }
+
+  /* ---------- reordering the points: hold the grip and drag, by finger or mouse ---------- */
+  function reorder(from, to) {
+    if (from === to || from < 0 || to < 0 || to >= pts().length) return;
+    const [m] = pts().splice(from, 1);
+    pts().splice(to, 0, m);
+    selectedWp = -1;
+    changed('order');
+  }
+  function startDrag(e, box, from) {
+    if (e.button > 0) return;
+    const grip = e.currentTarget;
+    const rows = [...box.children], rects = rows.map((r) => r.getBoundingClientRect());
+    if (rows.length < 2) return;
+    e.preventDefault();
+    const step = rects[1].top - rects[0].top, row = rows[from], startY = e.clientY;
+    const minDy = rects[0].top - rects[from].top, maxDy = rects[rects.length - 1].top - rects[from].top;
+    let to = from;
+    try { grip.setPointerCapture(e.pointerId); } catch { /* the drag still works while the pointer stays on the grip */ }
+    ctx.holdPanel = true;
+    box.classList.add('sorting'); row.classList.add('dragging');
+    const move = (ev) => {
+      const dy = Math.max(minDy - step * 0.3, Math.min(maxDy + step * 0.3, ev.clientY - startY));
+      row.style.transform = `translateY(${dy}px)`;
+      to = Math.max(0, Math.min(rows.length - 1, from + Math.round(dy / step)));
+      rows.forEach((r, k) => {
+        if (k === from) return;
+        const shift = from < to && k > from && k <= to ? -step : to < from && k >= to && k < from ? step : 0;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
+      ctx.holdPanel = false;
+      if (to !== from) reorder(from, to);
+      else { box.classList.remove('sorting'); row.classList.remove('dragging'); for (const r of rows) r.style.transform = ''; }
+      if (ctx.releasePanel) ctx.releasePanel();
+    };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+  }
+  const GRIP = '<svg viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2.5" cy="2.5" r="1.5"/><circle cx="7.5" cy="2.5" r="1.5"/><circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/><circle cx="2.5" cy="13.5" r="1.5"/><circle cx="7.5" cy="13.5" r="1.5"/></g></svg>';
+
+  /* ---------- the panel: the route with its points, the settings and the navigation log ---------- */
   function panel() {
     const pl = ctx.planning(), list = pts();
-    const head = h('div', { class: 'zp-sec' },
-      h('div', { class: 'zp-sec-head' }, h('h3', {}, route.name || 'Route'),
-        h('div', { class: 'zp-sec-tools' },
-          zpBtn('', () => ctx.setMode('route'), { icon: 'route', title: 'Routemodus (R): klik op de kaart om punten toe te voegen', cls: ctx.mode === 'route' ? 'on' : '' }),
-          zpBtn('', reverse, { icon: 'refresh', title: 'Route omdraaien', disabled: list.length < 2 }),
-          zpBtn('', () => list.length && confirmDialog('Route wissen', 'Alle routepunten verwijderen?', 'Wissen', clear), { icon: 'trash', title: 'Route wissen', disabled: !list.length }))),
-      list.length ? null : h('p', { class: 'zp-hint' }, 'Klik op ', h('b', {}, 'Route'), ' (of druk R) en klik op de kaart om punten te zetten. Sleep een punt om het te verplaatsen, sleep een + om een punt in te voegen, ' + RCLICK() + ' om te verwijderen. Zoekresultaten en platforms kun je ook direct aan de route toevoegen.'));
+    const savedNow = list.length > 1 && route.savedSig && route.savedSig === sig();
+    const nameIn = h('input', { class: 'zp-rname', type: 'text', value: route.name || '', maxlength: 60, placeholder: autoName() || 'Nieuwe route', title: route.name || autoName() || 'Naam van de route', 'aria-label': 'Naam van de route' });
+    nameIn.addEventListener('change', () => { route.name = nameIn.value.trim().slice(0, 60); ctx.save(); ctx.emit('route', 'rename'); });
+    nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameIn.blur(); });
+    const saveBtn = zpBtn(savedNow ? 'Opgeslagen' : 'Opslaan', save, { icon: savedNow ? 'check' : 'download', primary: !savedNow, cls: 'zp-save' + (savedNow ? ' done' : ''), disabled: list.length < 2,
+      title: list.length < 2 ? 'Zet eerst minstens twee punten' : savedNow ? 'Deze route is opgeslagen en gaat mee naar de andere schermen' : 'Route opslaan (gaat mee naar de andere schermen; terug te vinden onder Opgeslagen)' });
+    const head = h('div', { class: 'zp-rhead' }, nameIn, saveBtn,
+      h('div', { class: 'zp-sec-tools' },
+        zpBtn('', () => ctx.setMode('route'), { icon: 'plus', title: ctx.mode === 'route' ? 'Routemodus aan: klik op de kaart om punten toe te voegen (R of Esc om te stoppen)' : 'Routemodus (R): klik op de kaart om punten toe te voegen', cls: ctx.mode === 'route' ? 'on' : '' }),
+        zpBtn('', reverse, { icon: 'swap', title: 'Route omdraaien', disabled: list.length < 2 }),
+        zpBtn('', () => list.length && confirmDialog('Route wissen', 'Alle routepunten verwijderen?', 'Wissen', clear), { icon: 'trash', title: 'Route wissen', disabled: !list.length })));
+    // The points, right under the name: grip to reorder, name to change, zoom and remove.
+    const box = h('div', { class: 'zp-wps' });
+    list.forEach((wp, i) => {
+      const nIn = h('input', { class: 'input', value: wp.name, 'aria-label': `Naam van punt ${i + 1}`, onchange: (e) => { wp.name = e.target.value.slice(0, 40) || `WP${i + 1}`; wp.named = true; changed('name'); } });
+      const grip = h('button', { class: 'zp-grip', title: 'Vasthouden en omhoog of omlaag slepen om de volgorde te wijzigen (of pijltjestoetsen)', 'aria-label': `Punt ${i + 1} verplaatsen`, html: GRIP });
+      grip.addEventListener('pointerdown', (e) => startDrag(e, box, i));
+      grip.addEventListener('keydown', (e) => {
+        const to = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : null;
+        if (to == null) return;
+        e.preventDefault(); reorder(i, to);
+        requestAnimationFrame(() => requestAnimationFrame(() => { const g = ctx.side.querySelectorAll('.zp-wps .zp-grip')[to]; if (g) g.focus(); }));
+      });
+      box.append(h('div', { class: 'zp-wpr' + (i === selectedWp ? ' sel' : '') }, grip,
+        h('span', { class: 'zp-wpn' }, i === 0 ? 'A' : i === list.length - 1 && list.length > 1 ? 'B' : String(i)), nIn,
+        h('button', { class: 'w-tool', title: 'Inzoomen op dit punt', onclick: () => map.setView([wp.lat, wp.lon], Math.max(map.getZoom(), 11)) }, icon('target')),
+        h('button', { class: 'w-tool zp-bin', title: 'Punt verwijderen', onclick: () => remove(i) }, icon('close'))));
+    });
+    const top = h('div', { class: 'zp-sec zp-routecard' }, head,
+      list.length ? box : h('p', { class: 'zp-hint' }, 'Druk op ', h('b', {}, '+'), ' (of R) en klik op de kaart om punten te zetten. Zoekresultaten en punten op de kaart kun je ook met "Route +" toevoegen.'),
+      list.length === 1 ? h('p', { class: 'zp-hint' }, 'Klik nog een punt op de kaart voor de eerste etappe.') : null);
     // Flight settings for this route.
     const settings = h('div', { class: 'zp-grid4' },
       field('Hoogte', zpNum(route.altFt != null ? Math.round(PlanUnits.altIn(route.altFt, cfg.units.alt)) : '', (v) => { route.altFt = v == null ? null : PlanUnits.altFt(v, cfg.units.alt); changed('alt'); }, { placeholder: String(Math.round(PlanUnits.altIn(PlanProfiles.planning(ctx.profile()).altFt, cfg.units.alt))), step: 100 }), PlanUnits.ALT[cfg.units.alt].name),
@@ -243,18 +323,7 @@ function zpRoute(ctx) {
       zpRow('TAS / verbruik', `${Math.round(plan.tasKt)} kt · ${Math.round(pl.flowKgh)} kg/u`, 'TAS uit de IAS op hoogte (ISA); verbruik uit het profiel')) : null;
     const warn = plan ? zpRouteWarnings(ctx, plan) : [];
     const fuelSec = plan ? zpFuelSection(ctx, plan, changed) : null;
-    // The points themselves, to rename and reorder.
-    const wps = h('div', { class: 'zp-wps' }, list.map((wp, i) => {
-      const nameIn = h('input', { class: 'input', value: wp.name, onchange: (e) => { wp.name = e.target.value.slice(0, 40) || `WP${i + 1}`; wp.named = true; changed('name'); } });
-      return h('div', { class: 'zp-wpr' + (i === selectedWp ? ' sel' : ''), draggable: 'true',
-        ondragstart: (e) => e.dataTransfer.setData('text/plain', String(i)),
-        ondragover: (e) => e.preventDefault(),
-        ondrop: (e) => { e.preventDefault(); const from = +e.dataTransfer.getData('text/plain'); if (from === i) return; const [m] = list.splice(from, 1); list.splice(i, 0, m); changed('order'); } },
-      h('span', { class: 'zp-wpn' }, i === 0 ? 'A' : i === list.length - 1 && list.length > 1 ? 'B' : String(i)), nameIn,
-      h('button', { class: 'w-tool', title: 'Inzoomen op dit punt', onclick: () => map.setView([wp.lat, wp.lon], Math.max(map.getZoom(), 11)) }, icon('target')),
-      h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => remove(i) }, icon('close')));
-    }));
-    return h('div', { class: 'zp-panel' }, head, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, fuelSec, tot, table, list.length ? h('h4', { class: 'zp-sub' }, 'Routepunten (sleep om de volgorde te wijzigen)') : null, wps);
+    return h('div', { class: 'zp-panel' }, top, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, fuelSec, tot, table);
   }
 
   function zpDepart() {
@@ -263,7 +332,7 @@ function zpRoute(ctx) {
     return el;
   }
 
-  return { add, remove, clear, reverse, setPoints, panel, recompute, points: pts, get plan() { return plan; } };
+  return { add, remove, clear, reverse, setPoints, save, markSaved: () => { route.savedSig = sig(); ctx.save(); }, panel, recompute, points: pts, get plan() { return plan; } };
 }
 
 // What the planning should warn about: VNE, fuel, too much wind, rotor start wind at the destination.
@@ -326,6 +395,5 @@ function zpFuelSection(ctx, plan, changed) {
       F.extraKg ? row('Extra', ctx.fmt.fuel(F.extraKg)) : null,
       row('Benodigd', ctx.fmt.fuel(F.requiredKg), null, 'strong'),
       row('Aan boord', ctx.fmt.fuel(F.onBoardKg), null, 'strong'),
-      row(F.marginKg >= 0 ? 'Over (extra beschikbaar)' : 'Tekort', ctx.fmt.fuel(Math.abs(F.marginKg)), F.marginKg >= 0 ? `Komt overeen met ${ctx.fmt.dur((F.marginKg / pl.flowKgh) * 60)} extra vliegtijd` : null, F.marginKg >= 0 ? 'ok' : 'bad')),
-    h('p', { class: 'zp-hint' }, 'In de vlucht: elke 10 min brandstof controleren. Verwachte brandstof bij de bestemming onder uitwijk + eindreserve: uitwijken of herplannen. Onder de eindreserve: PANPAN (BOM 8.2.7.3, 8.4.7).'));
+      row(F.marginKg >= 0 ? 'Over (extra beschikbaar)' : 'Tekort', ctx.fmt.fuel(Math.abs(F.marginKg)), F.marginKg >= 0 ? `Komt overeen met ${ctx.fmt.dur((F.marginKg / pl.flowKgh) * 60)} extra vliegtijd` : null, F.marginKg >= 0 ? 'ok' : 'bad')));
 }

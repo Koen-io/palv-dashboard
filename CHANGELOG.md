@@ -1,5 +1,23 @@
 # Wijzigingen
 
+## 1.26.0
+
+### Zoek & Plan: route plannen, eenvoudiger
+- **Opslaan** staat nu direct in de naambalk van de route, naast routemodus, omdraaien en wissen. De naam typ je bovenin; zonder naam wordt het *vertrek – bestemming*. Na het opslaan staat er een groen **Opgeslagen**, tot je de route weer verandert
+- De **routepunten** staan bovenaan, direct onder de naam, en niet meer onderaan de pagina
+- Elk punt heeft een **greep** (zes puntjes): vasthouden en omhoog of omlaag slepen om de volgorde te wijzigen. Werkt met de vinger op het touchscreen en met de muis; met het toetsenbord kan het met de pijltjes
+- De uitlegtekst onder *Tekort* in het brandstofblok is weg
+- Het tabblad **Profiel** staat nu helemaal links, voor Route: daar begin je, zodat alle berekeningen daarna kloppen
+
+### Zoek & Plan: briefing
+- **Exporteren** staat bovenaan: één grote knop voor het kniebord (PDF), met GPX, KML en Navlog eronder
+- **Luchtruim langs de route** en **Verticaal profiel** zijn ingeklapt; het aantal luchtruimen staat in de kop. Een klik klapt ze uit, en dat blijft zo zolang het dashboard draait
+
+### Zoek & Plan: punt op de kaart
+- In het detailvenster staat nog één coördinaat (DMS). Het pijltje rechts in die balk klapt de andere notaties uit (DDM, DD, RD, MGRS, UTM); een klik op een coördinaat kopieert hem nog steeds
+- **Luchtruim boven dit punt** is ingeklapt, met het aantal in de kop
+- Kies je in het detailvenster Orbit, Zoeken, Bereik of Ringen, dan opent het gereedschap links meteen, uitgeklapt en in beeld. Dat geldt ook voor de knoppen boven de kaart; het laatst gekozen gereedschap blijft uitgeklapt, ook na Esc
+
 ## 1.25.1
 
 ### Zoek & Plan: wie is er het snelst?

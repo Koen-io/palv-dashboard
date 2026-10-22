@@ -5,11 +5,11 @@
    en de keuzes voor kaartlagen en eenheden.
    ============================================================ */
 const ZP_TABS = [
+  { id: 'profile', name: 'Profiel', icon: 'shield' },
   { id: 'route', name: 'Route', icon: 'route' },
   { id: 'brief', name: 'Briefing', icon: 'note' },
   { id: 'fleet', name: 'Vloot', icon: 'plane' },
   { id: 'tools', name: 'Gereedschap', icon: 'target' },
-  { id: 'profile', name: 'Profiel', icon: 'shield' },
   { id: 'saved', name: 'Opgeslagen', icon: 'star' },
 ];
 
@@ -38,7 +38,9 @@ function zpPanels(ctx) {
     modes.setValue(m);
     // The panel follows the tool: the route to Route, every other tool to Gereedschap.
     const tab = m === 'route' ? 'route' : ZP_TOOLS[m] ? 'tools' : null;
-    if (tab && cfg.sideTab !== tab) { cfg.sideTab = tab; ctx.save(); if (!cfg.side) setSide(true); paintTabs(); }
+    if (tab && cfg.sideTab !== tab) { cfg.sideTab = tab; ctx.save(); paintTabs(); }
+    if (tab && !cfg.side) setSide(true);
+    if (ZP_TOOLS[m]) ctx.revealTool = m;
     // Choosing another tool ends the typing in the panel, so its card always opens (a field that kept
     // the focus would otherwise hold the panel as it was).
     const a = document.activeElement;
@@ -225,7 +227,8 @@ function zpPanels(ctx) {
     pending = false;
     if (!ZP_TABS.some((t) => t.id === cfg.sideTab)) cfg.sideTab = 'route';
     // Never while someone is typing in the panel: it would take the field away under their fingers.
-    if (ctx.side.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { pending = 'focus'; return; }
+    // Nor while a route point is being dragged to another place in the list.
+    if (ctx.holdPanel || (ctx.side.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName))) { pending = 'focus'; return; }
     const scroll = content.scrollTop;
     let el;
     try {
@@ -241,11 +244,18 @@ function zpPanels(ctx) {
     } catch (err) { plog('warn', 'zoek & plan: paneel mislukt', String(err && err.stack || err)); el = h('p', { class: 'zp-hint warn' }, 'Dit paneel kon niet worden getoond.'); }
     content.replaceChildren(el);
     content.scrollTop = scroll;
+    // A tool that was just chosen (above the map, here or on a point's card) comes into view, open.
+    if (ctx.revealTool && cfg.sideTab === 'tools') {
+      const card = content.querySelector(`.zp-tool[data-kind="${ctx.revealTool}"]`);
+      if (card) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    ctx.revealTool = null;
   }
   const paintSoon = () => { if (!pending) { pending = true; requestAnimationFrame(paintSide); } };
   // The paint held back for a field is done as soon as the field lets go (pending has to be cleared
   // first, or paintSoon would think one is still on its way and the panel would stay as it was).
   ctx.side.addEventListener('focusout', () => { if (pending === 'focus') { pending = false; setTimeout(paintSoon, 50); } });
+  ctx.releasePanel = () => { if (pending === 'focus') pending = false; paintSoon(); };
   // A click on the map ends the typing in the panel (Leaflet keeps the focus where it was otherwise).
   map.on('mousedown', () => { const a = document.activeElement; if (a && ctx.side.contains(a) && a.blur) a.blur(); });
   const paintIf = (...tabsFor) => () => { if (tabsFor.includes(cfg.sideTab)) paintSoon(); };
@@ -278,18 +288,26 @@ function zpPanels(ctx) {
             h('div', { class: 'zp-first-t' }, h('b', {}, vrAltText(a)), h('small', {}, a.gs == null ? '—' : `${Math.round(a.gs)} kt · ${a.track == null ? '' : ctx.fmt.course(a.track, a.lat, a.lon)}`)));
         })) : h('p', { class: 'zp-hint' }, 'Geen eigen eenheden in de lucht (of zet de groepen aan onder Lagen › Vloot).')));
   }
-  const showTab = (id) => { cfg.sideTab = id; ctx.save(); paintTabs(); paintSoon(); };
+  const showTab = (id) => { cfg.sideTab = id; ctx.save(); if (!cfg.side) setSide(true); paintTabs(); paintSoon(); };
   return { paintSide: paintSoon, paintPop, showTab };
 }
 
 /* ---------- pieces of the card ---------- */
+// One coordinate in sight (DMS); the arrow at the right of its bar folds out the other notations.
+let zpCoordsOpen = false;
 function zpCoordBlock(ctx, lat, lon) {
-  const styles = [['ddm', 'DDM'], ['dms', 'DMS'], ['dd', 'DD'], ['rd', 'RD'], ['mgrs', 'MGRS']];
-  return h('div', { class: 'zp-coords' }, styles.map(([s, n]) => {
+  const btn = (s, n) => {
     const v = PlanCoords.fmt(lat, lon, s);
-    if (!v) return null;
-    return h('button', { class: 'zp-coord' + (ctx.cfg.units.coord === s ? ' on' : ''), title: 'Klik om te kopiëren', onclick: () => zpCopy(PlanCoords.fmt(lat, lon, s, { copy: true }) || v) }, h('span', {}, n), h('b', {}, v));
-  }));
+    return v ? h('button', { class: 'zp-coord', title: 'Klik om te kopiëren', onclick: () => zpCopy(PlanCoords.fmt(lat, lon, s, { copy: true }) || v) }, h('span', {}, n), h('b', {}, v)) : null;
+  };
+  const rest = h('div', { class: 'zp-coords-rest', hidden: !zpCoordsOpen || null }, [['ddm', 'DDM'], ['dd', 'DD'], ['rd', 'RD'], ['mgrs', 'MGRS'], ['utm', 'UTM']].map(([s, n]) => btn(s, n)));
+  const more = h('button', { class: 'zp-coord-more', title: 'Andere notaties tonen', 'aria-expanded': String(zpCoordsOpen) }, h('i', { class: 'zp-chev' + (zpCoordsOpen ? ' up' : '') }));
+  more.addEventListener('click', () => {
+    zpCoordsOpen = !zpCoordsOpen;
+    rest.hidden = !zpCoordsOpen; more.firstChild.classList.toggle('up', zpCoordsOpen);
+    more.setAttribute('aria-expanded', String(zpCoordsOpen)); more.title = zpCoordsOpen ? 'Andere notaties verbergen' : 'Andere notaties tonen';
+  });
+  return h('div', { class: 'zp-coords' }, h('div', { class: 'zp-coord-main' }, btn('dms', 'DMS'), more), rest);
 }
 function zpPointExtras(ctx, p) {
   const out = [];
@@ -309,7 +327,8 @@ function zpPointExtras(ctx, p) {
   })));
   // The airspace over this point.
   const rows = ctx.airspaceRows ? ctx.airspaceRows(p.lat, p.lon) : [];
-  if (rows.length) out.push(h('h4', { class: 'zp-sub' }, 'Luchtruim boven dit punt'), h('div', { class: 'zp-airlist' }, rows.map((r) => { const url = zpAipUrl({ airspace: r.a }); return h('div', { class: 'zp-air' }, h('i', { class: 'zp-dot', style: `background:${r.color}` }), h('div', {}, h('b', {}, r.text), h('small', {}, r.sub)), url ? h('button', { class: 'w-tool', title: 'Officiële AIP (LVNL) voor dit luchtruim', onclick: () => zpOpenAip(url) }, icon('globe')) : null); })));
+  // Folded away by default: there when it is needed.
+  if (rows.length) out.push(zpFold('card-air', 'Luchtruim boven dit punt', () => h('div', { class: 'zp-airlist' }, rows.map((r) => { const url = zpAipUrl({ airspace: r.a }); return h('div', { class: 'zp-air' }, h('i', { class: 'zp-dot', style: `background:${r.color}` }), h('div', {}, h('b', {}, r.text), h('small', {}, r.sub)), url ? h('button', { class: 'w-tool', title: 'Officiële AIP (LVNL) voor dit luchtruim', onclick: () => zpOpenAip(url) }, icon('globe')) : null); })), { cls: 'zp-cfold', badge: rows.length }));
   return h('div', {}, out);
 }
 function zpAirportExtra(ctx, ap) {
@@ -328,10 +347,10 @@ function zpPointActions(ctx, p) {
   return h('div', { class: 'zp-card-actions' },
     zpBtn('Route +', () => { route.add({ lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }); toast(`${name} aan de route toegevoegd`); }, { icon: 'plus', title: 'Achteraan aan de route toevoegen' }),
     zpBtn('Vertrek', () => { const wp = { lat: p.lat, lon: p.lon, name, kind: ctx.selected && ctx.selected.kind }; if (route.points().length) route.add(wp, 0); else route.add(wp); }, { icon: 'route', title: 'Als eerste routepunt' }),
-    zpBtn('Ringen', () => tools.addRings(p), { icon: 'radar', title: 'Afstandsringen rond dit punt' }),
+    zpBtn('Ringen', () => { tools.addRings(p); tools.reveal('rings'); ctx.parts.zpPanels.showTab('tools'); }, { icon: 'radar', title: 'Afstandsringen rond dit punt' }),
     zpBtn('Meten', () => { ctx.setMode('measure', true); tools.setTape({ lat: p.lat, lon: p.lon }); }, { icon: 'route', title: 'Meetlint vanaf dit punt: klik daarna punt B' }),
     zpBtn('Snelst', () => { sel(); ctx.cfg.sideTab = 'fleet'; ctx.cfg.firstShow = true; ctx.save(); ctx.parts.zpPanels.paintSide(); ctx.emit('select', ctx.selected); }, { icon: 'plane', title: 'Wie is er het snelst naar dit punt' }),
-    ...['pattern', 'orbit', 'reach'].map((k) => zpBtn(ZP_TOOLS[k].short, () => { tools.place(k, { lat: p.lat, lon: p.lon, label: name }); ctx.parts.zpPanels.showTab('tools'); }, { icon: ZP_TOOLS[k].icon, title: `${ZP_TOOLS[k].name} op dit punt` })),
+    ...['pattern', 'orbit', 'reach'].map((k) => zpBtn(ZP_TOOLS[k].short, () => { tools.place(k, { lat: p.lat, lon: p.lon, label: name }); tools.reveal(k); ctx.parts.zpPanels.showTab('tools'); }, { icon: ZP_TOOLS[k].icon, title: `${ZP_TOOLS[k].name} op dit punt` })),
     zpBtn('', () => { const id = Math.random().toString(36).slice(2, 10); ctx.put('shared', 'favorites', id, { name, lat: p.lat, lon: p.lon }).then(() => toast(`${name} bij de favorieten`)); }, { icon: 'star', title: 'Als favoriet bewaren (gaat mee naar de andere schermen)' }));
 }
 
@@ -420,23 +439,14 @@ function zpSavedPanel(ctx) {
   const routes = Object.entries(sh.routes || {}).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
   const favs = Object.entries(sh.favorites || {}).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)));
   const bases = Object.entries(sh.bases || {});
-  const nameIn = textInput(cfg.route.name || '', { placeholder: 'Naam van de route', maxlength: 60 });
   const sel = ctx.selected;
   const go = (lat, lon, z = 12) => ctx.map.setView([lat, lon], Math.max(ctx.map.getZoom(), z));
   return h('div', { class: 'zp-panel' },
     h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Routes')),
-      h('div', { class: 'zp-btnrow' }, nameIn, zpBtn('Opslaan', () => {
-        if (cfg.route.points.length < 2) { toast('Een route heeft minstens twee punten', true); return; }
-        const name = nameIn.value.trim() || `${cfg.route.points[0].name} – ${cfg.route.points[cfg.route.points.length - 1].name}`;
-        cfg.route.name = name;
-        const existing = routes.find(([, r]) => r.name === name);
-        const id = existing ? existing[0] : Math.random().toString(36).slice(2, 10);
-        ctx.put('shared', 'routes', id, { name, points: cfg.route.points.map(({ lat, lon, name: n }) => ({ lat, lon, name: n })), profile: cfg.profile, altFt: cfg.route.altFt, ias: cfg.route.ias }).then(() => toast(`Route "${name}" opgeslagen`));
-      }, { icon: 'download', primary: true })),
       routes.length ? h('div', { class: 'zp-list' }, routes.map(([id, r]) => h('div', { class: 'zp-li' },
         h('div', {}, h('b', {}, r.name), h('small', {}, `${r.points.length} punten · ${PlanUnits.fmtDist(PlanGeo.measure(r.points).total, cfg.units.dist)} · ${(r.profile || '').toUpperCase()} · ${new Date(r.updatedAt).toLocaleDateString('nl-NL')}`)),
-        zpBtn('Laden', () => { if (r.profile) cfg.profile = r.profile; ctx.parts.zpRoute.setPoints(r.points, { name: r.name, altFt: r.altFt ?? null, ias: r.ias ?? null }); ctx.emit('profile'); }),
-        h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => confirmDialog('Route verwijderen', `"${r.name}" verwijderen, ook op de andere schermen?`, 'Verwijderen', () => ctx.put('shared', 'routes', id, null)) }, icon('trash'))))) : h('p', { class: 'zp-hint' }, 'Nog geen opgeslagen routes. Opgeslagen routes gaan mee naar de andere schermen.')),
+        zpBtn('Laden', () => { if (r.profile) cfg.profile = r.profile; ctx.parts.zpRoute.setPoints(r.points, { name: r.name, altFt: r.altFt ?? null, ias: r.ias ?? null }); ctx.parts.zpRoute.markSaved(); ctx.emit('profile'); ctx.parts.zpPanels.showTab('route'); }, { title: 'Route laden en openen in het tabblad Route' }),
+        h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => confirmDialog('Route verwijderen', `"${r.name}" verwijderen, ook op de andere schermen?`, 'Verwijderen', () => ctx.put('shared', 'routes', id, null)) }, icon('trash'))))) : h('p', { class: 'zp-hint' }, 'Nog geen opgeslagen routes. Sla een route op met de knop Opslaan in het tabblad Route; opgeslagen routes gaan mee naar de andere schermen.')),
     h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Favorieten')),
       favs.length ? h('div', { class: 'zp-list' }, favs.map(([id, f]) => h('div', { class: 'zp-li' },
         h('div', {}, h('b', {}, f.name), h('small', {}, ctx.fmt.coord(f.lat, f.lon))),

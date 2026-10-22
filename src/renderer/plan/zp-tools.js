@@ -56,6 +56,11 @@ function zpTools(ctx) {
   map.on('mousemove', (e) => { if (ctx.mode === 'measure' && tapeOpen) { tapeLive = { lat: e.latlng.lat, lon: e.latlng.lng }; ctx.cv.request(); } });
   // Leaving the tape mode halfway: the unfinished tape goes.
   ctx.on('mode', (m) => { if (m !== 'measure' && tapeOpen) { cfg.tapes = cfg.tapes.filter((t) => t !== tapeOpen); tapeOpen = null; tapeLive = null; changed(); } });
+  // The card of the tool chosen last stays open in the panel, also after it stops (Esc) or when the tool was
+  // used from a point's card without becoming the active one; one card open at a time.
+  let openKind = null;
+  ctx.on('mode', (m) => { if (ZP_TOOLS[m]) openKind = m; });
+  const reveal = (kind) => { openKind = kind; ctx.revealTool = kind; ctx.emit('tools'); };
 
   function place(kind, p) {
     cfg.placed[kind] = { id: uid(), lat: p.lat, lon: p.lon, label: p.label || null, at: Date.now() };
@@ -338,11 +343,12 @@ function zpTools(ctx) {
     const set = (obj, k) => (v) => { obj[k] = v; changed(); };
     const list = items();
     const card = (kind, body) => {
-      const tl = ZP_TOOLS[kind], on = ctx.mode === kind, mine = list.filter((x) => x.kind === kind);
-      return h('div', { class: 'zp-tool' + (on ? ' on' : ''), style: `--zp-c:${tl.color}` },
-        h('button', { class: 'zp-tool-head', title: on ? 'Klik om dit gereedschap te stoppen (Esc)' : `Kies ${tl.name.toLowerCase()} (${tl.key})`, onclick: () => ctx.setMode(kind) },
+      const tl = ZP_TOOLS[kind], on = ctx.mode === kind, open = on || openKind === kind, mine = list.filter((x) => x.kind === kind);
+      const kids = open ? body().filter(Boolean) : [];
+      return h('div', { class: 'zp-tool' + (on ? ' on' : open ? ' open' : ''), style: `--zp-c:${tl.color}`, 'data-kind': kind },
+        h('button', { class: 'zp-tool-head', title: on ? 'Klik om dit gereedschap te stoppen en in te klappen (Esc stopt alleen)' : `Kies ${tl.name.toLowerCase()} (${tl.key}): daarna klikken op de kaart`, onclick: () => { if (on) { openKind = null; ctx.setMode('select'); ctx.emit('tools'); } else ctx.setMode(kind); } },
           icon(tl.icon), h('b', {}, tl.name), mine.length ? h('span', { class: 'zp-count' }, String(mine.length)) : null, h('span', { class: 'zp-tool-state' }, on ? 'Actief' : 'Kiezen')),
-        on ? h('div', { class: 'zp-tool-body' }, h('p', { class: 'zp-tool-click' }, icon('info'), tl.click), ...body()) : null,
+        on ? h('div', { class: 'zp-tool-body' }, h('p', { class: 'zp-tool-click' }, icon('info'), tl.click), ...kids) : open && kids.length ? h('div', { class: 'zp-tool-body' }, ...kids) : null,
         mine.length ? h('div', { class: 'zp-tool-items' }, mine.map((it) => h('div', { class: 'zp-tool-item' },
           h('button', { class: 'zp-linkbtn', title: 'Toon op de kaart', onclick: () => ctx.focusItem(it) }, h('b', {}, it.label), h('small', {}, it.sub)),
           h('button', { class: 'w-tool zp-bin', title: 'Verwijderen', onclick: () => ctx.removeItem(it) }, icon('trash'))))) : null);
@@ -450,5 +456,5 @@ function zpTools(ctx) {
         windBlock(r)))));
   }
 
-  return { panel, firstPanel, addRings, place, items, remove, state: T, setTape: (a) => { if (cfg.tapes.length >= 8) cfg.tapes.shift(); tapeOpen = { id: uid(), a, b: null, at: Date.now() }; cfg.tapes.push(tapeOpen); changed(); } };
+  return { panel, firstPanel, addRings, place, reveal, items, remove, state: T, setTape: (a) => { if (cfg.tapes.length >= 8) cfg.tapes.shift(); tapeOpen = { id: uid(), a, b: null, at: Date.now() }; cfg.tapes.push(tapeOpen); changed(); } };
 }
