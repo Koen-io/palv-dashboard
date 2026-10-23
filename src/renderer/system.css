@@ -57,6 +57,31 @@
 .wx-dew { margin: 0 0 0.2rem; font-size: 0.78rem; color: var(--muted); }
 .wx-dew .dew-rh { color: var(--muted); }
 
+/* ---------- cloud base (BOM) and every reported layer ---------- */
+.metric-cloud .metric-value { line-height: 1.05; }
+.layers { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.18rem; font-size: 0.72rem; font-weight: 600; color: #a9bad3; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.layers .few { color: var(--amber-soft); }
+.layers-sep { color: #5f7391; }
+.wx-cloud { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.85rem; flex-wrap: wrap; }
+.wx-cloud-label { font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.wx-cloud b { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; }
+.wx-cloud .layers { margin: 0; color: var(--muted); }
+
+/* ---------- BOM verdict of the moment: one chip per profile of the current period (day or night) ---------- */
+.bom { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; min-width: 0; }
+.bom-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); margin-right: 0.1rem; }
+.eham-head .bom-label { color: #8ea2bf; }
+.bom-chip { display: inline-flex; align-items: center; gap: 0.32rem; padding: 0.1rem 0.5rem 0.1rem 0.42rem; border-radius: 99px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.02em; color: inherit; background: rgba(128, 150, 180, 0.16); border: 1px solid rgba(128, 150, 180, 0.4); }
+.eham-head .bom-chip { color: #e9eff8; }
+.bom-chip i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #7c8aa0; flex: none; }
+.bom-chip.green i { background: #2fd67b; box-shadow: 0 0 0.3rem #2fd67b; }
+.bom-chip.amber i { background: #ffb020; box-shadow: 0 0 0.3rem #ffb020; }
+.bom-chip.amber { border-color: rgba(255, 176, 32, 0.6); }
+.bom-chip.red i { background: #ff4d42; box-shadow: 0 0 0.3rem #ff4d42; }
+.bom-chip.red { border-color: rgba(255, 77, 66, 0.7); background: rgba(255, 77, 66, 0.14); }
+.bom-chip em { font-style: normal; font-weight: 800; color: #38bdf8; }
+.wx-bom { display: flex; }
+
 /* ---------- freshness: dot, time and age of the data ---------- */
 .w-age { display: flex; align-items: center; min-width: 0; flex: none; }
 .w-age:empty { display: none; }

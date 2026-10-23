@@ -4,7 +4,7 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 
 ## Wat het toont
 
-- **Kop:** klokken (LT en UTC), uniforme daglichtperiode (UDP), maan (fase, maanop en -onder, lichtniveau in lux en millilux) en het luchtvaartweer van Schiphol met de spreiding tussen temperatuur en dauwpunt.
+- **Kop:** klokken (LT en UTC), uniforme daglichtperiode (UDP), maan (fase, maanop en -onder, lichtniveau in lux en millilux) en het luchtvaartweer van Schiphol: wolkenbasis volgens het BOM (vanaf SCT) met alle gemelde lagen, de toetsing aan de BOM-profielen van het moment (dag of nacht volgens UDP) en de spreiding tussen temperatuur en dauwpunt.
 - **Vluchtradar:** eigen live-kaart van al het ADS-B-verkeer (adsb.fi en adsb.lol), met categorieën, routes, kaartlagen en een noodsquawk-alarm.
 - **Weerradar:** Windy met METAR- en TAF-stations, getoetst aan de BOM-weerminima.
 - **Baangebruik Schiphol** (per vlucht van de Schiphol-radar via de BAS-flighttracker, live ADS-B als terugval) en **In de lucht** (eigen eenheden), live waargenomen.

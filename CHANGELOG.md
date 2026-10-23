@@ -1,5 +1,29 @@
 # Wijzigingen
 
+## 1.27.0
+
+### Luchtvaartweer: de wolkenbasis volgens het BOM
+- Het Schiphol-blok in de kop toonde als **Wolken** de eerste BKN- of OVC-laag (het ICAO-plafond). Bij *FEW008 SCT010 BKN018* stond er dus **BKN 1800 ft**, terwijl de wolkenbasis volgens het BOM (Deel A §8.2.4.1, note 1: een laag van 3/8 of meer) **SCT 1000 ft** is. Dat is hersteld: het vak heet nu **Wolkenbasis** en toont de laagste laag van SCT of meer
+- Onder de wolkenbasis staan **alle gemelde lagen**, laagste eerst (*FEW 800 · SCT 1000 · BKN 1800*). Een FEW-laag onder de basis kleurt oranje: die telt volgens het BOM niet als wolkenbasis, maar wel bij Single pilot EC en Advanced Operations ("geen bewolking incl. FEW")
+- Alleen FEW gemeld: wolkenbasis **Geen**, met de FEW-laag eronder. Alleen verticaal zicht: **VV** met de hoogte. Niet gemeten: **Niet gemeten** (stond voorheen ten onrechte als NSC)
+- **BOM-toetsing van het moment** in de kop: naast de vliegcategorie staan chips per BOM-profiel dat nu geldt. Overdag (binnen UDP) *Multi pilot* en *Single pilot*, ’s nachts (buiten UDP) *Unaided*, *Aided*, *Advanced* en *SP buiten UDP*. Groen binnen de minima, oranje marginaal of volgens de trend binnen 2 uur eronder, rood erbuiten, grijs geen oordeel. Ze schakelen op de UDP-grenzen direct om; de muis erover geeft de minima uit de tabel en de trend
+- **QNH** en het **actuele weer** vielen in de kop rechts buiten beeld; het weer (bijvoorbeeld *-RADZ*) staat nu onder het zicht, met de betekenis in de tooltip, en de QNH is weer te zien
+
+### Weer-tabblad: METAR-widgets
+- Elke METAR/TAF-widget heeft in de titelbalk een **stationskeuze**: alle luchthavens (Schiphol, Rotterdam, Eindhoven, Groningen Eelde, Maastricht, Lelystad), de militaire vliegbases (De Kooy, Leeuwarden, Volkel, Gilze-Rijen, Woensdrecht, Deelen), Vlieland en Vlissingen, de Noordzeestations (Euro Platform, Lichteiland Goeree, de platforms en de heliports van de windparken) en de stations net over de grens. Een station dat nieuw in de feed verschijnt komt er vanzelf bij
+- Kies je een ander station, dan verandert de titel mee en wordt de keuze bewaard
+- De widget is opnieuw opgezet als **nette kaart**: station en vliegcategorie met de waarnemingstijd, de BOM-chips van het moment, een blok met wind, zicht (met het actuele weer), wolkenbasis (met alle lagen), temperatuur/dauwpunt (met de spreiding) en QNH, en daaronder de METAR en de TAF. Zonder TAF staat dat er eerlijk bij
+- Dezelfde wolkenbasis, lagen en BOM-chips als in de kop
+- Kop, METAR-widgets, weerradar en Zoek & Plan lezen de METAR nu met **één en dezelfde parser**; ze kunnen elkaar niet meer tegenspreken
+- **Zicht** tussen 5 en 10 km staat nu met een decimaal als het niet rond is (*7,5 km* in plaats van *8 km*)
+- De trend bij Schiphol gebruikt ook het waargenomen verloop van de laatste uren als de METAR geen trend heeft en er geen TAF is, net als op de weerradar
+- De vliegcategorie (VFR/MVFR/IFR/LIFR) legt in de tooltip uit dat dit de Amerikaanse indeling van aviationweather.gov is en niets zegt over het BOM
+
+### BOM-profielen (weerradar, Zoek & Plan en kop)
+- **Single pilot EC buiten UDP** (voorheen "Single pilot (ferry) EC buiten UDP") stond op 1200 ft / 5000 m. Volgens de BOM-tabel (versie 10, revisie 1, 1 oktober 2025) is het **geen bewolking (incl. FEW) onder 1100 ft bij 3000 m zicht**, voor de ferryvlucht (note 5) én de operationele vlucht na 07:00 of na 22:00 LT (note 6). Dat is nu zo
+- De namen volgen de tabel: *Single pilot EC Dag*; de volgorde ’s nachts is Unaided, Aided, Advanced, SP buiten UDP
+- Instellingen › Systeem legt uit hoe de wolkenbasis en de BOM-chips werken
+
 ## 1.26.0
 
 ### Zoek & Plan: route plannen, eenvoudiger

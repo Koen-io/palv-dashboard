@@ -6,17 +6,23 @@
    Staat los van de rest van de renderer, zodat de regels apart te controleren zijn.
    ============================================================ */
 (function (root) {
-  // The minima table of the BOM. `any`: no cloud at all (FEW included) below this height.
-  // `ceil`: cloud base, counted from 3/8 (SCT) upwards. Multi pilot Dag has its own sliding scale.
+  // The minima table of BOM Deel A §8.2.4.1 (versie 10, revisie 1, 1 oktober 2025), "algemene minimale
+  // weerscondities voor helikopter VMC operaties". `ceil`: the BOM cloud base, which by note 1 is a layer
+  // of 3/8 (SCT) or more, so FEW does not count. `any`: "geen bewolking (incl. FEW)" below this height.
+  // Multi pilot Dag has its own sliding scale (500 ft/1500 m, 499-400 ft/2000 m, 399-300 ft/3000 m).
+  // "SP EC buiten UDP" is one row for the ferry flight (note 5) and the operational flight after 07:00
+  // or after 22:00 LT (note 6): the same minima, equal to Unaided Nacht but with FEW counted.
   const PROFILES = [
-    { id: 'mpd', period: 'day', name: 'Multi pilot Dag' },
-    { id: 'spd', period: 'day', name: 'Single pilot Dag', any: 600, vis: 3000 },
-    { id: 'ferry', period: 'night', name: 'Single pilot (ferry) EC buiten UDP', any: 1200, vis: 5000 },
-    { id: 'unaided', period: 'night', name: 'Unaided Nacht', ceil: 1100, vis: 3000 },
-    { id: 'aided', period: 'night', name: 'Aided Nacht', ceil: 900, vis: 3000 },
-    { id: 'adv', period: 'night', name: 'Aided Nacht Advanced Operations', any: 600, vis: 3000, aw139: true },
+    { id: 'mpd', period: 'day', name: 'Multi pilot Dag', short: 'Multi pilot', rule: 'wolkenbasis (vanaf SCT) ≥ 500 ft bij 1500 m zicht, 499–400 ft bij 2000 m, 399–300 ft bij 3000 m' },
+    { id: 'spd', period: 'day', name: 'Single pilot EC Dag', short: 'Single pilot', any: 600, vis: 3000, rule: 'geen bewolking (incl. FEW) onder 600 ft, zicht ≥ 3000 m' },
+    { id: 'unaided', period: 'night', name: 'Unaided Nacht', short: 'Unaided', ceil: 1100, vis: 3000, rule: 'wolkenbasis (vanaf SCT) ≥ 1100 ft, zicht ≥ 3000 m' },
+    { id: 'aided', period: 'night', name: 'Aided Nacht', short: 'Aided', ceil: 900, vis: 3000, rule: 'wolkenbasis (vanaf SCT) ≥ 900 ft, zicht ≥ 3000 m' },
+    { id: 'adv', period: 'night', name: 'Aided Nacht Advanced Operations', short: 'Advanced', any: 600, vis: 3000, aw139: true, rule: 'geen bewolking (incl. FEW) onder 600 ft, zicht ≥ 3000 m (note 3: alleen bij dringende noodzaak of advanced training)' },
+    { id: 'ferry', period: 'night', name: 'Single pilot EC buiten UDP', short: 'SP buiten UDP', any: 1100, vis: 3000, rule: 'geen bewolking (incl. FEW) onder 1100 ft, zicht ≥ 3000 m (ferry, note 5, of operationeel na 07:00 / na 22:00 LT, note 6; niet voor low time pilots)' },
   ];
   const profile = (id) => PROFILES.find((p) => p.id === id) || PROFILES[0];
+  // The profiles that apply inside (day) or outside (night) the UDP.
+  const forPeriod = (period) => PROFILES.filter((p) => p.period === period);
 
   // Margin inside which a station that is within limits is shown as marginal.
   // Adjustable under Instellingen > Weerradar.
@@ -26,20 +32,31 @@
   const CLOUD_CAP = 5000;
 
   /* ---------- parsing ---------- */
-  // Visibility, cloud and wind out of a run of METAR/TAF tokens. `cloud` is 'layers', 'none' (reported
-  // free of cloud), 'unknown' (not measured, or only a vertical visibility) or null (not mentioned).
+  // Visibility, cloud, wind, present weather, temperature and pressure out of a run of METAR/TAF tokens.
+  // `cloud` is 'layers', 'none' (reported free of cloud), 'unknown' (not measured, or only a vertical
+  // visibility) or null (not mentioned). Every layer keeps its cover, base (ft) and type (CB/TCU).
+  // One parser for the whole dashboard: the header, the METAR widget, the radar and Zoek & Plan all read
+  // the same fields, so they can never disagree about what a METAR says.
+  const WX_RE = /^(\+|-|VC)?(MI|PR|BC|DR|BL|SH|TS|FZ)?(DZ|RA|SN|SG|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PO|SQ|FC|SS|DS){0,3}$/;
   function parseCond(tokens) {
-    const c = { vis: null, cloud: null, layers: [], wind: null, vv: null, cavok: false };
+    const c = { vis: null, cloud: null, layers: [], wind: null, vv: null, cavok: false, wx: [], temp: null, dew: null, qnh: null };
     for (const t of tokens) {
       let m;
       if (t === 'RMK') break;
       if (t === 'CAVOK') { c.vis = 9999; c.cloud = 'none'; c.layers = []; c.cavok = true; }
       else if ((m = t.match(/^(\d{4})(NDV|[NESW]{1,2})?$/))) c.vis = c.vis == null ? +m[1] : Math.min(c.vis, +m[1]);
-      else if ((m = t.match(/^(FEW|SCT|BKN|OVC)(\d{3})/))) { c.layers.push({ cover: m[1], base: +m[2] * 100 }); c.cloud = 'layers'; }
+      else if ((m = t.match(/^P?(\d{1,2})SM$/))) c.vis = Math.min(9999, +m[1] * 1609);
+      else if ((m = t.match(/^(\d)\/(\d{1,2})SM$/))) c.vis = Math.round((+m[1] / +m[2]) * 1609);
+      else if ((m = t.match(/^(FEW|SCT|BKN|OVC)(\d{3})(CB|TCU)?/))) { c.layers.push({ cover: m[1], base: +m[2] * 100, type: m[3] || '' }); c.cloud = 'layers'; }
       else if (/^(FEW|SCT|BKN|OVC)\/\/\//.test(t) || /^\/{6,9}$/.test(t)) { if (c.cloud !== 'layers') c.cloud = 'unknown'; }
       else if (/^(NSC|NCD|SKC|CLR)$/.test(t)) { if (!c.cloud) c.cloud = 'none'; }
       else if ((m = t.match(/^VV(\d{3}|\/\/\/)$/))) { c.vv = m[1] === '///' ? -1 : +m[1] * 100; if (c.cloud !== 'layers') c.cloud = 'unknown'; }
-      else if (!c.wind && (m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) c.wind = { dir: m[1], spd: +m[2], gust: m[3] ? +m[3] : null, unit: m[4] };
+      else if (!c.wind && (m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) c.wind = { dir: m[1], spd: +m[2], gust: m[3] ? +m[3] : null, unit: m[4], vary: null };
+      else if (c.wind && (m = t.match(/^(\d{3})V(\d{3})$/))) c.wind.vary = `${m[1]}–${m[2]}`;
+      else if ((m = t.match(/^(M?\d{2})\/(M?\d{2}|\/\/)?$/))) { c.temp = +m[1].replace('M', '-'); c.dew = m[2] && m[2] !== '//' ? +m[2].replace('M', '-') : null; }
+      else if ((m = t.match(/^Q(\d{4})$/))) c.qnh = +m[1];
+      else if ((m = t.match(/^A(\d{4})$/))) c.qnh = Math.round((+m[1] / 100) * 33.8639);
+      else if (t.length >= 2 && WX_RE.test(t) && !/^(\+|-|VC)$/.test(t)) c.wx.push(t);
     }
     return c;
   }
@@ -105,10 +122,14 @@
   }
 
   /* ---------- toetsing ---------- */
-  const lowest = (cond, countFew) => {
-    const bases = cond.layers.filter((l) => countFew || l.cover !== 'FEW').map((l) => l.base);
-    return bases.length ? Math.min(...bases) : Infinity;
+  // The lowest layer that counts: from SCT upwards (the BOM cloud base, note 1), or FEW included for the
+  // rows that say "geen bewolking (incl. FEW)". Null when no such layer is reported.
+  const lowestLayer = (cond, countFew) => {
+    let best = null;
+    for (const l of cond.layers) if ((countFew || l.cover !== 'FEW') && (!best || l.base < best.base)) best = l;
+    return best;
   };
+  const lowest = (cond, countFew) => { const l = lowestLayer(cond, countFew); return l ? l.base : Infinity; };
 
   // 'ok', 'out' or 'unknown'. One known value below its minimum is enough for 'out'; 'ok' needs both.
   function check(id, cond) {
@@ -221,7 +242,13 @@
     return [...by.values()];
   }
 
-  const api = { PROFILES, margins, profile, parseCond, parseMetar, parseTaf, check, marginal, trend, assess, windText, stations };
+  // One station out of one airfield's METAR, TAF and earlier observations (the header and the METAR widget).
+  function station(icao, raw, obsTime, taf, history, now, extra) {
+    const metars = [{ icao, raw, obsTime, ...(extra || {}) }, ...(history || []).filter((o) => o.obsTime !== obsTime).map((o) => ({ icao, raw: o.raw, obsTime: o.obsTime }))];
+    return stations({ metars, tafs: taf ? [{ icao, raw: taf }] : [] }, now)[0];
+  }
+
+  const api = { PROFILES, margins, profile, forPeriod, parseCond, parseMetar, parseTaf, lowestLayer, check, marginal, trend, assess, windText, stations, station };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.WX = api;
 })(typeof window !== 'undefined' ? window : globalThis);

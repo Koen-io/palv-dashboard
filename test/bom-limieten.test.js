@@ -6,6 +6,7 @@ const C = (s) => WX.parseMetar('METAR XXXX 091125Z ' + s);
 const all = (s) => WX.PROFILES.map((p) => WX.check(p.id, C(s))).join(',');
 
 // table rows
+// Columns: Multi pilot Dag, Single pilot EC Dag, Unaided Nacht, Aided Nacht, Advanced Operations, SP EC buiten UDP
 assert.equal(all('21010KT 1500 BKN005'), 'ok,out,out,out,out,out');
 assert.equal(all('21010KT 1400 BKN005'), 'out,out,out,out,out,out');
 assert.equal(all('21010KT 1900 BKN004'), 'out,out,out,out,out,out');
@@ -13,23 +14,25 @@ assert.equal(all('21010KT 2000 BKN004'), 'ok,out,out,out,out,out');
 assert.equal(all('21010KT 2900 BKN003'), 'out,out,out,out,out,out');
 assert.equal(all('21010KT 3000 BKN003'), 'ok,out,out,out,out,out');
 assert.equal(all('21010KT 9999 BKN002'), 'out,out,out,out,out,out');
-assert.equal(all('21010KT 3000 FEW002 BKN011'), 'ok,out,out,ok,ok,out'); // FEW only counts for the "incl. few" rows
-assert.equal(all('21010KT 3000 BKN006'), 'ok,ok,out,out,out,ok');
-assert.equal(all('21010KT 3000 FEW005'), 'ok,out,out,ok,ok,out');
+assert.equal(all('21010KT 3000 FEW002 BKN011'), 'ok,out,ok,ok,out,out'); // FEW only counts for the "incl. few" rows
+assert.equal(all('21010KT 3000 BKN006'), 'ok,ok,out,out,ok,out');
+assert.equal(all('21010KT 3000 FEW005'), 'ok,out,ok,ok,out,out');
 assert.equal(all('21010KT 5000 SCT012'), 'ok,ok,ok,ok,ok,ok');
-assert.equal(all('21010KT 4900 SCT012'), 'ok,ok,out,ok,ok,ok');
-assert.equal(all('21010KT 9999 FEW011'), 'ok,ok,out,ok,ok,ok');
-assert.equal(all('21010KT 9999 SCT010'), 'ok,ok,out,out,ok,ok');
-assert.equal(all('21010KT 9999 SCT009'), 'ok,ok,out,out,ok,ok');
-assert.equal(all('21010KT 9999 SCT008'), 'ok,ok,out,out,out,ok');
+assert.equal(all('21010KT 3000 SCT012'), 'ok,ok,ok,ok,ok,ok'); // 3000 m is the visibility of every night row
+assert.equal(all('21010KT 2900 SCT012'), 'ok,out,out,out,out,out'); // Multi pilot Dag needs 1500 m at a base of 500 ft or more
+assert.equal(all('21010KT 9999 FEW011'), 'ok,ok,ok,ok,ok,ok'); // 1100 ft is not below 1100 ft
+assert.equal(all('21010KT 9999 FEW010'), 'ok,ok,ok,ok,ok,out'); // SP buiten UDP: no cloud incl. FEW below 1100 ft
+assert.equal(all('21010KT 9999 SCT010'), 'ok,ok,out,ok,ok,out');
+assert.equal(all('21010KT 9999 SCT009'), 'ok,ok,out,ok,ok,out');
+assert.equal(all('21010KT 9999 SCT008'), 'ok,ok,out,out,ok,out');
 assert.equal(all('21010KT CAVOK'), 'ok,ok,ok,ok,ok,ok');
 assert.equal(all('21010KT 9999 NCD'), 'ok,ok,ok,ok,ok,ok');
 assert.equal(all('25031KT //// // /////////'), 'unknown,unknown,unknown,unknown,unknown,unknown');
 assert.equal(all('23032KT 9999 /////////'), 'unknown,unknown,unknown,unknown,unknown,unknown');
 assert.equal(all('23032KT 0800 /////////'), 'out,out,out,out,out,out');
 assert.equal(all('00000KT 0300 FG VV001'), 'out,out,out,out,out,out');
-assert.equal(all('00000KT 4000 VV002'), 'unknown,unknown,out,unknown,unknown,unknown'); // VV is not a cloud base
-assert.equal(all('26019KT 9999 FEW009/// SCT011/// BKN015///'), 'ok,ok,out,ok,ok,ok');
+assert.equal(all('00000KT 4000 VV002'), 'unknown,unknown,unknown,unknown,unknown,unknown'); // VV is not a cloud base
+assert.equal(all('26019KT 9999 FEW009/// SCT011/// BKN015///'), 'ok,ok,ok,ok,ok,out');
 assert.equal(all('21010KT 6000 2000SW BKN020'), 'ok,out,out,out,out,out'); // lowest visibility counts
 
 const st = (raw, taf, hist) => {

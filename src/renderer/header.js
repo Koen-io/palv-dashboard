@@ -219,6 +219,7 @@ function renderUdp() {
     stripTime(icon('moon'), u.end),
     h('span', { class: 'udp-badge ' + (u.day ? 'day' : 'night') }, u.day ? 'DAG' : 'NACHT')
   );
+  notePeriod(now);
 }
 
 /* ---------- moon: phase, rise and set, light on the ground ---------- */
@@ -273,24 +274,75 @@ function renderMoon() {
 }
 
 /* ---------- Schiphol: METAR in the header ---------- */
-const eham = { metar: null, metarFail: false, fetchedAt: 0, live: null };
+// The METAR is read by WX.parseMetar (wx.js), the same parser that judges the stations on the radar, so
+// the header can never tell a different story than the station layer. Earlier observations are kept for
+// the observed trend when the METAR carries no trend and there is no TAF.
+const eham = { metar: null, metarFail: false, fetchedAt: 0, live: null, history: [], period: null };
+const EHAM_POS = { name: 'Schiphol', lat: 52.31, lon: 4.76 };
+const HISTORY_KEEP = 3 * 3600e3;
 
-function parseMetar(raw) {
-  const out = { wind: null, vis: null, clouds: [], wx: [], temp: null, dew: null, qnh: null };
-  const tokens = raw.replace(/^(METAR|SPECI)\s+/, '').split(/\s+/);
-  for (const t of tokens.slice(2)) {
-    let m;
-    if (/^(NOSIG|BECMG|TEMPO|RMK)$/.test(t)) break;
-    if ((m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) out.wind = { dir: m[1], spd: +m[2], gust: m[3] ? +m[3] : null, unit: m[4] === 'KT' ? 'kt' : 'm/s' };
-    else if ((m = t.match(/^(\d{3})V(\d{3})$/))) { if (out.wind) out.wind.vary = `${m[1]}–${m[2]}`; }
-    else if (t === 'CAVOK') { out.vis = 9999; out.cavok = true; }
-    else if (/^\d{4}$/.test(t) && out.vis == null) out.vis = +t;
-    else if ((m = t.match(/^(FEW|SCT|BKN|OVC|VV)(\d{3})(CB|TCU)?$/))) out.clouds.push({ cover: m[1], base: +m[2] * 100, type: m[3] || '' });
-    else if ((m = t.match(/^(M?\d{2})\/(M?\d{2})$/))) { out.temp = +m[1].replace('M', '-'); out.dew = +m[2].replace('M', '-'); }
-    else if ((m = t.match(/^Q(\d{4})$/))) out.qnh = +m[1];
-    else if (/^(\+|-|VC)?(MI|PR|BC|DR|BL|SH|TS|FZ)?(DZ|RA|SN|SG|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PO|SQ|FC|SS|DS){1,3}$/.test(t)) out.wx.push(t);
+// Day inside the UDP, night outside it: which rows of the BOM table apply right now.
+const bomPeriod = (now = Date.now()) => (udpToday(now).day ? 'day' : 'night');
+// Whoever shows a BOM verdict repaints when the period flips, without waiting for the next fetch.
+const periodWatchers = new Set();
+function notePeriod(now) {
+  const period = bomPeriod(now);
+  if (eham.period === period) return;
+  const first = eham.period == null;
+  eham.period = period;
+  if (first) return;
+  if (eham.metar) renderEham();
+  for (const fn of periodWatchers) { try { fn(period); } catch { /* one widget must not stop the others */ } }
+}
+
+const STATUS_WORD = { green: 'binnen de minima', red: 'buiten de minima' };
+function statusWord(a) {
+  if (a.status === 'amber') return a.marginal ? 'binnen de minima, maar marginaal (minder marge dan ingesteld onder Instellingen › Weerradar)' : 'binnen de minima, maar volgens de trend binnen 2 uur eronder';
+  if (a.status === 'none') return a.stale ? 'geen oordeel: waarneming ouder dan 90 minuten' : 'geen oordeel: zicht of bewolking niet gemeten';
+  return STATUS_WORD[a.status];
+}
+
+// The verdict of every BOM profile of the current period for one station, as chips: green within the
+// minima, orange marginal or expected below within two hours, red outside, grey no verdict. A plus on
+// Aided Nacht: outside its minima but inside those of Advanced Operations, AW139 only.
+function bomChips(st, now = Date.now()) {
+  const period = bomPeriod(now);
+  const u = udpToday(now);
+  const root = h('span', { class: 'bom', title: `Toetsing aan de BOM-tabel (Deel A §8.2.4.1) voor ${period === 'day' ? 'overdag: binnen de UDP' : '’s nachts: buiten de UDP'} (${ltFmt.format(u.begin)}–${ltFmt.format(u.end)} LT). Schakelt op de UDP-grenzen vanzelf om.\nWolkenbasis volgens het BOM is een laag van 3/8 (SCT) of meer; bij de rijen "geen bewolking (incl. FEW)" telt FEW mee.` },
+    h('span', { class: 'bom-label' }, period === 'day' ? 'BOM DAG' : 'BOM NACHT'));
+  for (const p of WX.forPeriod(period)) {
+    const a = WX.assess(p.id, st, now);
+    const tr = a.trend && a.trend.text ? `\nTrend (${a.trend.src}): ${a.trend.text}` : '';
+    root.append(h('span', { class: 'bom-chip ' + a.status, title: `${p.name}: ${statusWord(a)}.\nBOM: ${p.rule}.${a.aw139 ? '\nBuiten Aided Nacht, maar binnen Advanced Operations: alleen AW139.' : ''}${tr}` },
+      h('i'), p.short, a.aw139 ? h('em', {}, '+') : null));
   }
+  return root;
+}
+
+// What the cloud box shows: the BOM cloud base (the lowest layer of SCT or more) as the big figure, and
+// every reported layer in a line under it. A FEW layer below that base is marked: it is no cloud base by
+// note 1, but it does count for Single pilot EC and Advanced Operations.
+function cloudSummary(p) {
+  const base = WX.lowestLayer(p, false);
+  const out = { value: '', unit: null, layers: [], title: 'Wolkenbasis volgens het BOM (note 1): de laagste laag met een bedekking van 3/8 (SCT) of meer. FEW telt niet als wolkenbasis, behalve bij Single pilot EC en Advanced Operations ("geen bewolking incl. FEW").' };
+  if (base) { out.value = `${base.cover} ${base.base}`; out.unit = 'ft' + (base.type ? ' ' + base.type : ''); }
+  else if (p.vv != null) { out.value = p.vv < 0 ? 'VV' : `VV ${p.vv}`; out.unit = p.vv < 0 ? null : 'ft'; out.title += '\nAlleen een verticaal zicht gemeld: geen wolkenbasis, de bewolking is onbekend.'; }
+  else if (p.cloud === 'none' || p.cloud === 'layers') { out.value = 'Geen'; out.title += p.cloud === 'layers' ? '\nAlleen FEW gemeld: volgens het BOM geen wolkenbasis.' : '\nGeen bewolking gemeld (' + (p.cavok ? 'CAVOK' : 'NSC/NCD') + ').'; }
+  else { out.value = 'Niet gemeten'; out.title += '\nDe bewolking is niet gemeten (//////).'; }
+  for (const l of [...p.layers].sort((a, b) => a.base - b.base)) out.layers.push({ text: `${l.cover} ${l.base}${l.type ? ' ' + l.type : ''}`, few: l.cover === 'FEW' && (!base || l.base < base.base) });
   return out;
+}
+function layersLine(c) {
+  if (!c.layers.length) return null;
+  return h('div', { class: 'layers', title: 'Alle gemelde wolkenlagen, laagste eerst. Oranje: een FEW-laag onder de wolkenbasis; die telt bij Single pilot EC en Advanced Operations wél mee ("geen bewolking incl. FEW").' },
+    ...c.layers.flatMap((l, i) => [i ? h('span', { class: 'layers-sep' }, '·') : null, h('span', { class: l.few ? 'few' : '' }, l.text)]));
+}
+// Visibility as the pilots read it: metres up to 5 km, then kilometres with a decimal when not whole,
+// so 7500 m never becomes "8 km".
+function visText(vis) {
+  if (vis >= 9999) return '≥10';
+  if (vis >= 5000) return vis % 1000 ? (vis / 1000).toFixed(1).replace('.', ',') : String(vis / 1000);
+  return String(vis);
 }
 
 // Spread between temperature and dew point, and the relative humidity it means (Magnus). At a spread
@@ -302,11 +354,53 @@ function dewSpread(temp, dew) {
   const es = (t) => Math.exp((17.625 * t) / (243.04 + t));
   const rh = clamp(Math.round((100 * es(dew)) / es(temp)), 0, 100);
   const level = spread <= 1 ? 'bad' : spread <= 3 ? 'warn' : 'ok';
-  return { spread, rh, level, word: spread <= 1 ? 'MIST/LAGE BEWOLKING WAARSCHIJNLIJK' : spread <= 3 ? 'KANS OP MIST' : '' };
+  return { spread, rh, level, word: spread <= 1 ? 'MIST/LAGE BEWOLKING' : spread <= 3 ? 'KANS OP MIST' : '' };
 }
 
 function metric(label, ...value) {
   return h('div', { class: 'metric' }, h('div', { class: 'metric-label' }, label), h('div', { class: 'metric-value' }, value));
+}
+
+// Present weather in words, for the tooltips (the codes stay on screen: that is what the crew reads).
+const WX_WORDS = { '+': 'zware', '-': 'lichte', VC: 'in de omgeving', MI: 'dunne', BC: 'banken', PR: 'gedeeltelijk', DR: 'laag opwaaiend', BL: 'opwaaiend', SH: 'buien', TS: 'onweer', FZ: 'onderkoeld', DZ: 'motregen', RA: 'regen', SN: 'sneeuw', SG: 'motsneeuw', PL: 'ijsregen', GR: 'hagel', GS: 'korrelhagel', UP: 'onbekende neerslag', BR: 'nevel', FG: 'mist', FU: 'rook', VA: 'vulkanische as', DU: 'stof', SA: 'zand', HZ: 'heiigheid', PO: 'stofhozen', SQ: 'windstoot', FC: 'windhoos', SS: 'zandstorm', DS: 'stofstorm' };
+const wxWords = (code) => (code.match(/^\+|^-|[A-Z]{2}/g) || []).map((k) => WX_WORDS[k] || k).join(' ');
+
+// The metrics of one METAR (wind, visibility with the present weather, the BOM cloud base with every
+// layer, temperature with the dew-point spread, QNH), as in the header and in every METAR widget.
+function metarMetrics(p, cls) {
+  const metrics = h('div', { class: cls });
+  if (p.wind) {
+    const calm = p.wind.spd === 0;
+    const arrow = p.wind.dir === 'VRB' || calm ? null : h('span', { style: `display:flex;transform:rotate(${(+p.wind.dir + 180) % 360}deg)`, title: `Wind uit ${p.wind.dir}°${p.wind.vary ? `, variërend ${p.wind.vary}°` : ''}` }, icon('arrowUp', 'wind-arrow'));
+    const box = metric('WIND', arrow, calm ? 'Stil' : `${p.wind.dir === 'VRB' ? 'VRB' : p.wind.dir + '°'} / ${p.wind.spd}`, p.wind.gust ? h('small', {}, `G${p.wind.gust}`) : null, calm ? null : h('small', {}, p.wind.unit === 'MPS' ? 'm/s' : 'kt'));
+    box.title = calm ? 'Windstil' : `Wind uit ${p.wind.dir === 'VRB' ? 'variabele richting' : p.wind.dir + '°'}${p.wind.vary ? ` (variërend ${p.wind.vary}°)` : ''}, ${p.wind.spd} ${p.wind.unit === 'MPS' ? 'm/s' : 'kt'}${p.wind.gust ? `, vlagen tot ${p.wind.gust}` : ''}.`;
+    metrics.append(box);
+  }
+  const wxLine = p.wx.length ? h('div', { class: 'layers wxline', title: 'Actueel weer: ' + p.wx.map(wxWords).join(', ') + '.' }, p.wx.join(' ')) : null;
+  if (p.vis != null) {
+    const box = metric('ZICHT', p.cavok ? 'CAVOK' : visText(p.vis), p.cavok ? null : h('small', {}, p.vis >= 5000 ? 'km' : 'm'));
+    box.classList.add('metric-cloud');
+    box.title = p.cavok ? 'CAVOK: zicht 10 km of meer, geen bewolking onder 5000 ft en geen significant weer.' : `Heersend zicht ${p.vis >= 9999 ? '10 km of meer' : p.vis + ' m'}.`;
+    if (wxLine) box.append(wxLine);
+    metrics.append(box);
+  } else if (wxLine) metrics.append(metric('WEER', p.wx.join(' ')));
+  const cs = cloudSummary(p);
+  const cloudBox = metric('WOLKENBASIS', cs.value, cs.unit ? h('small', {}, cs.unit) : null);
+  cloudBox.classList.add('metric-cloud');
+  cloudBox.title = cs.title;
+  const ll = layersLine(cs);
+  if (ll) cloudBox.append(ll);
+  metrics.append(cloudBox);
+  if (p.temp != null && p.dew != null) {
+    const ds = dewSpread(p.temp, p.dew);
+    const box = metric('TEMP / DAUWP', `${p.temp}° / ${p.dew}°`);
+    box.classList.add('metric-dew');
+    box.append(h('div', { class: 'dew ' + ds.level, title: `Verschil tussen temperatuur en dauwpunt: ${ds.spread}°C, relatieve vochtigheid ${ds.rh} %.\nBij 3 °C of minder is de lucht bijna verzadigd en kan mist of lage bewolking ontstaan, vooral bij afkoeling ’s avonds en ’s nachts.` },
+      h('span', { class: 'dew-dot' }), `Δ ${ds.spread}°`, h('span', { class: 'dew-rh' }, `RV ${ds.rh}%`), ds.word ? h('b', {}, ds.word) : null));
+    metrics.append(box);
+  } else if (p.temp != null) metrics.append(metric('TEMP', `${p.temp}°`));
+  if (p.qnh) { const box = metric('QNH', p.qnh, h('small', {}, 'hPa')); box.title = 'QNH: luchtdruk herleid tot zeeniveau.'; metrics.append(box); }
+  return metrics;
 }
 
 let ehamBadge = null;
@@ -322,29 +416,13 @@ function renderEham() {
   }));
   ehamBadge.classList.add('hd');
   if (metar) {
-    const p = parseMetar(metar.raw);
-    if (metar.fltCat) head.append(h('span', { class: 'cat ' + metar.fltCat, title: 'Vliegcategorie' }, metar.fltCat));
-    head.append(ehamBadge);
+    const now = Date.now();
+    const st = WX.station('EHAM', metar.raw, metar.obsTime, metar.taf, eham.history, now, EHAM_POS);
+    const p = st.metar;
+    if (metar.fltCat) head.append(h('span', { class: 'cat ' + metar.fltCat, title: 'Vliegcategorie volgens de Amerikaanse indeling van aviationweather.gov (plafond BKN/OVC en zicht). Zegt niets over de BOM-minima: zie de toetsing ernaast.' }, metar.fltCat));
+    head.append(bomChips(st, now), ehamBadge);
 
-    const metrics = h('div', { class: 'eham-metrics' });
-    if (p.wind) {
-      const calm = p.wind.spd === 0;
-      const arrow = p.wind.dir === 'VRB' || calm ? null : h('span', { style: `display:flex;transform:rotate(${(+p.wind.dir + 180) % 360}deg)`, title: `Wind uit ${p.wind.dir}°` }, icon('arrowUp', 'wind-arrow'));
-      metrics.append(metric('WIND', arrow, calm ? 'Stil' : `${p.wind.dir === 'VRB' ? 'VRB' : p.wind.dir + '°'} / ${p.wind.spd}`, p.wind.gust ? h('small', {}, `G${p.wind.gust}`) : null, calm ? null : h('small', {}, p.wind.unit)));
-    }
-    if (p.vis != null) metrics.append(metric('ZICHT', p.cavok ? 'CAVOK' : p.vis >= 9999 ? '≥10' : p.vis >= 5000 ? (p.vis / 1000).toFixed(0) : p.vis, p.cavok ? null : h('small', {}, p.vis >= 5000 ? 'km' : 'm')));
-    const cloud = p.clouds.find((c) => /BKN|OVC|VV/.test(c.cover)) || p.clouds[0];
-    metrics.append(metric('WOLKEN', cloud ? `${cloud.cover} ${cloud.base}` : p.cavok ? 'Geen' : 'NSC', cloud ? h('small', {}, 'ft' + (cloud.type ? ' ' + cloud.type : '')) : null));
-    if (p.temp != null) {
-      const ds = dewSpread(p.temp, p.dew);
-      const box = metric('TEMP / DAUWP', `${p.temp}° / ${p.dew}°`);
-      box.classList.add('metric-dew');
-      box.append(h('div', { class: 'dew ' + ds.level, title: `Verschil tussen temperatuur en dauwpunt: ${ds.spread}°C, relatieve vochtigheid ${ds.rh} %.\nBij 3 °C of minder is de lucht bijna verzadigd en kan mist of lage bewolking ontstaan, vooral bij afkoeling ’s avonds en ’s nachts.` },
-        h('span', { class: 'dew-dot' }), `Δ ${ds.spread}°`, h('span', { class: 'dew-rh' }, `RV ${ds.rh}%`), ds.word ? h('b', {}, ds.word) : null));
-      metrics.append(box);
-    }
-    if (p.qnh) metrics.append(metric('QNH', p.qnh, h('small', {}, 'hPa')));
-    if (p.wx.length) metrics.append(metric('WEER', p.wx.join(' ')));
+    const metrics = metarMetrics(p, 'eham-metrics');
     wx.append(head, metrics, h('div', { class: 'eham-raw', title: metar.raw + (metar.taf ? '\n\n' + metar.taf : '') }, metar.raw.replace(/^(METAR|SPECI)\s+/, '')));
   } else {
     head.append(ehamBadge);
@@ -353,9 +431,18 @@ function renderEham() {
   root.replaceChildren(wx);
 }
 
+// Keeps the last hours of observations of one field, one per observation time, newest first.
+function rememberObs(history, res) {
+  if (!res.obsTime || !res.raw || history.some((o) => o.obsTime === res.obsTime)) return;
+  history.push({ obsTime: res.obsTime, raw: res.raw });
+  history.sort((a, b) => b.obsTime - a.obsTime);
+  const cut = Date.now() - HISTORY_KEEP;
+  while (history.length && history[history.length - 1].obsTime < cut) history.pop();
+}
+
 async function refreshMetar() {
   const res = await window.palv.data.metar('EHAM').catch(() => ({ ok: false }));
-  if (res.ok) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; } else eham.metarFail = true;
+  if (res.ok) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; rememberObs(eham.history, res); } else eham.metarFail = true;
   renderEham();
   const m = eham.metar, obsAge = m && m.obsTime ? Date.now() - m.obsTime : Infinity;
   report('metar', 'METAR Schiphol', !eham.metarFail && obsAge < 75 * 60000,
