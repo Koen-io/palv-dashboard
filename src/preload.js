@@ -104,8 +104,28 @@ contextBridge.exposeInMainWorld('palv', {
     prefetchStop: () => ipcRenderer.invoke('plan:prefetchStop'),
     onPrefetch: (cb) => on('plan:prefetch', cb),
     tileStats: () => ipcRenderer.invoke('plan:tileStats'),
+    putMany: (kind, items) => ipcRenderer.invoke('plan:putMany', kind, items),
+    live: (msg) => ipcRenderer.invoke('plan:live', msg),
+    onLive: (cb) => on('plan:live', cb),
+    syncNow: () => ipcRenderer.invoke('plan:syncNow'),
     saveText: (q) => ipcRenderer.invoke('plan:saveText', q),
+    saveBinary: (q) => ipcRenderer.invoke('plan:saveBinary', q),
     printPdf: (q) => ipcRenderer.invoke('plan:printPdf', q),
+  },
+  ais: {
+    snap: (since) => ipcRenderer.invoke('ais:snap', since),
+    status: () => ipcRenderer.invoke('ais:status'),
+    track: (mmsi) => ipcRenderer.invoke('ais:track', mmsi),
+    photo: (q) => ipcRenderer.invoke('ais:photo', q),
+    setKey: (k) => ipcRenderer.invoke('ais:setKey', k),
+  },
+  docs: {
+    pick: (slot) => ipcRenderer.invoke('docs:pick', slot),
+    remove: (slot) => ipcRenderer.invoke('docs:remove', slot),
+    file: (slot) => ipcRenderer.invoke('docs:file', slot),
+  },
+  offshore: {
+    places: (force) => ipcRenderer.invoke('offshore:places', force),
   },
   opensky: {
     status: () => ipcRenderer.invoke('opensky:status'),

@@ -43,6 +43,7 @@ function everySecond() {
   paintFreshBadges();
   oledTick();
   briefingTick();
+  timingsTick();
   nightlyReload();
   const r = state.settings.rotate;
   if (r > 0 && state.pages.length > 1 && !editing && !modalOpen()) {

@@ -74,26 +74,97 @@ function leaderPeer() {
 // Only the unit's own screens (peers this screen has found or was given) get the files.
 const isPeer = (caller) => !!caller && caller.secure === true && screens.peers().some((p) => p.id === caller.id);
 
+const KIND_WORDS = { private: 'eigen profielen en dekken', shared: 'routes en favorieten', ops: 'timers', boards: 'whiteboards', missions: 'missieplanning' };
+// What was fetched from each screen so far, per kind: the next fetch asks only for what changed after it.
+const synced = new Map();
+let syncBusy = false, syncAgain = false;
 async function syncFiles() {
-  const mine = store.digests();
-  for (const p of screens.peers()) {
-    const theirs = p.online && p.status && p.status.plan;
-    if (!theirs || p.status.ephemeral || !p.secure) continue;
-    for (const kind of Object.keys(store.KINDS)) {
-      if (!theirs[kind] || theirs[kind] === mine[kind]) continue;
-      try {
-        const data = await peerGet(p, `/api/plan/sync?kind=${kind}`);
-        if (store.merge(kind, data)) log.info('plan', `${kind === 'private' ? 'eigen profielen en dekken' : 'routes en favorieten'} bijgewerkt van ${p.name}`);
-      } catch (err) { /* that screen is busy or gone; the next round tries again */ }
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true;
+  try {
+    const mine = store.digests();
+    for (const p of screens.peers()) {
+      const theirs = p.online && p.status && p.status.plan;
+      if (!theirs || p.status.ephemeral || !p.secure) continue;
+      for (const kind of Object.keys(store.KINDS)) {
+        if (!theirs[kind] || theirs[kind] === mine[kind]) continue;
+        const key = `${p.id}|${kind}`;
+        try {
+          const since = synced.get(key) || 0;
+          const data = await peerGet(p, `/api/plan/sync?kind=${kind}&since=${since}`);
+          let newest = since;
+          for (const l of Object.values(data || {})) for (const it of Object.values(l || {})) if (it && it.updatedAt > newest && it.updatedAt < Date.now() + 864e5) newest = it.updatedAt;
+          synced.set(key, newest);
+          if (store.merge(kind, data)) { mine[kind] = store.digests()[kind]; if (kind === 'private' || kind === 'shared') log.info('plan', `${KIND_WORDS[kind]} bijgewerkt van ${p.name}`); }
+        } catch (err) { synced.delete(key); /* that screen is busy or gone; the next round tries again */ }
+      }
     }
+  } finally {
+    syncBusy = false;
+    if (syncAgain) { syncAgain = false; setTimeout(syncFiles, 50); }
   }
+}
+// A change made here goes to the other screens at once: they are told the new fingerprints and fetch what
+// is new. That keeps a whiteboard stroke or a timer within a tenth of a second on every screen.
+const selfHeader = () => JSON.stringify({ id: screens.id(), name: screens.name(), port: screens.port() });
+let pokeTimer = null;
+function pokePeers() {
+  if (!screens) return;
+  clearTimeout(pokeTimer);
+  pokeTimer = setTimeout(() => {
+    const digests = JSON.stringify(store.digests());
+    for (const p of screens.peers()) {
+      if (!p.online || !p.secure || !p.status || p.status.ephemeral) continue;
+      const req = screens.request(p, { path: '/api/plan/poke', timeout: 3000, headers: { 'X-Palv-Screen': selfHeader(), 'X-Palv-Digests': digests } }, (res) => res.resume());
+      req.on('timeout', () => req.destroy());
+      req.on('error', () => {});
+    }
+  }, 40);
+}
+let pokedTimer = null;
+function onPoked(caller, digests) {
+  const p = screens.peers().find((x) => x.id === caller.id);
+  if (p && p.status && digests && typeof digests === 'object') p.status.plan = { ...(p.status.plan || {}), ...digests };
+  clearTimeout(pokedTimer);
+  pokedTimer = setTimeout(() => syncFiles().catch(() => {}), 30);
+}
+// Volatile messages between the screens (a cursor on a whiteboard, a stroke still being drawn): never
+// stored, straight to the dashboards of the other screens.
+const LIVE_MAX = 12000;
+function liveSend(msg) {
+  let body;
+  try { body = JSON.stringify(msg); } catch { return false; }
+  if (body.length > LIVE_MAX || !screens) return false;
+  for (const p of screens.peers()) {
+    if (!p.online || !p.secure || !p.status || p.status.ephemeral) continue;
+    const req = screens.request(p, { path: '/api/live', timeout: 3000, headers: { 'X-Palv-Screen': selfHeader(), 'X-Palv-Live': body } }, (res) => res.resume());
+    req.on('timeout', () => req.destroy());
+    req.on('error', () => {});
+  }
+  return true;
 }
 
 const routes = {
   '/api/plan/sync': (req, res, caller, respond) => {
-    const kind = new URL(req.url, 'http://x').searchParams.get('kind');
+    const u = new URL(req.url, 'http://x');
+    const kind = u.searchParams.get('kind');
     if (!isPeer(caller) || !store.KINDS[kind]) return respond(res, 403, 'text/plain', 'Niet toegestaan');
-    respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(store.get(kind, { withDeleted: true })));
+    respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(store.get(kind, { withDeleted: true, since: Math.max(0, +u.searchParams.get('since') || 0) })));
+  },
+  '/api/plan/poke': (req, res, caller, respond) => {
+    if (!isPeer(caller)) return respond(res, 403, 'text/plain', 'Niet toegestaan');
+    let digests = null;
+    try { digests = JSON.parse(req.headers['x-palv-digests'] || 'null'); } catch { /* none */ }
+    onPoked(caller, digests);
+    respond(res, 200, 'text/plain; charset=utf-8', '');
+  },
+  '/api/live': (req, res, caller, respond) => {
+    if (!isPeer(caller)) return respond(res, 403, 'text/plain', 'Niet toegestaan');
+    try {
+      const msg = JSON.parse(req.headers['x-palv-live'] || 'null');
+      if (msg && typeof msg === 'object') send('plan:live', { ...msg, from: caller.id, fromName: caller.name });
+    } catch { /* unreadable: dropped */ }
+    respond(res, 200, 'text/plain; charset=utf-8', '');
   },
   // Wind for a screen that follows this one: from the cache, or fetched now on its behalf.
   '/api/plan/wind/grid': async (req, res, caller, respond) => {
@@ -249,12 +320,12 @@ async function saveFile(title, name, filters, content) {
   return res.filePath;
 }
 // The kneeboard card: an HTML page laid out by the renderer, printed to PDF in a hidden window.
-async function printPdf(html, name) {
+async function printPdf(html, name, pageSize = 'A5') {
   const w = new BrowserWindow({ show: false, webPreferences: { javascript: false, offscreen: true } });
   try {
     await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    const pdf = await w.webContents.printToPDF({ pageSize: 'A5', printBackground: true, margins: { marginType: 'custom', top: 0.3, bottom: 0.3, left: 0.3, right: 0.3 } });
-    return saveFile('Kniebordkaart opslaan', name, [{ name: 'PDF', extensions: ['pdf'] }], pdf);
+    const pdf = await w.webContents.printToPDF({ pageSize: pageSize === 'A4' ? 'A4' : 'A5', printBackground: true, margins: { marginType: 'custom', top: 0.3, bottom: 0.3, left: 0.3, right: 0.3 } });
+    return saveFile(pageSize === 'A4' ? 'PDF opslaan' : 'Kniebordkaart opslaan', name, [{ name: 'PDF', extensions: ['pdf'] }], pdf);
   } finally { w.destroy(); }
 }
 
@@ -309,8 +380,11 @@ function start(opts) {
 /* ---------- what the tab asks ---------- */
 const safe = (fn) => async (...args) => { try { return await fn(...args); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; } };
 
-ipcMain.handle('plan:store', () => ({ private: store.get('private'), shared: store.get('shared') }));
-ipcMain.handle('plan:put', safe((_e, kind, list, id, item) => store.put(kind, list, id, item)));
+ipcMain.handle('plan:store', () => Object.fromEntries(Object.keys(store.KINDS).map((k) => [k, store.get(k)])));
+ipcMain.handle('plan:put', safe((_e, kind, list, id, item) => { const out = store.put(kind, list, id, item); pokePeers(); return out; }));
+ipcMain.handle('plan:putMany', safe((_e, kind, items) => { const out = store.putMany(kind, Array.isArray(items) ? items.slice(0, 500) : []); pokePeers(); return out; }));
+ipcMain.handle('plan:live', (_e, msg) => liveSend(msg && typeof msg === 'object' ? msg : {}));
+ipcMain.handle('plan:syncNow', () => { syncFiles().catch(() => {}); return true; });
 ipcMain.handle('plan:importProfiles', safe(async () => {
   const res = await dialog.showOpenDialog(getWin(), { title: 'Profielbestand importeren', filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
   if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
@@ -349,9 +423,14 @@ ipcMain.handle('plan:prefetch', safe((_e, q) => prefetch(q)));
 ipcMain.handle('plan:prefetchStop', () => { if (prefetchRun) prefetchRun.stop = true; return true; });
 ipcMain.handle('plan:tileStats', () => ({ bytes: tileBytes, sources: Object.fromEntries(Object.entries(TILE_SOURCES).map(([k, d]) => [k, { max: d.max, prefetch: d.prefetch }])) }));
 
+ipcMain.handle('plan:saveBinary', safe(async (_e, { title, name, ext, dataUrl }) => {
+  const m = /^data:([\w/+.-]+);base64,(.+)$/.exec(String(dataUrl || ''));
+  if (!m) throw new Error('Geen afbeelding');
+  return { ok: !!(await saveFile(String(title || 'Opslaan'), String(name || 'bestand'), [{ name: String(ext || 'png').toUpperCase(), extensions: [String(ext || 'png')] }], Buffer.from(m[2], 'base64'))) };
+}));
 ipcMain.handle('plan:saveText', safe(async (_e, { title, name, ext, content }) => ({ ok: !!(await saveFile(title, name, [{ name: ext.toUpperCase(), extensions: [ext] }], String(content))) })));
-ipcMain.handle('plan:printPdf', safe(async (_e, { html, name }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'))) })));
+ipcMain.handle('plan:printPdf', safe(async (_e, { html, name, pageSize }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'), pageSize)) })));
 
 const status = () => ({ ...store.digests(), wind: wind.own() });
 
-module.exports = { start, registerScheme, status, TILE_SOURCES };
+module.exports = { start, registerScheme, status, TILE_SOURCES, peerGet, leaderPeer, isPeer, request, fetchJson, fetchText, fetchBuffer, pokePeers, selfHeader: () => selfHeader() };

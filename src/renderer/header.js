@@ -113,6 +113,8 @@ function renderTabs() {
         'button',
         { class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), title: i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
         p.name,
+        // A page with the Timings tab shows the nearest running timer in its tab; nothing when none runs.
+        typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,
         h('span', { class: 'tab-tool', title: 'Naam wijzigen', onclick: (e) => { e.stopPropagation(); renamePage(i); } }, icon('edit')),
         state.pages.length > 1 ? h('span', { class: 'tab-tool danger', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null
       )

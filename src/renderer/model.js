@@ -14,7 +14,7 @@
   // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
   // same area stays in view on any screen resolution and in any window size.
   const REF_W = 939, REF_H = 1041;
-  const VERSION = 8;
+  const VERSION = 9;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -39,6 +39,13 @@
     fleet: { name: 'In de lucht', defaults: { groups: ['police', 'hems', 'coastguard'], hide: [], ground: true } },
     note: { name: 'Notitie', defaults: { text: '' } },
     plan: { name: 'Zoek & Plan', defaults: {} },
+    // 1.28: timers and alarms, the next of them as a widget, the mission planning (SOMP), the whiteboard and the offshore map.
+    timings: { name: 'Timings', defaults: { sort: 'remaining', filter: 'all', side: true } },
+    nextevent: { name: 'Next event', defaults: { mode: 'both', category: 'all' } },
+    mission: { name: 'Mission Planning', defaults: { missionId: null, phase: 'overview' } },
+    whiteboard: { name: 'Whiteboard', defaults: { boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#ffffff', width: 4 } },
+    debrief: { name: '(De)Briefing', defaults: { slot: 'debriefing' } },
+    offshore: { name: 'Offshore', defaults: { lat: 53.35, lon: 4.1, zoom: 7.2, base: 'osm', raster: ['seamark'], side: true, sideTab: 'ships', layers: { platforms: true, farms: true, turbines: false, helidecks: true, wx: true, fleet: true, ships: true, tracks: true, labels: true, places: true, eez: true, pipelines: false, cables: false, density: false, natura: false }, shipTypes: ['all'], minSog: 0 } },
   };
 
   // Briefing times from the sheet at Flight Ops; editable under Instellingen > Meldingen.
@@ -83,6 +90,8 @@
     ],
     hex: { ...DEFAULT_HEX },
     unitInfo: {},
+    // 1.28: Timings: the sounds and the warning ahead of time, as standard for a new timer on this screen.
+    timings: { sound: 'alarm', warnSound: 'chime', warnMin: 5, popup: true, volume: 0.8, repeatS: 20 },
   };
 
   function defaultState() {
@@ -116,6 +125,11 @@
           ],
         },
         { id: uid(), name: 'Zoek & Plan', widgets: [widget('plan', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'Timings', widgets: [widget('timings', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'Mission Planning', widgets: [widget('mission', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'Whiteboard', widgets: [widget('whiteboard', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'Offshore', widgets: [widget('offshore', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: '(De)Briefing', widgets: [widget('debrief', 0, 0, 96, 54, 1)] },
       ],
     };
   }
@@ -166,6 +180,7 @@
     if (from < 5) migrateV5(loaded);
     if (from < 6) migrateV6(loaded);
     if (from < 8) migrateV8(loaded);
+    if (from < 9) migrateV9(loaded);
     loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
     return loaded;
   }
@@ -254,6 +269,15 @@
   function migrateV8(st) {
     if (st.pages.some((p) => p.widgets.some((w) => w.type === 'plan'))) return;
     st.pages.push({ id: uid(), name: 'Zoek & Plan', widgets: [{ id: uid(), type: 'plan', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.plan.name, cfg: {} }] });
+  }
+
+  // 1.28: four new tabs, each one widget over the whole page, behind the existing pages; an existing page
+  // that already holds that widget keeps it.
+  function migrateV9(st) {
+    for (const [type, name] of [['timings', 'Timings'], ['mission', 'Mission Planning'], ['whiteboard', 'Whiteboard'], ['offshore', 'Offshore'], ['debrief', '(De)Briefing']]) {
+      if (st.pages.some((p) => p.widgets.some((w) => w.type === type))) continue;
+      st.pages.push({ id: uid(), name, widgets: [{ id: uid(), type, x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META[type].name, cfg: JSON.parse(JSON.stringify(WIDGET_META[type].defaults)) }] });
+    }
   }
 
   return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_BRIEFINGS, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };

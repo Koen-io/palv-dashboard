@@ -1,0 +1,50 @@
+/* ============================================================
+   Offshore
+   ============================================================ */
+.widget.offshore .w-body { background: var(--bg); }
+.os { position: absolute; inset: 0; display: flex; flex-direction: column; font-family: var(--font-ui); }
+.os-body { flex: 1; min-height: 0; display: flex; position: relative; }
+.os-side { flex: none; width: 25rem; max-width: 40%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; }
+.os.side-off .os-side { margin-left: calc(-1 * min(25rem, 40%)); }
+.os.side-off .zp-side-toggle svg { transform: rotate(180deg); }
+.os-tabs { grid-template-columns: repeat(4, 1fr); }
+.os-status { position: static; }
+.os-ships { display: flex; flex-direction: column; gap: 0.2rem; }
+.os-ship { display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.5rem; align-items: center; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); text-align: left; }
+.os-ship:hover { border-color: var(--border-strong); background: var(--surface-3); }
+.os-ship.on { border-color: #ffd21f; }
+.os-ship .zp-dot { background: var(--c); }
+.os-ship b { display: block; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.os-ship small { display: block; font-size: 0.66rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.os-ship > div { min-width: 0; }
+.os-ship-d { font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.os-flag { display: inline-block; width: 1.3rem; height: 0.975rem; border-radius: 2px; background: var(--surface-3) center / cover no-repeat; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3); }
+.os-card { width: 25rem; }
+.os-photo { display: flex; flex-direction: column; gap: 0.2rem; }
+.os-photo img { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.14); }
+.os-photo small { font-size: 0.62rem; color: #8ea2bf; line-height: 1.3; }
+.os-photo-none { padding: 0.8rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05); color: #8ea2bf; font-size: 0.74rem; text-align: center; }
+.os-flagrow { display: flex; align-items: center; gap: 0.5rem; }
+.os-flagrow b { font-size: 0.9rem; }
+.os-flagrow i { font-style: normal; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; padding: 0.08rem 0.38rem; border-radius: 3px; color: #c9d6ea; background: rgba(143, 183, 230, 0.12); border: 1px solid rgba(143, 183, 230, 0.22); }
+.os-near { padding: 0.25rem 0; border-top: 1px dashed rgba(255, 255, 255, 0.1); color: #e9eff8; }
+.os-near b { color: #fff; }
+.os-near small { color: #8ea2bf; }
+.os-raw { margin: 0; padding: 0.5rem; border-radius: 5px; background: #060c16; color: #c6d4e8; font: 400 0.7rem/1.45 var(--font-mono); white-space: pre-wrap; word-break: break-word; user-select: text; }
+.wb-cat .zp-dot { width: 0.55rem; height: 0.55rem; margin-right: 0.3rem; }
+.zp-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+body.touch .os-ship { padding: 0.55rem 0.6rem; }
+
+/* ---------- (De)Briefing ---------- */
+.widget.debrief .w-body { background: var(--bg); }
+.db { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.db-seg button { height: 2.3rem; padding: 0 1.3rem; font-size: 0.86rem; }
+.db-info { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30rem; }
+.db-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #2a3140; touch-action: none; cursor: grab; }
+.db-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.55); user-select: none; -webkit-user-drag: none; image-rendering: auto; }
+.db-pdf { position: absolute; inset: 0; width: 100%; height: 100%; }
+.db-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; color: #8ea2bf; text-align: center; padding: 2rem; }
+.db-empty svg { width: 2.4rem; height: 2.4rem; opacity: 0.6; }
+.db-empty b { color: #e9eff8; font: 600 1.2rem var(--font-display); }
+.db-empty span { max-width: 36rem; line-height: 1.5; }
+body.touch .db-seg button { height: 2.7rem; }

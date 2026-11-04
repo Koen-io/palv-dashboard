@@ -9,9 +9,15 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// 1.28: three more shared files, each synchronised the same way: the timers and alarms of the Timings tab,
+// the whiteboards (one item per board, one per element, so two screens can draw on one board at once) and
+// the mission plans (one item per mission, one per field).
 const KINDS = {
-  private: { file: 'plan-private.json', mode: 0o600, lists: ['profiles', 'decks', 'keys'] },
+  private: { file: 'plan-private.json', mode: 0o600, lists: ['profiles', 'decks', 'keys', 'docs'] },
   shared: { file: 'plan-shared.json', mode: 0o644, lists: ['routes', 'favorites', 'bases'] },
+  ops: { file: 'palv-timings.json', mode: 0o644, lists: ['timers', 'presets'] },
+  boards: { file: 'palv-whiteboards.json', mode: 0o644, lists: ['boards', 'elements'] },
+  missions: { file: 'palv-missies.json', mode: 0o644, lists: ['missions', 'fields'] },
 };
 const TOMBSTONE_DAYS = 60;
 
@@ -48,11 +54,33 @@ function prune(kind) {
   for (const l of KINDS[kind].lists) for (const [id, it] of Object.entries(data[kind][l])) if (it && it.deleted && it.updatedAt < cut) delete data[kind][l][id];
 }
 
-// Everything of a kind, without tombstones; `withDeleted` for passing on to another screen.
-function get(kind, { withDeleted = false } = {}) {
+// Everything of a kind, without tombstones; `withDeleted` for passing on to another screen, and `since`
+// (ms) for only what changed after that moment, so a screen that keeps up fetches just the new items.
+function get(kind, { withDeleted = false, since = 0 } = {}) {
   const d = data[kind];
-  if (withDeleted) return JSON.parse(JSON.stringify(d));
-  return Object.fromEntries(KINDS[kind].lists.map((l) => [l, Object.fromEntries(Object.entries(d[l]).filter(([, it]) => it && !it.deleted))]));
+  const keep = (it) => it && (withDeleted || !it.deleted) && (!since || it.updatedAt > since);
+  return Object.fromEntries(KINDS[kind].lists.map((l) => [l, Object.fromEntries(Object.entries(d[l]).filter(([, it]) => keep(it)))]));
+}
+// The newest change in a kind, for the `since` of the next fetch.
+function newest(kind) {
+  let t = 0;
+  for (const l of KINDS[kind].lists) for (const it of Object.values(data[kind][l])) if (it && it.updatedAt > t) t = it.updatedAt;
+  return t;
+}
+// Several items of one kind in one go (a whiteboard stroke with its board, a mission with its fields): one
+// write, one notification. `items`: [{ list, id, item }] with item null for a removal.
+function putMany(kind, items) {
+  if (!KINDS[kind]) throw new Error('onbekende soort');
+  const now = Date.now();
+  let n = 0;
+  for (const { list, id, item } of items || []) {
+    if (!KINDS[kind].lists.includes(list) || id == null) continue;
+    const key = String(id).slice(0, 200);
+    data[kind][list][key] = item == null ? { deleted: true, updatedAt: now + n } : { ...item, updatedAt: now + n };
+    n += 1;
+  }
+  if (n) { write(kind); emit(kind); }
+  return get(kind);
 }
 
 // One item set (or removed with item = null) by this screen.
@@ -106,4 +134,4 @@ function importProfiles(obj) {
   return ids;
 }
 
-module.exports = { start, get, put, merge, digest, digests, onChange, importProfiles, KINDS };
+module.exports = { start, get, put, putMany, newest, merge, digest, digests, onChange, importProfiles, KINDS };

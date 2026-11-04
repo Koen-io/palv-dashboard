@@ -9,12 +9,17 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 - **Weerradar:** Windy met METAR- en TAF-stations, getoetst aan de BOM-weerminima.
 - **Baangebruik Schiphol** (per vlucht van de Schiphol-radar via de BAS-flighttracker, live ADS-B als terugval) en **In de lucht** (eigen eenheden), live waargenomen.
 - **Zoek & Plan:** navigatie en vluchtplanning voor EC135 en AW139: zoeken met aanvullen, routes met wind en brandstof, meetlint, afstandsringen, luchtruim (openAIP), platforms, live vloot, zoekpatronen, orbit, actieradius en briefing. De eigen cijfers uit vlieghandboek en SOP staan niet in deze code maar in een privébestand op het scherm (`plan-private.json`).
+- **Timings:** timers, wekkers en positietimers (een eigen toestel bereikt een punt) voor een missie of dienst, met waarschuwing vooraf, geluid en pop-up, de L-uur ketting uit de TACSOP, en de widget Next event. Gedeeld met alle schermen.
+- **Mission Planning:** de Scheme Of Maneuver Planning (SOMP) van de TACSOP AW139 digitaal, alle fases en planborden invulbaar, met een overzicht dat laat zien of de SOMP compleet is.
+- **Whiteboard:** tekenen, tekst en ruim honderd operationele iconen, op het touchscreen, live samen op alle schermen.
+- **Offshore:** alle platforms, windparken, grenzen, kabels, kustpunten, de eigen vloot en live AIS met scheepsdata, past tracks en foto's.
 - Versheidsbolletje op elke widget: groen, oranje of rood, met tijd en leeftijd van de gegevens.
 
 ## Beheer
 
 - **Updates:** elke 30 minuten wordt gekeken naar de [releases](../../releases). Een nieuwe versie wordt gedownload, met SHA-256 gecontroleerd en automatisch geïnstalleerd.
-- **Schermoverzicht:** dashboards in hetzelfde netwerk of via Tailscale zien elkaar. Elk dashboard heeft een statuspagina op `http://<adres>:47800/` (alleen-lezen, alleen bereikbaar vanaf privé- en Tailscale-adressen). Onderling praten de dashboards alleen versleuteld met de eenheidssleutel (TLS-PSK op poort 47801); een nieuw scherm koppel je met de koppelcode in het Schermoverzicht.
+- **Schermoverzicht:** dashboards in hetzelfde netwerk of via Tailscale zien elkaar. Elk dashboard heeft een statuspagina op `http://<adres>:47800/` (alleen-lezen, alleen bereikbaar vanaf privé- en Tailscale-adressen). Onderling praten de dashboards alleen versleuteld met de eenheidssleutel (TLS-PSK op poort 47801); een nieuw scherm koppel je met de koppelcode in het Schermoverzicht. Timers, whiteboards en missies staan binnen een tiende seconde op alle schermen.
+- **AIS:** de schepen op het tabblad Offshore komen van aisstream.io; dat vraagt een (gratis) API-sleutel, in te vullen onder Instellingen › Offshore.
 - **Betrouwbaarheid:** het scherm blijft altijd aan, het dashboard herstelt zichzelf na een crash, de indeling heeft automatische reservekopieën, en er is een logboek van 14 dagen en OLED-bescherming.
 
 ## Ontwikkelen

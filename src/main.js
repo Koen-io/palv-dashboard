@@ -11,6 +11,9 @@ const data = require('./main/data');
 const share = require('./share');
 const traffic = require('./traffic');
 const plan = require('./main/plan');
+const ais = require('./ais');
+const offshore = require('./offshore');
+const docs = require('./main/docs');
 require('./main/tiles');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -287,10 +290,15 @@ app.whenReady().then(() => {
   watchdog.attach(win);
   data.start(() => win);
   const planOut = plan.start({ screens, share, getWin: () => win, test: !!shotPath });
+  const planStore = require('./plan/store');
+  const lg = { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) };
+  const aisOut = ais.start({ dir: app.getPath('userData'), screens, share, store: planStore, peerGet: plan.peerGet, request: screens.request, log: lg });
+  offshore.start({ dir: app.getPath('userData'), fetchText: plan.fetchText, log: lg, ais, store: planStore, poke: plan.pokePeers });
+  docs.start({ store: planStore, getWin: () => win, poke: plan.pokePeers });
   // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
   if (shotPath && !process.argv.includes('--shot-full')) return;
   if (!shotPath) updater.start({ repository: UPDATE_REPO, onStatus: (s) => send('update:status', s) });
-  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share, routes: planOut.routes });
+  screens.start({ userData: app.getPath('userData'), status: screenStatus, onUpdate: (list) => send('screens:update', list), test: !!shotPath, share, routes: { ...planOut.routes, ...aisOut.routes } });
   // A test window never fetches for others nor follows them: it keeps to itself.
   share.start({
     traffic, peers: screens.peers, disabled: !!shotPath, request: screens.request,
@@ -300,7 +308,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => log.info('app', 'afgesloten'));
+app.on('before-quit', () => { ais.stop(); log.info('app', 'afgesloten'); });
 
 const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 
@@ -486,6 +494,8 @@ function screenStatus() {
     share: share.info(),
     // Fingerprints of the Zoek & Plan files, so the screens only fetch them from each other on a change.
     plan: plan.status(),
+    // Ships: whether this screen keeps the AIS stream open, so the other screens can take them from it.
+    ais: ais.status(),
   };
 }
 ipcMain.handle('screens:info', () => ({ name: screens.name(), port: screens.port(), addresses: screens.addresses(), list: screens.list() }));

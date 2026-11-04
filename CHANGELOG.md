@@ -1,5 +1,51 @@
 # Wijzigingen
 
+## 1.28.0
+
+Vier nieuwe tabbladen, achter de bestaande: **Timings**, **Mission Planning**, **Whiteboard** en **Offshore**. Wat je daar zet of tekent staat binnen een tiende seconde op alle schermen van de eenheid, over de beveiligde verbinding met de eenheidssleutel; drie nieuwe gedeelde bestanden naast de routes en profielen.
+
+### Timings
+- **Timers** (aftellen vanaf een duur), **wekkers** (een tijdstip, LT of UTC) en **positietimers**: gaat af als een eigen toestel een punt bereikt (of een gebied verlaat), met het toestel uit de live-bron, een punt uit het zoeken van Zoek & Plan (plaats, platform, vliegveld, favoriet of coördinaat), een straal in NM en een ETA uit koers en grondsnelheid
+- Elke timing heeft een naam, categorie (Missie, Dienst, Brandstof, Briefing, Bemanning, Overig), toelichting, de tekst van de melding, een **waarschuwing vooraf** (minuten), een geluid vooraf en een geluid als hij afgaat, en de keuze voor een pop-up over het hele scherm of alleen de balk bovenaan
+- Geluiden worden ter plekke gemaakt (gong, belletje, alarm, sirene, piepjes, tik, hoorn) of het eigen briefinggeluid van het scherm; volume, herhaling en standaardwaarden onder de knop Geluiden en onder Instellingen › Meldingen
+- Een afgegane timing geeft op elk scherm de rode balk, de gloed en (naar keuze) de pop-up, en herhaalt het geluid tot iemand **bevestigt**; dat stopt hem overal. Een wekker kan vijf minuten later opnieuw
+- Kaarten met aftelring, status, start/pauze, +1 en +5 minuten, terugzetten, bewerken; sorteren op resterende tijd, tijdstip, naam, categorie of aanmaak; filteren op lopend, afgegaan of categorie; rechts een tijdlijn van wat komt en wat ging
+- **L-uur ketting** volgens de TACSOP-ingress: holding (L-30), holding verlaten (L-5), 1LEAD (L-3), 1GATE (L-2), 1 minuut en HAMMER, plus eigen punten; en snelle timers en voorkeuzes (playtime, bingo fuel, rotor running, HOTO, laatste intel-update)
+- Het **tabblad** toont de dichtstbijzijnde lopende timer als badge (groen, oranje binnen een minuut, rood afgegaan); niets als er niets loopt
+- Nieuwe widget **Next event**: de eerstvolgende timing als aftelling, tijdstip of allebei, met Bevestigen als hij is afgegaan; per widget een categorie
+
+### Mission Planning (SOMP)
+- De Scheme Of Maneuver Planning van de TACSOP AW139 (hoofdstuk 5.1) digitaal: Opdracht, Fase 1, Initial guidance, ICM, Fase 2, SOMP, Post-SOMP, Fase 3, FCM, Mission briefing, Uitvoering en Missiekaart, met de planborden van appendix 6.1 (ML, PF/FL, TFO despatcher per fase), de SOMP-checklist (mission statement, SOMP briefing met COEFAK, SOM development, SWOT, configuratie, C2, communicatie, minimum result), de producten, de FCM-onderwerpen en de volledige briefingchecklist (appendix 2)
+- Het **overzicht** laat in één oogopslag zien of de SOMP compleet is: percentage en ring per fase en totaal, wat nog open staat (klik en je bent er), wat het laatst is gewijzigd en door wie, het L-uur met aftelling, en de status (in planning, gereed, lopend, afgerond, archief)
+- Meerdere missies naast elkaar; elk veld wordt los opgeslagen, zodat twee mensen op twee schermen tegelijk aan dezelfde missie kunnen werken
+- **L-uur → Timings** zet de ingress-ketting als wekkers; **PDF** drukt het hele plan af (A4)
+
+### Whiteboard
+- Tekenen met de vinger of de muis: pen, markeerstift, lijn, pijl, rechthoek, ellips (gevuld of niet), tekst (dubbeltik om te bewerken), gum; selecteren, verplaatsen, **draaien en schalen** met grepen; zoomen met het wiel, de knoppen of **twee vingers**; ongedaan maken en opnieuw; raster; vier achtergronden; sneltoetsen
+- Een bibliotheek met ruim **honderd operationele iconen** als vector, in elke kleur en grootte: AW139 en EC135 (bovenaanzicht), H145, AW189, drone, vliegtuig, helipad, baan, windzak; politieauto, onopvallende auto, bus, vrachtwagen, motor, ambulance, brandweer, gepantserd voertuig; RIB, patrouillevaartuig, vracht- en containerschip, tanker, kotter, zeilboot, veerboot, reddingboot, sleper, boei; verdachte, eigen eenheid, agent, team, DSI, hondengeleider, bereden politie, slachtoffer, drone-operator, menigte; woning, flat, loods, hangar, boerderij, school, ziekenhuis, bureau, brug, tunnel, mast, hoogspanningsmast en -lijn, windturbine, windpark, platform, vuurtoren, haven, tankstation, kerk, parkeerplaats, weg, spoor, water, hek, slagboom, duin, veld; boom, bos, vogels, wild, vee, zeehonden, hond, paard, vis; en de tactische symbolen uit de TACSOP: 1LEAD, 1GATE, 1-minuutpunt, doel, hot zone, de **deconflictie-standaard** (4/5 km, N-E-S-W), holding, LP, PUP, DP, LZ, FARP, CP, OP, RV, no fire area, fase-lijn, ingress en egress, sniper/EPS, sector, camera, antenne, gevaar, no-go, explosie, brand, vlag, cijfers, letters, speld, ster, vinkje, kruis, vraagteken, klok, noordpijl, schaalbalk. Zoeken op naam of trefwoord, per categorie; dubbeltik op een geplaatst icoon voor een label (callsign, LP-nummer)
+- De **scheepssectoren** (bow, mid, stern; bakboord rood, stuurboord groen; 0°, 45°, 90°, 139°, 180°) als vector-ondergrond, groot en haarscherp op elke zoom; alles wat je daarna tekent of plaatst komt erbovenop
+- Borden **bewaren en laden** met een miniatuur, hernoemen, kopiëren, verwijderen, als PNG opslaan; het paneel werkt als dat van Zoek & Plan (Tekenen, Iconen, Borden) en klapt in
+- **Live samen tekenen**: elke streek, vorm of icoon staat zodra hij af is op de andere schermen; een streek die nog getekend wordt groeit daar mee, en je ziet van elk ander scherm de naam en de cursor op het bord
+
+### Offshore
+- Eén kaart met alles van de offshore-operatie: alle **platforms** (olie en gas, trafostations van de windparken, FPSO's; NLOG, Rijkswaterstaat, GEUS, NSTA, Sodir, BOEM, EMODnet, OpenStreetMap), windparken met veiligheidszones, windturbines, helidekken (openAIP), **EEZ en 12-mijlsgrens** (Marine Regions), pijpleidingen, kabels, scheepsdichtheid, militaire oefengebieden en Natura 2000 (EMODnet), de zeekaart (OpenSeaMap), KNRM-reddingstations, kustwachtposten, vuurtorens, havens, ziekenhuizen en helipads (OpenStreetMap), de eigen vloot en de Noordzee-weerstations getoetst aan het BOM; alle lagen apart aan en uit
+- **Live AIS** van alle schepen op de Noordzee via aisstream.io (gratis, met een API-sleutel van een gratis account: Instellingen › Offshore). Eén scherm houdt de stream open; de andere schermen krijgen de schepen van dat scherm, zoals het vliegverkeer. Schepen gekleurd per soort (vracht, tanker, passagiers, visserij, HSC, sleep/loods/werk, zeil, overheid/SAR/militair, bakens), met koerslijn en gegist bestek tussen twee berichten
+- Klik op een schip voor de **detailkaart**: naam, vlag (uit de MMSI), MMSI, IMO, roepnaam, type, navigatiestatus, snelheid, koers en heading, draaisnelheid, positie, leeftijd van het bericht, afmetingen, diepgang, bestemming en ETA, afstand en peiling vanaf de basis en vanaf elk eigen toestel in de lucht (met vliegtijd), de **past track** van de laatste uren en een **foto** van het schip (Wikimedia Commons, op IMO-nummer of op naam, met fotograaf en licentie). Volgen, markeren, centreren, positie kopiëren
+- **Zoeken** op naam, MMSI, IMO, roepnaam of bestemming; filteren op soort en minimumsnelheid; sorteren op naam, afstand, snelheid of laatste bericht; gemarkeerde schepen bovenaan en altijd met naam op de kaart. Platforms zoeken met de dichtstbijzijnde eerst; bij elk platform en elk punt op de kaart de dichtstbijzijnde schepen en platforms
+
+### (De)Briefing
+- Nieuw tabblad met bovenin een knop **Briefing** en een knop **Debriefing**: elk toont het document van de eenheid (afbeelding of pdf), passend in beeld, met zoomen (wiel of twee vingers) en verschuiven. Laden met *Document kiezen*; het document komt in het profielbestand van de eenheid en staat daarmee op alle schermen, nooit in de code
+
+### Weerradar
+- Het **tandwiel** in de titelbalk kiest wat er bij elk bolletje staat: stationscode, naam, wind, **wolkenbasis volgens het BOM** (met een lagere FEW-laag ernaast), alle wolkenlagen, zicht, actueel weer, temperatuur en dauwpunt, QNH, de trendpijl en de waarnemingstijd; standaard code, wind, wolkenbasis, zicht en trend
+- Alle stations op elk zoomniveau tonen, en de grootte van de labels (klein tot extra groot)
+- De waarden komen elke minuut vers van aviationweather.gov, uit dezelfde parser als de kop en de METAR-widgets
+
+### Onder de motorkap
+- Drie gedeelde bestanden (timers, whiteboards, missies) naast de routes en profielen; een scherm haalt alleen op wat na de vorige keer veranderde, en een wijziging wordt direct aan de andere schermen gemeld in plaats van elke 15 seconden
+- Een live-kanaal tussen de schermen voor wat niet bewaard hoeft te worden (cursors, lopende pennenstreken)
+- Instellingen › Offshore (AIS-sleutel en bronnen) en Instellingen › Meldingen › Timings
+
 ## 1.27.0
 
 ### Luchtvaartweer: de wolkenbasis volgens het BOM

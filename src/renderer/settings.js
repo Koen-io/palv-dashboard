@@ -183,6 +183,10 @@ function openSettings(startTab) {
         h('div', { class: 'hint' }, 'Een bevestigde melding verdwijnt en komt terug zodra het toestel een andere noodcode uitzendt. Elke melding komt ook in het logboek.'),
         h('hr'),
         ...briefingSettings(s, changed),
+        h('hr'),
+        h('h3', {}, 'Timings'),
+        h('p', {}, 'De timers, wekkers en positietimers van het tabblad Timings gaan op alle schermen tegelijk af, met een waarschuwing vooraf, een geluid en (naar keuze) een pop-up over het hele scherm. Bevestigen op één scherm stopt het overal.'),
+        h('div', {}, h('button', { class: 'btn', onclick: () => tmSettingsDialog() }, icon('clock'), 'Geluiden en standaardwaarden…')),
       ],
     },
     weerradar: {
@@ -300,6 +304,32 @@ function openSettings(startTab) {
         ];
       },
     },
+    // Offshore: the AIS key and what the tab draws on.
+    offshore: {
+      label: 'Offshore', icon: 'globe',
+      build: () => {
+        const key = h('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: 'API-sleutel van aisstream.io' });
+        const info = h('div', { class: 'sys-ver' }, h('div', {}, h('span', {}, 'Laden…')));
+        const paint = (st) => info.replaceChildren(
+          h('div', {}, h('span', {}, 'Sleutel'), h('b', {}, st.key ? 'Ingesteld (gedeeld met de schermen van de eenheid)' : 'Niet ingesteld')),
+          h('div', {}, h('span', {}, 'Verbinding'), h('b', {}, st.connected ? (st.role === 'follow' ? `via ${st.via}` : 'live met aisstream.io') : st.lastErr || 'geen')),
+          h('div', {}, h('span', {}, 'Schepen in het register'), h('b', {}, String(st.count || 0))),
+          h('div', {}, h('span', {}, 'Berichten per minuut'), h('b', {}, String(st.perMin || 0))));
+        window.palv.ais.status().then(paint).catch(() => {});
+        return [
+          h('h3', {}, 'Live schepen (AIS)'),
+          h('p', {}, 'Het tabblad Offshore toont alle schepen op de Noordzee live via aisstream.io. Dat is gratis: maak een account op aisstream.io, maak onder API Keys een sleutel en plak die hier. De sleutel komt in het profielbestand van de eenheid en gaat vanzelf naar de andere schermen. Eén scherm houdt de stream open; de andere schermen krijgen de schepen van dat scherm, net als het vliegverkeer.'),
+          h('div', { class: 'row' }, field('API-sleutel', key), h('div', { class: 'field', style: 'flex:0 0 auto;align-self:flex-end' }, h('button', { class: 'btn primary', onclick: async () => { const r = await window.palv.ais.setKey(key.value); if (r && r.error) return toast(r.error, true); key.value = ''; paint(r); toast('AIS-sleutel opgeslagen'); } }, icon('check'), 'Opslaan'))),
+          h('div', {}, h('button', { class: 'btn danger', onclick: async () => { paint(await window.palv.ais.setKey('')); toast('AIS-sleutel verwijderd'); } }, icon('trash'), 'Sleutel verwijderen')),
+          h('hr'),
+          h('h3', {}, 'Status'),
+          info,
+          h('hr'),
+          h('h3', {}, 'Bronnen van de kaart'),
+          h('p', {}, 'Platforms: NLOG (TNO), Rijkswaterstaat, Energistyrelsen/GEUS, NSTA, Sodir, BOEM, EMODnet en OpenStreetMap. Grenzen (EEZ, 12 NM): Marine Regions (VLIZ). Pijpleidingen, kabels, scheepsdichtheid, militaire gebieden en Natura 2000: EMODnet Human Activities. Zeekaart: OpenSeaMap. KNRM-stations, kustwachtposten, vuurtorens en havens: OpenStreetMap. Helidekken: openAIP (sleutel onder Zoek & Plan). Scheepsfoto\'s: Wikimedia Commons, per IMO-nummer of op naam, met fotograaf en licentie. Vlag: uit de MMSI (ITU MID-tabel).'),
+        ];
+      },
+    },
     over: {
       label: 'Over', icon: 'info',
       build: () => {
@@ -322,6 +352,7 @@ function openSettings(startTab) {
           h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap (overdag licht, in de avond vloeiend donker), satelliet Sentinel-2 cloudless van EOX (Copernicus) met de luchtfoto van PDOK boven Nederland, en de topografische kaart van PDOK (Kadaster). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
           h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
           h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, reserve OpenSky Network, routes van ADS-B Exchange. Weerradar: Windy.com.'),
+          h('p', {}, 'Timings, Mission Planning en Whiteboard delen hun inhoud met alle schermen van de eenheid: elke wijziging staat binnen een tiende seconde op de andere schermen (via de beveiligde verbinding met de eenheidssleutel). Offshore: schepen van aisstream.io (AIS), met foto\'s van Wikimedia Commons.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),
         ];
       },
