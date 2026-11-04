@@ -197,14 +197,23 @@ function connect() {
   sock.addEventListener('open', () => {
     try { sock.send(JSON.stringify({ APIKey: key, BoundingBoxes: [DEFAULT_BBOX], FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport', 'ShipStaticData', 'StaticDataReport', 'AidsToNavigationReport', 'LongRangeAisBroadcastMessage'] })); } catch (err) { lastErr = err.message; }
   });
-  sock.addEventListener('message', (ev) => {
+  // aisstream.io sends its JSON as binary frames: taken as bytes and decoded, not as text.
+  try { sock.binaryType = 'arraybuffer'; } catch { /* not every implementation */ }
+  const onText = (text) => {
     if (!connected) { connected = true; retries = 0; lastErr = null; log.info('ais', 'verbonden met aisstream.io'); }
     lastMsg = Date.now();
     msgCount += 1;
     let m;
-    try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)); } catch { return; }
+    try { m = JSON.parse(text); } catch { return; }
     if (m && m.error) { lastErr = String(m.error); log.warn('ais', 'aisstream.io: ' + lastErr); return; }
     try { ingest(m); } catch (err) { /* one bad message */ }
+  };
+  sock.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (typeof d === 'string') onText(d);
+    else if (d instanceof ArrayBuffer) onText(Buffer.from(d).toString('utf8'));
+    else if (ArrayBuffer.isView(d)) onText(Buffer.from(d.buffer, d.byteOffset, d.byteLength).toString('utf8'));
+    else if (d && typeof d.text === 'function') d.text().then(onText).catch(() => {});
   });
   const down = (why) => {
     if (ws !== sock) return;
@@ -292,7 +301,7 @@ function track(mmsi) { return (tracks.get(String(mmsi)) || []).slice(); }
 function status() {
   const now = Date.now();
   msgWindow = msgWindow.filter((t) => now - t < 60000);
-  return { on: !!key, key: !!key, connected: role === 'lead' ? connected : !!(via && now - lastMsg < 15000), role, via: via ? via.name : null, count: vessels.size, lastMsg, lastErr, perMin: msgWindow.length };
+  return { on: !!key || !!via, key: !!key, connected: role === 'lead' ? connected : !!via, role, via: via ? via.name : null, count: vessels.size, lastMsg, lastErr, perMin: msgWindow.length };
 }
 // Per minute message rate, for the settings page.
 setInterval(() => { if (msgCount) { for (let i = 0; i < Math.min(msgCount, 5000); i += 1) msgWindow.push(Date.now()); msgCount = 0; } }, 5000).unref();

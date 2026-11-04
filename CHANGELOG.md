@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 1.28.1
+
+### Offshore
+- De schepen kwamen niet op de kaart: aisstream.io stuurt zijn berichten als binaire frames en die werden als tekst gelezen en weggegooid. Nu worden ze als bytes gelezen; binnen een minuut staan er honderden schepen op de kaart
+- Een scherm dat de schepen van een ander scherm krijgt, meldt dat ook zo in de status ("AIS via …") als het tabblad daar even niet in beeld is
+
 ## 1.28.0
 
 Vier nieuwe tabbladen, achter de bestaande: **Timings**, **Mission Planning**, **Whiteboard** en **Offshore**. Wat je daar zet of tekent staat binnen een tiende seconde op alle schermen van de eenheid, over de beveiligde verbinding met de eenheidssleutel; drie nieuwe gedeelde bestanden naast de routes en profielen.
