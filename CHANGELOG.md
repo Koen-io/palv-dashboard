@@ -1,5 +1,24 @@
 # Wijzigingen
 
+## 1.29.0
+
+### Whiteboard
+- **Tekenen werkt meteen**: het tabblad opent vanzelf het laatste bord van de eenheid en maakt er een als er nog geen is; tot nu toe deden pen, iconen en tekst niets zolang er geen bord was gekozen
+- De achtergrond is nu **wit** (ook lichtgrijs, papier, donker, zwart en krijtbord), gekozen met een klik; hij werkt ook zonder open bord en de pen wisselt mee van zwart naar wit en terug
+- **Een stuk kaart op het bord**: kies satelliet (met de luchtfoto van Nederland), kaart, topografisch (NL of wereld), luchtfoto of VFR-kaart, met de zeekaart erover; zoek een plaats, platform, vliegveld, favoriet of coördinaat, kies de verhouding van het kader (16:9, 4:3, 1:1, 3:4, A4 of vrij) of sleep zelf een kader, en zet het gebied op het bord. De kaart ligt vergrendeld onder alles wat je tekent, met schaalbalk, noordpijl en bron; de muis boven de kaart geeft de coördinaat; vergrendelen, dekking en centreren onder het nieuwe paneel Kaart. De tegels komen uit de eigen kaartopslag, dus de kaart staat ook op de andere schermen en blijft scherp bij inzoomen
+- **Nieuwe iconen**: de AW139, AW189, EC135 en H145 opnieuw getekend met de bladen netjes om de rotorkop (vijf of vier), sponsons, staartrotor of fenestron; de Dash 8 van de kustwacht; ruim twintig **vaartuigen in bovenaanzicht** (vracht, container, tanker, bulk, veerboot, cruise, patrouille, fregat, RIB, speedboot, zeiljacht, kotter, sleepboot, PSV, CTV, KNRM, loodsboot, baggerschip, duwbak, waterscooter, kajak, rubberboot) om op de scheepssectoren en de kaart te zetten; veel meer scheepstypen in zijaanzicht (bulkcarrier, LNG-tanker, cruiseschip, ro-ro, PSV, SOV, CTV, boorschip, fregat, onderzeeboot, loodsboot, kustwachtcutter, politieboot, speedboot, hovercraft, kajak, rubberboot, reddingsvlot, lichtschip, duwbak, trawler, baggerschip, zeiljacht); offshore (hefeiland, halfafzinkbaar platform, FPSO, transformatorstation, monopile, satellietplatform, pijpleiding, anker, TSS); en een **gedetailleerde set** naast de eenvoudige (helikopters in boven- en zijaanzicht, drone, containerschip, tanker, veerboot, patrouillevaartuig, RIB, kotter, KNRM, platform, windturbine, politieauto, ME-bus, gepantserd voertuig, DSI-operator, agent, vuurtoren, haven), te kiezen met Eenvoudig / Gedetailleerd; elk icoon met zijn naam in het paneel
+- Selectie: naar voren of naar achteren, kopie, pijlpunt en lijnstijl van een lijn, label en rechtzetten van een icoon; gereedschap Lijn en Verschuiven ook in de balk; K opent de kaart
+
+### Mission Planning
+- De balk met de missie, de status, L-uur → Timings en PDF was onzichtbaar (platgedrukt door een naamconflict in de opmaak) en staat er weer, met een eigen knop **Nieuwe missie** en de voortgang van de hele SOMP
+
+### Offshore
+- De knoppen Schepen en Lagen rechtsboven en het tabblad Bronnen zijn weg: de panelen staan links, de AIS-sleutel onder Instellingen › Offshore, en Platforms en Kustpunten opnieuw ophalen onder Lagen
+- **Sneller**: de projectie van duizenden schepen zonder tussenobjecten, schepen buiten beeld worden overgeslagen vóór het rekenen, gegist bestek alleen als het zichtbaar is (vanaf zoom 8), de kaart tekent elke seconde alleen ingezoomd of met eigen vloot in beeld (anders elke 2,5 of 6 seconden), de scheepslijst in het paneel ververst hooguit elke tien seconden en het aanwijzen op de kaart hooguit één keer per beeld
+
+### Overal
+- Het woord "null" verscheen op plekken waar een leeg onderdeel werd getoond (onder meer "nullnull" in de tijdlijn van Timings): een leeg onderdeel wordt nu overal weggelaten
+
 ## 1.28.1
 
 ### Offshore

@@ -11,7 +11,7 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 - **Zoek & Plan:** navigatie en vluchtplanning voor EC135 en AW139: zoeken met aanvullen, routes met wind en brandstof, meetlint, afstandsringen, luchtruim (openAIP), platforms, live vloot, zoekpatronen, orbit, actieradius en briefing. De eigen cijfers uit vlieghandboek en SOP staan niet in deze code maar in een privébestand op het scherm (`plan-private.json`).
 - **Timings:** timers, wekkers en positietimers (een eigen toestel bereikt een punt) voor een missie of dienst, met waarschuwing vooraf, geluid en pop-up, de L-uur ketting uit de TACSOP, en de widget Next event. Gedeeld met alle schermen.
 - **Mission Planning:** de Scheme Of Maneuver Planning (SOMP) van de TACSOP AW139 digitaal, alle fases en planborden invulbaar, met een overzicht dat laat zien of de SOMP compleet is.
-- **Whiteboard:** tekenen, tekst en ruim honderd operationele iconen, op het touchscreen, live samen op alle schermen.
+- **Whiteboard:** tekenen, tekst en ruim tweehonderd operationele iconen (eenvoudig en gedetailleerd, schepen ook in bovenaanzicht), een stuk kaart als ondergrond (satelliet, kaart, topografisch, luchtfoto, VFR), op het touchscreen, live samen op alle schermen.
 - **Offshore:** alle platforms, windparken, grenzen, kabels, kustpunten, de eigen vloot en live AIS met scheepsdata, past tracks en foto's.
 - Versheidsbolletje op elke widget: groen, oranje of rood, met tijd en leeftijd van de gegevens.
 

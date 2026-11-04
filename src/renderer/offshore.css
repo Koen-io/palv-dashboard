@@ -7,7 +7,7 @@
 .os-side { flex: none; width: 25rem; max-width: 40%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; }
 .os.side-off .os-side { margin-left: calc(-1 * min(25rem, 40%)); }
 .os.side-off .zp-side-toggle svg { transform: rotate(180deg); }
-.os-tabs { grid-template-columns: repeat(4, 1fr); }
+.os-tabs { grid-template-columns: repeat(3, 1fr); }
 .os-status { position: static; }
 .os-ships { display: flex; flex-direction: column; gap: 0.2rem; }
 .os-ship { display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.5rem; align-items: center; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); text-align: left; }

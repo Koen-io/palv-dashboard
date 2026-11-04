@@ -6,25 +6,18 @@
    infrastructuur, natuur en dieren, en de tactische symbolen uit de TACSOP (lead-in, gate, holding,
    hot zone, deconflictie, LP/PUP/DP, no fire area, CP).
    ============================================================ */
-const WB_CATS = { air: 'Luchtvaart', veh: 'Voertuigen', sea: 'Vaartuigen', per: 'Personen', inf: 'Gebouwen en infra', nat: 'Natuur en dieren', tac: 'Tactisch', mrk: 'Markeringen' };
+const WB_CATS = { air: 'Luchtvaart', veh: 'Voertuigen', sea: 'Vaartuigen', seatop: 'Vaartuigen (bovenaanzicht)', off: 'Offshore', per: 'Personen', inf: 'Gebouwen en infra', nat: 'Natuur en dieren', tac: 'Tactisch', mrk: 'Markeringen' };
+// Two sets: the simple icons (clear at any size) and the detailed ones (recognisable silhouettes with windows, masts, deck gear).
+const WB_SETS = { basic: 'Eenvoudig', detail: 'Gedetailleerd' };
 // Every icon: id, name, category, keywords, and the SVG inside a 64 × 64 box. Strokes use currentColor;
 // `fill` marks what gets the colour as fill (solid shapes). Text in an icon is drawn in the same colour.
 const WB_ICONS = [];
 // `extra`: size (a standard size on the board, for a diagram used as a base) and own (keeps its own colours).
-const wbIcon = (id, name, cat, svg, kw = '', extra = {}) => WB_ICONS.push({ id, name, cat, kw: (name + ' ' + kw).toLowerCase(), svg, ...extra });
+const wbIcon = (id, name, cat, svg, kw = '', extra = {}) => WB_ICONS.push({ id, name, cat, set: 'basic', kw: (name + ' ' + kw).toLowerCase(), svg, ...extra });
 const WB_S = 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
 const WB_T = (x, y, txt, size = 14) => `<text x="${x}" y="${y}" font-family="Bahnschrift,Segoe UI,Arial,sans-serif" font-weight="700" font-size="${size}" text-anchor="middle" fill="currentColor" stroke="none">${txt}</text>`;
 
 /* ---------- luchtvaart ---------- */
-// AW139 from above: wide cabin, five blades, long tail with the tail rotor at the right.
-wbIcon('aw139', 'AW139 (bovenaanzicht)', 'air', `<g ${WB_S}><path d="M32 8 32 56" stroke-width="2"/><ellipse cx="32" cy="30" rx="7" ry="16" fill="currentColor" fill-opacity="0.25"/><path d="M27 17 37 17M25 24h14M25 36h14"/><path d="M32 46 32 58M29 58h6"/><g stroke-width="2.2"><path d="M32 30 32 6"/><path d="M32 30 54.8 37.4"/><path d="M32 30 46.1 49.4"/><path d="M32 30 17.9 49.4"/><path d="M32 30 9.2 37.4"/></g><circle cx="32" cy="30" r="2.6" fill="currentColor"/><path d="M28 60h8" stroke-width="2"/></g>`, 'helikopter heli politie aw agusta trooping');
-// EC135 from above: shorter, four blades, fenestron tail.
-wbIcon('ec135', 'EC135 (bovenaanzicht)', 'air', `<g ${WB_S}><ellipse cx="32" cy="30" rx="6.5" ry="13" fill="currentColor" fill-opacity="0.25"/><path d="M27 21h10M26 30h12"/><path d="M32 43 32 55"/><circle cx="32" cy="57" r="3.5"/><g stroke-width="2.2"><path d="M32 30V9M32 30h21M32 30v21M32 30H11"/></g><circle cx="32" cy="30" r="2.4" fill="currentColor"/></g>`, 'helikopter heli politie ec eurocopter airbus h135');
-wbIcon('heli', 'Helikopter (zijaanzicht)', 'air', `<g ${WB_S}><path d="M8 20h40M28 20v-4M22 30c0-5 4-8 10-8h8c6 0 10 4 10 10v2c0 4-3 6-7 6H26c-3 0-4-2-4-5Z" fill="currentColor" fill-opacity="0.2"/><path d="M22 32 8 28M8 24v8M18 46h20M24 40v6M36 40v6"/></g>`, 'helikopter heli generiek');
-wbIcon('h145', 'H145 / trauma', 'air', `<g ${WB_S}><ellipse cx="32" cy="31" rx="6.5" ry="13" fill="currentColor" fill-opacity="0.25"/><path d="M32 44v10M26 56h12"/><g stroke-width="2.2"><path d="M32 31V9M32 31h22M32 31v22M32 31H10"/></g><circle cx="32" cy="31" r="2.4" fill="currentColor"/><path d="M32 23v8M28 27h8" stroke-width="3"/></g>`, 'trauma ambulance lifeliner helikopter');
-wbIcon('aw189', 'AW189 / SAR kustwacht', 'air', `<g ${WB_S}><ellipse cx="32" cy="30" rx="7.5" ry="17" fill="currentColor" fill-opacity="0.25"/><path d="M32 47v9M28 58h8"/><g stroke-width="2.2"><path d="M32 30 32 6M32 30 54.8 37.4M32 30 46.1 49.4M32 30 17.9 49.4M32 30 9.2 37.4"/></g><circle cx="32" cy="30" r="2.6" fill="currentColor"/><path d="M40 20h8" stroke-width="2"/></g>`, 'sar kustwacht rescue helikopter');
-wbIcon('drone', 'Drone / UAV', 'air', `<g ${WB_S}><rect x="26" y="26" width="12" height="12" rx="3" fill="currentColor" fill-opacity="0.3"/><path d="M26 26 16 16M38 26l10-10M26 38 16 48M38 38l10 10"/><circle cx="14" cy="14" r="6"/><circle cx="50" cy="14" r="6"/><circle cx="14" cy="50" r="6"/><circle cx="50" cy="50" r="6"/></g>`, 'rpas uav quadcopter onbemand');
-wbIcon('fixedwing', 'Vliegtuig', 'air', `<g ${WB_S}><path d="M32 6c3 0 4 3 4 8v10l20 11v5l-20-6v12l6 5v4l-10-3-10 3v-4l6-5V34L8 40v-5l20-11V14c0-5 1-8 4-8Z" fill="currentColor" fill-opacity="0.3"/></g>`, 'vliegtuig dash 8 kustwacht fixed wing');
 wbIcon('helipad', 'Helipad', 'air', `<g ${WB_S}><circle cx="32" cy="32" r="24"/><circle cx="32" cy="32" r="19" stroke-dasharray="4 3"/>${WB_T(32, 42, 'H', 30)}</g>`, 'helipad helidek landingsplaats h');
 wbIcon('runway', 'Start- en landingsbaan', 'air', `<g ${WB_S}><path d="M22 4h20v56H22Z" fill="currentColor" fill-opacity="0.25"/><path d="M32 10v8M32 24v8M32 38v8M32 52v6M26 6v6M38 6v6M26 52v6M38 52v6" stroke-width="2"/></g>`, 'baan runway landingsbaan vliegveld');
 wbIcon('airport', 'Vliegveld', 'air', `<g ${WB_S}><circle cx="32" cy="32" r="24"/><path d="M32 12c2 0 3 2 3 6v8l16 9v4l-16-5v10l5 4v3l-8-2-8 2v-3l5-4V34l-16 5v-4l16-9v-8c0-4 1-6 3-6Z" fill="currentColor" fill-opacity="0.4"/></g>`, 'vliegveld airport luchthaven');

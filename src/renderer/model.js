@@ -43,7 +43,7 @@
     timings: { name: 'Timings', defaults: { sort: 'remaining', filter: 'all', side: true } },
     nextevent: { name: 'Next event', defaults: { mode: 'both', category: 'all' } },
     mission: { name: 'Mission Planning', defaults: { missionId: null, phase: 'overview' } },
-    whiteboard: { name: 'Whiteboard', defaults: { boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#ffffff', width: 4 } },
+    whiteboard: { name: 'Whiteboard', defaults: { boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#0a0f18', width: 4, bg: 'white' } },
     debrief: { name: '(De)Briefing', defaults: { slot: 'debriefing' } },
     offshore: { name: 'Offshore', defaults: { lat: 53.35, lon: 4.1, zoom: 7.2, base: 'osm', raster: ['seamark'], side: true, sideTab: 'ships', layers: { platforms: true, farms: true, turbines: false, helidecks: true, wx: true, fleet: true, ships: true, tracks: true, labels: true, places: true, eez: true, pipelines: false, cables: false, density: false, natura: false }, shipTypes: ['all'], minSog: 0 } },
   };

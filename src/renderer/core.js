@@ -32,6 +32,12 @@ function h(tag, attrs, ...children) {
   }
   return el;
 }
+// `el.replaceChildren(cond ? node : null)` would print the word "null": the DOM turns anything that is
+// not a node into text. Here a null, undefined or false child is simply left out, as h() does.
+for (const name of ['replaceChildren', 'append', 'prepend']) {
+  const orig = Element.prototype[name];
+  Element.prototype[name] = function (...nodes) { return orig.apply(this, nodes.flat().filter((n) => n != null && n !== false)); };
+}
 
 /* ---------- icons (24px stroke set) ---------- */
 const ICONS = {
@@ -85,6 +91,10 @@ const ICONS = {
   right: '<path d="m9 6 6 6-6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   swap: '<path d="M7 4v14M3.5 14.5 7 18l3.5-3.5M17 20V6M13.5 9.5 17 6l3.5 3.5"/>',
+  arrowDown: '<path d="M12 4v15M6 13l6 6 6-6"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>',
 };
 const icon = (name, cls) =>
   h('span', { class: cls || '', style: 'display:contents', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${cls || ''}">${ICONS[name] || ''}</svg>` }).firstChild;

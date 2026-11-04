@@ -69,9 +69,22 @@ function zpCanvas(map) {
     g.clearRect(0, 0, cv.width, cv.height);
     hits = [];
     const s = map.getSize();
+    // The projection done by hand (Web Mercator, as Leaflet's EPSG:3857): no objects per point, which
+    // matters with thousands of ships on the Offshore map. Same numbers as latLngToContainerPoint, unrounded.
+    const zoom = map.getZoom(), scale = 256 * 2 ** zoom, origin = map.getPixelOrigin(), pane = map._getMapPanePos();
+    const D2R = Math.PI / 180, MAXLAT = 85.0511287798, K = 0.5 / Math.PI;
+    const ox = pane.x - origin.x, oy = pane.y - origin.y;
+    const bounds = map.getBounds();
+    const bb = { s: bounds.getSouth(), n: bounds.getNorth(), w: bounds.getWest(), e: bounds.getEast() };
     const api = {
-      g, w: s.x, h: s.y, zoom: map.getZoom(), bounds: map.getBounds(),
-      P: (lat, lon) => { const p = map.latLngToContainerPoint([lat, lon]); return [p.x, p.y]; },
+      g, w: s.x, h: s.y, zoom, bounds,
+      P: (lat, lon) => {
+        const la = lat > MAXLAT ? MAXLAT : lat < -MAXLAT ? -MAXLAT : lat;
+        const sin = Math.sin(la * D2R);
+        return [scale * (K * lon * D2R + 0.5) + ox, scale * (-K * 0.5 * Math.log((1 + sin) / (1 - sin)) + 0.5) + oy];
+      },
+      // A coarse check before projecting: within the map's edges plus a margin in degrees.
+      near: (lat, lon, m = 0.05) => lat > bb.s - m && lat < bb.n + m && lon > bb.w - m && lon < bb.e + m,
       inView: (p, m = 40) => p[0] > -m && p[1] > -m && p[0] < s.x + m && p[1] < s.y + m,
       hit: (spot) => hits.push(spot),
       // Metres to pixels around a point, for rings and radii.

@@ -509,10 +509,10 @@ function tmCreate(body, w) {
       const total = t.kind === 'timer' ? t.durationMs : t.kind === 'alarm' && t.at ? Math.max(1, t.at - (t.createdAt || t.at - 3600e3)) : null;
       const frac = total && left != null ? clamp(left / total, 0, 1) : t.firedAt ? 0 : 1;
       fg.setAttribute('stroke-dasharray', `${(frac * 100).toFixed(1)} 100`);
-      sub.replaceChildren(
+      sub.replaceChildren(...[
         due ? h('span', {}, `${t.kind === 'alarm' ? 'Om' : 'Eindigt'} ${tmTimeText(due)}`) : t.kind === 'timer' ? h('span', {}, `Duur ${tmClock(t.durationMs)}`) : null,
         t.warnMin ? h('span', {}, `Waarschuwing ${t.warnMin} min vooraf`) : null,
-        t.by ? h('span', {}, `Gezet op ${t.by}${t.createdAt ? ' · ' + ltFmt.format(t.createdAt) : ''}`) : null);
+        t.by ? h('span', {}, `Gezet op ${t.by}${t.createdAt ? ' · ' + ltFmt.format(t.createdAt) : ''}`) : null].filter(Boolean));
       if (geoBox) {
         const g = tmGeoState(t, now);
         geoBox.replaceChildren(
@@ -568,8 +568,8 @@ function tmCreate(body, w) {
       h('div', { class: 'tm-side-head' }, h('b', {}, 'TIJDLIJN'), h('span', {}, `${ltFmt.format(now)} LT · ${zulu(now)}`)),
       h('div', { class: 'tm-tl' }, coming.length ? coming.map(({ t, due, left }) => h('div', { class: 'tm-tl-row' + (left < 60000 ? ' soon' : ''), style: `--tm-c:${(TM_CATS[t.cat] || TM_CATS.other).color}`, onclick: () => { const c = cards.get(t.id); if (c) c.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } },
         h('b', {}, ltFmt.format(due)), h('span', { class: 'tm-tl-left' }, tmClock(left, { seconds: left < 3600e3 })), h('span', { class: 'tm-tl-label' }, t.label))) : h('p', { class: 'zp-hint' }, 'Niets gepland.')),
-      past.length ? h('div', { class: 'tm-side-head' }, h('b', {}, 'AFGEGAAN')) : null,
-      past.length ? h('div', { class: 'tm-tl past' }, past.map((t) => h('div', { class: 'tm-tl-row' + (t.ackedAt ? '' : ' fired'), style: `--tm-c:${(TM_CATS[t.cat] || TM_CATS.other).color}` }, h('b', {}, ltFmt.format(t.firedAt)), h('span', { class: 'tm-tl-left' }, t.ackedAt ? 'bevestigd' : 'open'), h('span', { class: 'tm-tl-label' }, t.label)))) : null);
+      ...(past.length ? [h('div', { class: 'tm-side-head' }, h('b', {}, 'AFGEGAAN')),
+        h('div', { class: 'tm-tl past' }, past.map((t) => h('div', { class: 'tm-tl-row' + (t.ackedAt ? '' : ' fired'), style: `--tm-c:${(TM_CATS[t.cat] || TM_CATS.other).color}` }, h('b', {}, ltFmt.format(t.firedAt)), h('span', { class: 'tm-tl-left' }, t.ackedAt ? 'bevestigd' : 'open'), h('span', { class: 'tm-tl-label' }, t.label))))] : []));
   }
   const unsub = OPS.on('ops', () => { lastSig = ''; paint(); });
   const unwatch = tmWatch(() => { if (onScreen(body)) paint(); });
