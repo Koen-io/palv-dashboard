@@ -92,6 +92,8 @@
     unitInfo: {},
     // 1.28: Timings: the sounds and the warning ahead of time, as standard for a new timer on this screen.
     timings: { sound: 'alarm', warnSound: 'chime', warnMin: 5, popup: true, volume: 0.8, repeatS: 20 },
+    // 1.30: the Rijkswaterstaat station whose sea state and water temperature the header shows.
+    seaStation: 'europlatform',
   };
 
   function defaultState() {

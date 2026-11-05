@@ -35,6 +35,32 @@
 .zp-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 body.touch .os-ship { padding: 0.55rem 0.6rem; }
 
+/* sea state and water temperature of the chosen spot, in the bar */
+.os-sea { display: flex; align-items: center; gap: 0.7rem; min-width: 0; height: 2.3rem; padding: 0 0.7rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.os-sea-hint { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.76rem; color: var(--muted); }
+.os-sea-hint svg { width: 0.95rem; height: 0.95rem; }
+.os-sea-where { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--muted); max-width: 16rem; }
+.os-sea-where svg { width: 0.95rem; height: 0.95rem; color: var(--accent); flex: none; }
+.os-sea-where b { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.os-sea-state { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.08rem 0.5rem 0.08rem 0.3rem; border-radius: 0.4rem; background: color-mix(in srgb, #3d9bff 14%, transparent); border: 1px solid color-mix(in srgb, #3d9bff 40%, transparent); color: #2d7fd6; }
+.os-sea.s4 .os-sea-state { background: color-mix(in srgb, var(--amber) 16%, transparent); border-color: color-mix(in srgb, var(--amber) 50%, transparent); color: #b36b00; }
+.os-sea.s5 .os-sea-state, .os-sea.s6 .os-sea-state { background: color-mix(in srgb, #ff5148 16%, transparent); border-color: color-mix(in srgb, #ff5148 50%, transparent); color: #c0271f; }
+:root[data-theme="dark"] .os-sea-state { color: #9cc9ff; }
+:root[data-theme="dark"] .os-sea.s4 .os-sea-state { color: #ffc85c; }
+:root[data-theme="dark"] .os-sea.s5 .os-sea-state, :root[data-theme="dark"] .os-sea.s6 .os-sea-state { color: #ff8a82; }
+.os-sea-state .sea-wave { width: 1.7rem; height: 1.1rem; }
+.os-sea-state b { font: 700 1.3rem/1 var(--font-display); color: var(--text); }
+.os-sea-words { display: inline-flex; flex-direction: column; line-height: 1.05; }
+.os-sea-words em { font-style: normal; font-size: 0.56rem; font-weight: 800; letter-spacing: 0.14em; color: var(--muted); }
+.os-sea-words u { text-decoration: none; font-size: 0.76rem; font-weight: 700; }
+.os-sea-kv, .os-sea-obs { display: inline-flex; align-items: baseline; gap: 0.3rem; }
+.os-sea-kv small, .os-sea-obs small { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+.os-sea-kv b { font: 600 1.05rem var(--font-display); color: var(--text); }
+.os-sea-kv i, .os-sea-obs i { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.os-sea-obs b { font-size: 0.78rem; font-weight: 700; color: var(--text); }
+.os-sea-sep { width: 1px; height: 1.2rem; background: var(--border-strong); flex: none; }
+.os-sea-src { font-size: 0.64rem; color: var(--muted); letter-spacing: 0.04em; }
+
 /* ---------- (De)Briefing ---------- */
 .widget.debrief .w-body { background: var(--bg); }
 .db { position: absolute; inset: 0; display: flex; flex-direction: column; }

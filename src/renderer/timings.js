@@ -321,7 +321,16 @@ function tmEditDialog(t0, onDone) {
   const acSel = h('select', { class: 'input' }, [h('option', { value: '' }, own.length ? 'Kies een eigen toestel' : 'Geen eigen toestel in beeld'), ...own.map((a) => { const nm = UNIT_NAMES(a.hex) || {}; return h('option', { value: a.hex, selected: geo.hex === a.hex || null }, `${a.flight || a.reg || nm.reg || a.hex.toUpperCase()} · ${nm.reg || a.reg || ''} ${nm.type || a.type || ''} · ${FLEET_GROUPS[a.group] || ''}`); })]);
   const pointQ = textInput(geo.label || '', { placeholder: 'Plaats, platform, vliegveld of coördinaat zoeken…' });
   const pointRes = h('div', { class: 'zp-results tm-res', hidden: true });
-  const pointPick = h('div', { class: 'hint' }, geo.lat != null ? `Punt: ${geo.label || ''} ${PlanCoords.fmt(geo.lat, geo.lon, 'ddm')}` : 'Nog geen punt gekozen');
+  const pointPick = h('div', { class: 'tm-point' });
+  const radius = h('input', { class: 'input', type: 'number', min: 0.1, max: 50, step: 0.1, value: geo.radiusNm || 1 });
+  const paintPoint = () => {
+    pointPick.classList.toggle('set', geo.lat != null);
+    pointPick.replaceChildren(icon(geo.lat != null ? 'target' : 'globe'),
+      geo.lat != null ? h('div', {}, h('b', {}, geo.label || 'Gekozen punt'), h('small', {}, `${PlanCoords.fmt(geo.lat, geo.lon, 'ddm')} · straal ${String(parseFloat(radius.value) || 1).replace('.', ',')} NM`)) : h('div', {}, h('b', {}, 'Nog geen punt gekozen'), h('small', {}, 'Zoek hierboven, of wijs het punt aan op de kaart.')),
+      h('button', { class: 'btn zp-btn' + (geo.lat != null ? '' : ' primary'), title: 'Het punt op de kaart aanwijzen', onclick: () => tmPointOnMap(geo, () => { pointQ.value = geo.label || ''; paintPoint(); }) }, icon('globe'), geo.lat != null ? 'Op de kaart' : 'Kies op de kaart'));
+  };
+  radius.addEventListener('input', () => { geo.radiusNm = clamp(parseFloat(radius.value) || 1, 0.1, 50); paintPoint(); });
+  paintPoint();
   let seq = 0;
   pointQ.addEventListener('input', async () => {
     const q = pointQ.value.trim();
@@ -339,11 +348,10 @@ function tmEditDialog(t0, onDone) {
       if (!pt || pt.lat == null) return toast('Geen positie voor dit punt', true);
       geo.lat = +pt.lat; geo.lon = +pt.lon; geo.label = String(it.label || pt.label || '').split(',')[0].slice(0, 40);
       pointQ.value = geo.label; pointRes.hidden = true;
-      pointPick.textContent = `Punt: ${geo.label} ${PlanCoords.fmt(geo.lat, geo.lon, 'ddm')}`;
+      paintPoint();
     } }, icon('target'), h('div', {}, h('b', {}, it.label), h('small', {}, it.sub || '')))));
     pointRes.hidden = !items.length;
   });
-  const radius = h('input', { class: 'input', type: 'number', min: 0.1, max: 50, step: 0.1, value: geo.radiusNm || 1 });
   const modeSeg = segmented([{ value: 'enter', label: 'Bereikt het punt' }, { value: 'leave', label: 'Verlaat het gebied' }], geo.mode || 'enter', (v) => { geo.mode = v; });
   const kindBox = h('div', { class: 'tm-kindbox' });
   const paintKind = () => {
@@ -396,6 +404,92 @@ function tmEditDialog(t0, onDone) {
     ].filter(Boolean),
   });
   label.focus();
+}
+
+// The point of a position timer, chosen on a map: tap where it must be, the ring shows the radius, and
+// the nearest place (or the coordinate) becomes the label. `geo` is filled in and `onPick` called.
+function tmPointOnMap(geo, onPick) {
+  const mapEl = h('div', { class: 'wb-pickmap' });
+  const stageEl = h('div', { class: 'wb-pickstage tm-pickstage' }, mapEl);
+  const info = h('div', { class: 'wb-pickinfo' });
+  const q = h('input', { class: 'zp-q', type: 'search', placeholder: 'Plaats, platform, vliegveld, favoriet of coördinaat…' });
+  const res = h('div', { class: 'zp-results', hidden: true });
+  const s = tmSettings();
+  const picks = { base: s.pickBase || 'osm', raster: s.pickSea ? ['seamark'] : [] };
+  const fake = { cfg: picks };
+  let map = null, base = null, ro = null, mo = null, seq = 0, marker = null, ring = null;
+  let pick = geo.lat != null ? { lat: geo.lat, lon: geo.lon, label: geo.label || '' } : null;
+  const radiusNm = () => clamp(parseFloat(geo.radiusNm) || 1, 0.1, 50);
+  const bases = [{ value: 'osm', label: 'Kaart' }, { value: 'sat', label: 'Satelliet' }, { value: 'brt', label: 'Topo NL' }, { value: 'vfr', label: 'VFR' }];
+  const baseSeg = segmented(bases, bases.some((b) => b.value === picks.base) ? picks.base : 'osm', (v) => { picks.base = v; s.pickBase = v; save(); if (base) base.apply(); });
+  const seaChk = checkbox('Zeekaart', !!s.pickSea, (v) => { s.pickSea = v; picks.raster = v ? ['seamark'] : []; save(); if (base) base.applyRaster(); });
+  const pinIcon = () => L.divIcon({ className: 'tm-pin', html: '<svg viewBox="0 0 24 24" fill="none" stroke="#ffd21f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" fill="#ffd21f" fill-opacity="0.35"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>', iconSize: [26, 26], iconAnchor: [13, 13] });
+  // The nearest place as a name, with the coordinate as the fallback; a better name may come in later.
+  const describe = (lat, lon) => {
+    const n = typeof PLACES !== 'undefined' && PLACES.near ? PLACES.near(lat, lon) : null;
+    if (n) return n.above ? n.name : `${n.km.toFixed(n.km < 10 ? 1 : 0).replace('.', ',')} km ${n.dir} van ${n.name}`;
+    return PlanCoords.fmt(lat, lon, 'ddm');
+  };
+  const paintInfo = () => {
+    if (!pick) { info.replaceChildren(h('b', {}, 'Tik op de kaart'), h('span', {}, 'om het punt te kiezen')); return; }
+    info.replaceChildren(h('b', {}, PlanCoords.fmt(pick.lat, pick.lon, 'ddm')), h('span', {}, `${pick.label} · straal ${String(radiusNm()).replace('.', ',')} NM`));
+  };
+  const setPick = (lat, lon, label) => {
+    pick = { lat: +lat.toFixed(6), lon: +lon.toFixed(6), label: (label || describe(lat, lon)).slice(0, 40) };
+    if (map) {
+      if (!marker) marker = L.marker([pick.lat, pick.lon], { icon: pinIcon(), keyboard: false, interactive: false }).addTo(map); else marker.setLatLng([pick.lat, pick.lon]);
+      if (!ring) ring = L.circle([pick.lat, pick.lon], { radius: radiusNm() * 1852, color: '#ffd21f', weight: 2, dashArray: '6 5', fillColor: '#ffd21f', fillOpacity: 0.1, interactive: false }).addTo(map); else { ring.setLatLng([pick.lat, pick.lon]); ring.setRadius(radiusNm() * 1852); }
+    }
+    paintInfo();
+    if (!label) { const my = ++seq; window.palv.plan.reverse(pick.lat, pick.lon).then((r) => { if (my !== seq || !pick || !r || r.ok === false || !r.label || !(r.distance < 2500)) return; const n = PLACES.near(pick.lat, pick.lon); if (n && n.above) return; pick.label = String(r.label).split(',')[0].slice(0, 40); paintInfo(); }).catch(() => {}); }
+  };
+  q.addEventListener('input', async () => {
+    const str = q.value.trim(); const my = ++seq;
+    if (str.length < 2) { res.hidden = true; return; }
+    const coord = PlanCoords.parse ? PlanCoords.parse(str) : null;
+    let items = [];
+    if (coord) items.push({ label: PlanCoords.fmt(coord.lat, coord.lon, 'ddm'), sub: 'Coördinaat', lat: coord.lat, lon: coord.lon });
+    for (const f of OPS.list('shared', 'favorites')) if (String(f.name).toLowerCase().includes(str.toLowerCase())) items.push({ label: f.name, sub: 'Favoriet', lat: f.lat, lon: f.lon });
+    try { const r = await window.palv.plan.suggest(str, { limit: 8 }); if (my !== seq) return; if (r && Array.isArray(r.items)) items = items.concat(r.items); } catch { /* none */ }
+    res.replaceChildren(...items.slice(0, 10).map((it) => h('div', { class: 'zp-res', onclick: async () => {
+      let pt = it;
+      if (pt.lat == null && pt.id) { try { pt = await window.palv.plan.resolve(pt.id); } catch { pt = null; } }
+      if (!pt || pt.lat == null) return toast('Geen positie voor dit punt', true);
+      res.hidden = true; q.value = String(it.label || '').split(',')[0];
+      setPick(+pt.lat, +pt.lon, String(it.label || pt.label || '').split(',')[0]);
+      if (map) map.setView([+pt.lat, +pt.lon], Math.max(map.getZoom(), 11));
+    } }, icon('target'), h('div', {}, h('b', {}, it.label), h('small', {}, it.sub || '')))));
+    res.hidden = !items.length;
+  });
+  q.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { const first = res.querySelector('.zp-res'); if (first) first.click(); } ev.stopPropagation(); });
+  const cleanup = () => { if (ro) ro.disconnect(); if (mo) mo.disconnect(); if (base) base.destroy(); if (map) { map.remove(); map = null; } };
+  const close = openModal({
+    title: 'Punt op de kaart', wide: true, cls: 'wb-mapmodal tm-pickmodal',
+    body: [
+      h('div', { class: 'wb-pickbar' }, h('div', { class: 'zp-search wb-picksearch' }, icon('search'), q, res), baseSeg, seaChk, h('span', { class: 'zp-spacer' }), info),
+      stageEl,
+      h('p', { class: 'zp-hint' }, 'Tik of klik op de kaart waar de timer op moet reageren; de gele ring is de straal. Slepen verschuift de kaart, het wiel of de knoppen zoomen.'),
+    ],
+    actions: [{ label: 'Annuleren', onClick: cleanup }, { label: 'Dit punt kiezen', primary: true, onClick: () => { if (!pick) { toast('Tik eerst op de kaart', true); return false; } geo.lat = pick.lat; geo.lon = pick.lon; geo.label = pick.label; cleanup(); if (onPick) onPick(); } }],
+  });
+  const backdrop = mapEl.closest('.modal-backdrop');
+  mo = new MutationObserver(() => { if (backdrop && !backdrop.isConnected) cleanup(); });
+  mo.observe($('#modal-root'), { childList: true });
+  setTimeout(() => {
+    const last = pick ? { lat: pick.lat, lon: pick.lon, zoom: 11 } : s.pickView || { lat: 52.3, lon: 4.75, zoom: 8 };
+    map = L.map(mapEl, { zoomControl: true, attributionControl: true, zoomSnap: 0, zoomDelta: 0.5, minZoom: 3, maxZoom: 19, fadeAnimation: false, inertia: true, doubleClickZoom: false });
+    map.attributionControl.setPrefix(false);
+    map.setView([last.lat, last.lon], last.zoom, { animate: false });
+    base = zpBaseLayers({ map, el: mapEl, w: fake });
+    base.apply();
+    map.on('click', (e) => { setPick(e.latlng.lat, e.latlng.lng); });
+    map.on('moveend zoomend', () => { const c = map.getCenter(); s.pickView = { lat: +c.lat.toFixed(5), lon: +c.lng.toFixed(5), zoom: +map.getZoom().toFixed(2) }; save(); });
+    ro = new ResizeObserver(() => map.invalidateSize(false));
+    ro.observe(stageEl);
+    if (pick) setPick(pick.lat, pick.lon, pick.label);
+    paintInfo();
+  }, 30);
+  void close;
 }
 
 // L-hour: the TACSOP ingress chain as one set of alarms.

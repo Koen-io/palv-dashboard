@@ -79,6 +79,8 @@ async function boot() {
 
   refreshMetar();
   setInterval(refreshMetar, 60000);
+  refreshSea();
+  setInterval(refreshSea, 5 * 60000);
   refreshRunways();
   setInterval(refreshRunways, 5000);
   startEmergencyWatch();

@@ -199,6 +199,16 @@ function openSettings(startTab) {
           h('div', { class: 'row' }, field('Wolkenbasis (ft)', num('wxMarginFt', 2000, 100)), field('Zicht (m)', num('wxMarginM', 5000, 100))),
           h('div', { class: 'hint field' }, h('div', { class: 'hint' }, 'Standaard 200 ft en 1000 m. Met 0 vervalt de marge voor dat onderdeel; oranje blijft dan alleen bij een verwachte verslechtering tot onder de limiet.')),
           h('div', {}, h('button', { class: 'btn', onclick: () => { s.wxMarginFt = 200; s.wxMarginM = 1000; save(); applyWxMargins(); show('weerradar'); } }, icon('refresh'), 'Standaardmarges herstellen')),
+          h('hr'),
+          h('h3', {}, 'Sea state en zeewater in de kop'),
+          h('p', {}, 'Onder de METAR staan de sea state (Douglas-schaal, uit de significante golfhoogte) en de zeewatertemperatuur, gemeten door Rijkswaterstaat. Kies het station dat als referentie in de kop staat; alle stations staan in de tooltip.'),
+          field('Referentiestation', (() => {
+            const known = sea.data && sea.data.stations && sea.data.stations.length ? sea.data.stations : [{ code: 'europlatform', name: 'Europlatform' }, { code: 'k13a.1', name: 'K13a' }, { code: 'hollandsekust.zuid.alpha', name: 'Hollandse Kust Zuid' }, { code: 'hollandsekust.noord.alpha', name: 'Hollandse Kust Noord' }, { code: 'q1.1', name: 'Q1' }];
+            const sel = h('select', { class: 'input', onchange: changed((e) => { s.seaStation = e.target.value; refreshSea(); }) }, known.map((st) => h('option', { value: st.code }, `${st.name}${st.hs != null ? ` · Hs ${String(st.hs).replace('.', ',')} m` : ''}${st.tw != null ? ` · ${String(st.tw).replace('.', ',')} °C` : ''}`)));
+            if (!known.some((st) => st.code === s.seaStation)) sel.append(h('option', { value: s.seaStation }, s.seaStation));
+            sel.value = s.seaStation || 'europlatform';
+            return sel;
+          })(), 'Europlatform (voor de kust van Zuid-Holland) meet golfhoogte, periode, watertemperatuur en wind; Hollandse Kust Zuid en Noord liggen voor IJmuiden en Noordwijk.'),
         ];
       },
     },

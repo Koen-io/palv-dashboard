@@ -84,7 +84,7 @@ function wbCfg(w) {
   const c = w.cfg;
   // Before 1.29 the board was dark and the pen white; on the white board of today a white pen is invisible.
   if (c.bg === undefined && c.color === '#ffffff') c.color = '#0a0f18';
-  for (const [k, v] of Object.entries({ boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#0a0f18', width: 4, fill: false, fontSize: 18, iconSize: 80, grid: true, views: {}, iconId: 'aw139', iconSet: 'all', bg: 'white', map: { base: 'sat', seamark: false, aspect: '16:9' } })) if (c[k] === undefined) c[k] = JSON.parse(JSON.stringify(v));
+  for (const [k, v] of Object.entries({ boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#0a0f18', width: 4, fill: false, fontSize: 18, iconSize: 80, grid: true, views: {}, iconId: 'aw139', bg: 'white', map: { base: 'sat', seamark: false, aspect: '16:9' } })) if (c[k] === undefined) c[k] = JSON.parse(JSON.stringify(v));
   if (!c.views || typeof c.views !== 'object') c.views = {};
   if (!c.map || typeof c.map !== 'object') c.map = { base: 'sat', seamark: false, aspect: '16:9' };
   if (!WB_BG[c.bg]) c.bg = 'white';
@@ -119,6 +119,9 @@ function wbCreate(body, w) {
   let textBox = null;
   let thumbTimer = null, presenceTimer = null;
   const board = () => (cfg.boardId ? OPS.get('boards', 'boards', cfg.boardId) : null);
+  // Locked on another screen and no PIN entered here: nothing to see, nothing to draw.
+  const lockedOut = () => { const b = board(); return !!(b && b.lock && !b.lockOpen); };
+  let cover = null;
   const bgOf = () => WB_BG[(board() || {}).bg || cfg.bg] || WB_BG.white;
   const isLight = () => !!bgOf().light;
 
@@ -128,9 +131,12 @@ function wbCreate(body, w) {
   const loadView = () => { const v = cfg.boardId && cfg.views[cfg.boardId]; view = v ? { ...v } : { x: stage.clientWidth / 2, y: stage.clientHeight / 2, k: 1 }; };
 
   function reload() {
-    els = cfg.boardId ? OPS.list('boards', 'elements').filter((e) => e.board === cfg.boardId).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : [];
+    els = cfg.boardId ? OPS.list('boards', 'elements').filter((e) => e.board === cfg.boardId && !e.locked).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : [];
     if (sel && !els.some((e) => e.id === sel)) sel = null;
     stage.classList.toggle('light', isLight());
+    const b = board();
+    if (lockedOut()) { if (cover) cover.remove(); cover = lockedCover('boards', b, () => { reload(); paintBar(); paintSide(); }); stage.append(cover); if (textBox) cancelText(); drawing = null; drag = null; }
+    else if (cover) { cover.remove(); cover = null; }
     request();
   }
   // There is always a board to draw on: the one of this screen, else the newest of the unit, else a new one.
@@ -213,6 +219,7 @@ function wbCreate(body, w) {
   const clean = (e) => { const o = { ...e }; delete o.id; delete o.updatedAt; if (o.type === 'path') o.pts = o.pts.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]); return o; };
   function commit(e, before) {
     if (!ensureBoard()) { toast('De gedeelde bestanden zijn nog niet geladen', true); return; }
+    if (lockedOut()) { toast('Dit bord is vergrendeld: voer eerst de pincode in', true); return; }
     const id = e.id || OPS.uid();
     const fresh = !e.id;
     e.id = id; e.board = cfg.boardId; e.by = OPS.screen.name;
@@ -503,6 +510,8 @@ function wbCreate(body, w) {
   let liveTimer = null, livePending = null, lastCur = null;
   function liveSend(msg) { if (!cfg.boardId) return; OPS.live({ t: 'wb', b: cfg.boardId, ...msg }); }
   function liveStroke(e, newPts, end) {
+    const b = board();
+    if (b && b.lock) return;
     if (!livePending) livePending = { id: e.id || (e.id = OPS.uid()), color: e.color, width: e.width, marker: !!e.marker, pts: [] };
     livePending.pts.push(...newPts.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]));
     if (end) { liveSend({ cur: lastCur, st: livePending, end: true }); livePending = null; clearTimeout(liveTimer); liveTimer = null; return; }
@@ -533,6 +542,7 @@ function wbCreate(body, w) {
   const pos = (ev) => { const r = cv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
   cv.addEventListener('pointerdown', (ev) => {
     if (!ensureBoard()) { toast('Even geduld: de gedeelde bestanden worden geladen'); return; }
+    if (lockedOut()) return;
     cv.setPointerCapture(ev.pointerId);
     const [sx, sy] = pos(ev);
     pointers.set(ev.pointerId, [sx, sy]);
@@ -761,21 +771,19 @@ function wbCreate(body, w) {
     const q = h('input', { class: 'input zp-profq', type: 'search', placeholder: 'Zoek een icoon: AW139, platform, boot, verdachte…', value: iconQuery });
     const grid = h('div', { class: 'wb-icons' });
     const cats = h('div', { class: 'wb-cats' });
-    const sets = h('div', { class: 'wb-cats wb-sets' });
     const count = h('p', { class: 'zp-hint' });
     const paintGrid = () => {
       const words = iconQuery.toLowerCase().split(/\s+/).filter(Boolean);
-      const list = WB_ICONS.filter((ic) => (iconCat === 'all' || ic.cat === iconCat) && (cfg.iconSet === 'all' || (ic.set || 'basic') === cfg.iconSet) && words.every((wd) => ic.kw.includes(wd)));
-      grid.replaceChildren(...list.map((ic) => h('button', { class: 'wb-iconbtn' + (cfg.iconId === ic.id && cfg.tool === 'icon' ? ' on' : '') + (ic.set === 'detail' ? ' detail' : ''), title: `${ic.name} · ${WB_CATS[ic.cat]}${ic.set === 'detail' ? ' · gedetailleerd' : ''}`, onclick: () => { cfg.iconId = ic.id; save(); setTool('icon'); paintGrid(); } },
+      const list = WB_ICONS.filter((ic) => (iconCat === 'all' || ic.cat === iconCat) && words.every((wd) => ic.kw.includes(wd)));
+      grid.replaceChildren(...list.map((ic) => h('button', { class: 'wb-iconbtn' + (cfg.iconId === ic.id && cfg.tool === 'icon' ? ' on' : ''), title: `${ic.name} · ${WB_CATS[ic.cat]}`, onclick: () => { cfg.iconId = ic.id; save(); setTool('icon'); paintGrid(); } },
         h('span', { class: 'wb-iconpic', html: wbIconSvg(ic, ic.own ? (isLight() ? '#0a0f18' : '#e9eff8') : 'currentColor', 40) }), h('small', {}, ic.name.replace(/\s*\((bovenaanzicht|zijaanzicht)?,?\s*(detail)?\)$/i, '')))));
       if (!list.length) grid.append(h('p', { class: 'zp-hint' }, 'Geen icoon gevonden.'));
       count.textContent = `${list.length} van ${WB_ICONS.length} iconen · in de kleur van de pen; tik een icoon en daarna op het bord. Dubbeltik op een geplaatst icoon voor een label (callsign, LP-nummer).`;
       cats.replaceChildren(h('button', { class: 'wb-cat' + (iconCat === 'all' ? ' on' : ''), onclick: () => { iconCat = 'all'; paintGrid(); } }, 'Alles'), ...Object.entries(WB_CATS).map(([k, n]) => h('button', { class: 'wb-cat' + (iconCat === k ? ' on' : ''), onclick: () => { iconCat = k; paintGrid(); } }, n)));
-      sets.replaceChildren(h('b', {}, 'Set'), ...[['all', 'Alles'], ...Object.entries(WB_SETS)].map(([k, n]) => h('button', { class: 'wb-cat' + (cfg.iconSet === k ? ' on' : ''), onclick: () => { cfg.iconSet = k; save(); paintGrid(); } }, n)));
     };
     q.addEventListener('input', () => { iconQuery = q.value; paintGrid(); });
     paintGrid();
-    return h('div', { class: 'zp-panel' }, h('div', { class: 'zp-profsearch' }, icon('star'), q), sets, cats, count, grid);
+    return h('div', { class: 'zp-panel' }, h('div', { class: 'zp-profsearch' }, icon('star'), q), cats, count, grid);
   }
   /* ---------- a piece of map ---------- */
   function mapPanel() {
@@ -918,9 +926,9 @@ function wbCreate(body, w) {
       h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn primary', onclick: newBoard }, icon('plus'), 'Nieuw bord')),
       h('p', { class: 'zp-hint' }, 'Elk bord staat op alle schermen van de eenheid; wat je tekent is daar direct te zien, en wie meetekent zie je met naam en cursor.'),
       h('div', { class: 'wb-boards' }, list.length ? list.map((b) => h('div', { class: 'wb-board' + (b.id === cfg.boardId ? ' on' : '') },
-        h('button', { class: 'wb-board-thumb', style: `background:${(WB_BG[b.bg] || WB_BG.white).fill}`, onclick: () => openBoard(b.id) }, b.thumb ? h('img', { src: b.thumb, alt: '' }) : h('span', {}, 'leeg')),
+        h('button', { class: 'wb-board-thumb', style: `background:${(WB_BG[b.bg] || WB_BG.white).fill}`, onclick: () => openBoard(b.id) }, b.thumb ? h('img', { src: b.thumb, alt: '' }) : b.lock && !b.lockOpen ? icon('lock') : h('span', {}, 'leeg')),
         h('div', { class: 'wb-board-main' },
-          h('b', {}, b.name), h('small', {}, `${b.n || 0} elementen · ${new Date(b.updatedAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${b.by ? ' · ' + b.by : ''}`),
+          h('b', {}, b.lock ? icon('lock') : null, b.name), h('small', {}, `${b.n || 0} elementen · ${new Date(b.updatedAt).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${b.by ? ' · ' + b.by : ''}${b.lock ? (b.lockOpen ? ' · vergrendeld' : ' · vergrendeld, pincode nodig') : ''}`),
           h('div', { class: 'wb-board-acts' },
             h('button', { class: 'btn zp-btn' + (b.id === cfg.boardId ? ' on' : ''), onclick: () => openBoard(b.id) }, b.id === cfg.boardId ? 'Open' : 'Openen'),
             h('button', { class: 'w-tool', title: 'Naam wijzigen', onclick: () => pageNameDialog('Bord hernoemen', b.name, (n) => OPS.put('boards', 'boards', b.id, { ...b, name: n })) }, icon('edit')),
@@ -947,7 +955,8 @@ function wbCreate(body, w) {
   const quick = h('div', { class: 'wb-quick' });
   function paintBar() {
     const b = board();
-    title.replaceChildren(icon('note'), h('b', {}, b ? b.name : 'Whiteboard'), h('small', {}, b ? 'live op alle schermen' : 'bord wordt geopend…'));
+    title.replaceChildren(icon(b && b.lock ? 'lock' : 'note'), h('b', {}, b ? b.name : 'Whiteboard'), h('small', {}, !b ? 'bord wordt geopend…' : b.lock ? (b.lockOpen ? 'vergrendeld · zichtbaar op dit scherm' : 'vergrendeld · pincode nodig') : 'live op alle schermen'));
+    lockBtn.paint();
     quick.replaceChildren(...['select', 'pan', 'pen', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => setTool(k) }, icon(WB_TOOLS[k].icon))),
       h('span', { class: 'wb-swatch', style: `--c:${cfg.color}`, title: 'Huidige kleur (kies in het paneel Tekenen)', onclick: () => showTab('draw') }),
       h('span', { class: 'wb-sep' }),
@@ -956,7 +965,8 @@ function wbCreate(body, w) {
   }
   const mapBtn = h('button', { class: 'btn zp-btn', title: 'Een stuk kaart op het bord zetten (K)', onclick: mapDialog }, icon('globe'), 'Kaart');
   const boardsBtn = h('button', { class: 'btn zp-btn', title: 'Borden: openen, nieuw, beheren', onclick: () => showTab('boards') }, icon('folder'), 'Borden');
-  bar.append(title, h('span', { class: 'zp-spacer' }), quick, h('span', { class: 'wb-sep' }), mapBtn, boardsBtn);
+  const lockBtn = lockButton(board, () => { const b = board(); if (b) lockDialog('boards', b, () => { reload(); paintBar(); paintSide(); }); });
+  bar.append(title, h('span', { class: 'zp-spacer' }), quick, h('span', { class: 'wb-sep' }), mapBtn, boardsBtn, lockBtn);
 
   /* ---------- wiring ---------- */
   const ro = new ResizeObserver(() => { size(); request(); });

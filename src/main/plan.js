@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const log = require('./log');
 const store = require('../plan/store');
+const locks = require('../plan/locks');
 const wind = require('../plan/wind');
 const aero = require('../plan/aero');
 const platforms = require('../plan/platforms');
@@ -355,7 +356,8 @@ function start(opts) {
   aero.start({ dir, fetchJson, log: lg });
   platforms.start({ dir, fetchText, fetchBuffer, log: lg });
   geocode.start({ dir, fetchJson, fetchText, log: lg });
-  store.onChange((kind) => send('plan:store', { kind, data: store.get(kind) }));
+  locks.load(dir, lg);
+  store.onChange((kind) => send('plan:store', { kind, data: locks.view(kind, store.get(kind)) }));
   // The openAIP key from the private file, when this screen has none of its own yet.
   const keyFromStore = () => {
     const k = store.get('private').keys.openaip;
@@ -380,9 +382,69 @@ function start(opts) {
 /* ---------- what the tab asks ---------- */
 const safe = (fn) => async (...args) => { try { return await fn(...args); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; } };
 
-ipcMain.handle('plan:store', () => Object.fromEntries(Object.keys(store.KINDS).map((k) => [k, store.get(k)])));
-ipcMain.handle('plan:put', safe((_e, kind, list, id, item) => { const out = store.put(kind, list, id, item); pokePeers(); return out; }));
-ipcMain.handle('plan:putMany', safe((_e, kind, items) => { const out = store.putMany(kind, Array.isArray(items) ? items.slice(0, 500) : []); pokePeers(); return out; }));
+ipcMain.handle('plan:store', () => Object.fromEntries(Object.keys(store.KINDS).map((k) => [k, locks.view(k, store.get(k))])));
+// What the dashboard writes to a locked board or mission is sealed here first (locks.js); without the key it is refused.
+const sealed = (kind, list, id, item) => locks.toStore(kind, list, id, item, store.get(kind));
+ipcMain.handle('plan:put', safe((_e, kind, list, id, item) => { const out = store.put(kind, list, id, sealed(kind, list, id, item)); pokePeers(); return locks.view(kind, out); }));
+ipcMain.handle('plan:putMany', safe((_e, kind, items) => { const list = (Array.isArray(items) ? items.slice(0, 500) : []).map((x) => ({ ...x, item: sealed(kind, x.list, x.id, x.item) })); const out = store.putMany(kind, list); pokePeers(); return locks.view(kind, out); }));
+
+/* ---------- locks on a whiteboard or a mission ---------- */
+// kind 'boards' (list 'boards') or 'missions' (list 'missions'); `id` the board or mission.
+const ownerList = (kind) => (kind === 'boards' ? 'boards' : 'missions');
+function owner(kind, id) {
+  if (kind !== 'boards' && kind !== 'missions') throw new Error('Onbekende soort');
+  const it = store.get(kind)[ownerList(kind)][id];
+  if (!it) throw new Error(kind === 'boards' ? 'Bord niet gevonden' : 'Missie niet gevonden');
+  return it;
+}
+ipcMain.handle('lock:status', safe((_e, kind, id) => {
+  const it = owner(kind, id);
+  return { ok: true, locked: !!it.lock, open: !!(it.lock && locks.has(it.lock.id)), hint: it.lock ? it.lock.hint : '', by: it.lock ? it.lock.by : '', createdAt: it.lock ? it.lock.createdAt : null };
+}));
+// Lock: a new lock on the item, every element or field of it sealed, from now on only readable here.
+ipcMain.handle('lock:create', safe((_e, kind, id, pin, hint) => {
+  const it = owner(kind, id);
+  if (it.lock) throw new Error('Al vergrendeld');
+  const lock = locks.create(pin, hint, screens.name());
+  const data = store.get(kind);
+  const items = locks.rewrite(kind, id, data, lock);
+  const me = { ...it, lock }; delete me.updatedAt;
+  items.push({ list: ownerList(kind), id, item: locks.toStore(kind, ownerList(kind), id, me, { ...data, [ownerList(kind)]: { ...data[ownerList(kind)], [id]: me } }) });
+  store.putMany(kind, items);
+  pokePeers();
+  log.info('slot', `${kind === 'boards' ? 'bord' : 'missie'} "${it.name}" vergrendeld (${items.length - 1} items)`);
+  return { ok: true, lockId: lock.id };
+}));
+// Open: the PIN makes the contents readable on this screen too (the key is kept here).
+ipcMain.handle('lock:open', safe((_e, kind, id, pin) => {
+  const it = owner(kind, id);
+  if (!it.lock) return { ok: true, open: true };
+  const good = locks.open(it.lock, pin);
+  if (good) { log.info('slot', `${kind === 'boards' ? 'bord' : 'missie'} "${it.name}" zichtbaar gemaakt op dit scherm`); send('plan:store', { kind, data: locks.view(kind, store.get(kind)) }); }
+  return { ok: true, open: good };
+}));
+// Hide here: the key is forgotten on this screen; the lock stays, the PIN opens it again.
+ipcMain.handle('lock:hide', safe((_e, kind, id) => {
+  const it = owner(kind, id);
+  if (it.lock) { locks.forget(it.lock.id); send('plan:store', { kind, data: locks.view(kind, store.get(kind)) }); }
+  return { ok: true };
+}));
+// Remove: with the PIN, the contents go back to plain and every screen sees them again.
+ipcMain.handle('lock:remove', safe((_e, kind, id, pin) => {
+  const it = owner(kind, id);
+  if (!it.lock) return { ok: true };
+  if (!locks.has(it.lock.id) && !locks.open(it.lock, pin)) return { ok: false, error: 'Verkeerde pincode' };
+  if (locks.has(it.lock.id) && pin != null && !locks.open(it.lock, pin)) return { ok: false, error: 'Verkeerde pincode' };
+  const data = store.get(kind);
+  const items = locks.rewrite(kind, id, data, null);
+  const me = locks.toView(kind, ownerList(kind), id, it); delete me.lock; delete me.lockId; delete me.lockOpen; delete me.locked; delete me.updatedAt;
+  items.push({ list: ownerList(kind), id, item: me });
+  store.putMany(kind, items);
+  locks.forget(it.lock.id);
+  pokePeers();
+  log.info('slot', `${kind === 'boards' ? 'bord' : 'missie'} "${it.name}" ontgrendeld`);
+  return { ok: true };
+}));
 ipcMain.handle('plan:live', (_e, msg) => liveSend(msg && typeof msg === 'object' ? msg : {}));
 ipcMain.handle('plan:syncNow', () => { syncFiles().catch(() => {}); return true; });
 ipcMain.handle('plan:importProfiles', safe(async () => {

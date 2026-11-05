@@ -133,3 +133,17 @@ body.tm-warn #tm-glow { opacity: 1; box-shadow: inset 0 0 5rem 1rem rgba(245, 15
 .ne-ack { align-self: flex-start; height: 1.9rem; }
 body.touch .tm-actions .btn { height: 2.4rem; }
 body.touch .tm-tl-row { padding: 0.6rem 0.5rem; }
+
+/* the point of a position timer, and the map it is chosen on */
+.tm-point { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; padding: 0.5rem 0.6rem; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); }
+.tm-point.set { border-style: solid; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface-2)); }
+.tm-point > svg { width: 1.3rem; height: 1.3rem; flex: none; color: var(--muted); }
+.tm-point.set > svg { color: var(--accent); }
+.tm-point > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tm-point b { font: 600 0.9rem var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-point small { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tm-point .btn { flex: none; }
+.modal.tm-pickmodal { width: min(72rem, 96vw); }
+.tm-pickstage { height: min(56vh, 40rem); cursor: crosshair; }
+.tm-pin { background: none; border: 0; }
+.tm-pin svg { width: 26px; height: 26px; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)); }

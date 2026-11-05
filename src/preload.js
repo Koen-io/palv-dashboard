@@ -72,6 +72,8 @@ contextBridge.exposeInMainWorld('palv', {
     metar: (icao) => ipcRenderer.invoke('data:metar', icao),
     wxmap: () => ipcRenderer.invoke('data:wxmap'),
     runways: () => ipcRenderer.invoke('data:runways'),
+    seaOverview: (ref) => ipcRenderer.invoke('sea:overview', ref),
+    seaAt: (lat, lon) => ipcRenderer.invoke('sea:at', lat, lon),
   },
   traffic: {
     watch: (req) => ipcRenderer.invoke('traffic:watch', req),
@@ -126,6 +128,13 @@ contextBridge.exposeInMainWorld('palv', {
   },
   offshore: {
     places: (force) => ipcRenderer.invoke('offshore:places', force),
+  },
+  lock: {
+    status: (kind, id) => ipcRenderer.invoke('lock:status', kind, id),
+    create: (kind, id, pin, hint) => ipcRenderer.invoke('lock:create', kind, id, pin, hint),
+    open: (kind, id, pin) => ipcRenderer.invoke('lock:open', kind, id, pin),
+    hide: (kind, id) => ipcRenderer.invoke('lock:hide', kind, id),
+    remove: (kind, id, pin) => ipcRenderer.invoke('lock:remove', kind, id, pin),
   },
   opensky: {
     status: () => ipcRenderer.invoke('opensky:status'),

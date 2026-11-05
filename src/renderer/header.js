@@ -273,6 +273,33 @@ function renderMoon() {
       h('span', { class: 'lux-meter' }, h('i', { style: `width:${(luxLevel(L.lux) * 100).toFixed(1)}%` })),
       h('b', {}, lux.value), h('small', {}, lux.unit))
   );
+  renderMoonPos(m, now);
+}
+
+/* ---------- moon position: azimuth and elevation, for 52°N 005°E ---------- */
+const WINDS16 = ['N', 'NNO', 'NO', 'ONO', 'O', 'OZO', 'ZO', 'ZZO', 'Z', 'ZZW', 'ZW', 'WZW', 'W', 'WNW', 'NW', 'NNW'];
+const windName = (az) => WINDS16[Math.round((((az % 360) + 360) % 360) / 22.5) % 16];
+// A small compass rose with the needle on the moon's azimuth: where along the horizon to look.
+const compassSvg = (az) => h('span', { class: 'mp-rose', html: `<svg viewBox="-12 -12 24 24" aria-hidden="true"><circle r="10.5" class="mp-rose-ring"/><path d="M0-10.5v2.2M0 8.3v2.2M-10.5 0h2.2M8.3 0h2.2" class="mp-rose-ticks"/><text x="0" y="-5.6" class="mp-rose-n">N</text><g transform="rotate(${az.toFixed(1)})"><path d="M0-9.2 2.4 0H-2.4Z" class="mp-rose-needle"/><path d="M0 9.2 2.4 0H-2.4Z" class="mp-rose-tail"/></g><circle r="1.3" class="mp-rose-hub"/></svg>` });
+function renderMoonPos(m, now) {
+  const root = $('#moonpos');
+  if (!root) return;
+  const up = m.alt >= 0;
+  const az = Math.round(m.az) % 360, alt = m.alt;
+  const altTxt = `${alt >= 0 ? '+' : '−'}${Math.abs(alt).toFixed(1).replace('.', ',')}°`;
+  root.classList.toggle('up', up);
+  root.title = `Maanstand nu (${ltFmt.format(now)} LT), gezien vanaf 52°N 005°E (midden Nederland).\n`
+    + `Azimut ${az.toString().padStart(3, '0')}° ten opzichte van het ware noorden: de maan staat in het ${windName(m.az)}.\n`
+    + `Elevatie ${altTxt} boven de horizon (schijnbaar, met atmosferische refractie; negatief is onder de horizon).\n`
+    + 'Berekend met de maantheorie van Meeus; gecontroleerd tegen de JPL-efemeride (azimut op 0,1° nauwkeurig, elevatie op 0,2°).';
+  root.replaceChildren(
+    h('span', { class: 'udp-label' }, 'MAANSTAND'),
+    compassSvg(m.az),
+    h('span', { class: 'mp-val', title: 'Azimut: richting van de maan ten opzichte van het ware noorden' }, h('small', {}, 'AZ'), h('b', {}, `${az.toString().padStart(3, '0')}°`), h('em', {}, windName(m.az))),
+    h('span', { class: 'mp-sep' }),
+    h('span', { class: 'mp-val', title: 'Elevatie: hoogte van de maan boven de horizon' }, h('small', {}, 'ELEV'), h('span', { class: 'mp-arr', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M3 20A12 12 0 0 1 21 20" stroke-dasharray="2.5 2.2"/><path d="M12 20L${(12 + 9 * Math.cos((Math.PI * (180 - clamp(alt, -10, 90))) / 180)).toFixed(1)} ${(20 - 9 * Math.sin((Math.PI * Math.max(alt, 2)) / 180)).toFixed(1)}"/></svg>` }), h('b', {}, altTxt)),
+    h('span', { class: 'udp-badge ' + (up ? 'day' : 'night') }, up ? 'BOVEN HORIZON' : 'ONDER HORIZON')
+  );
 }
 
 /* ---------- Schiphol: METAR in the header ---------- */
@@ -405,6 +432,57 @@ function metarMetrics(p, cls) {
   return metrics;
 }
 
+/* ---------- North Sea: sea state and sea water temperature in the header ---------- */
+// Observations of Rijkswaterstaat's measuring stations on the Dutch part of the North Sea (significant
+// wave height Hm0, mean period Tm02, water temperature), fetched by the main process (src/sea.js) every
+// five minutes. The sea state is the Douglas number for the significant wave height. One station is the
+// reference in the header (Instellingen › Weerradar); the others are in the tooltip.
+const sea = { data: null, fail: false, at: 0 };
+const SEA_NAMES = ['Spiegelglad', 'Vlak', 'Kalm', 'Licht', 'Matig', 'Ruw', 'Zeer ruw', 'Hoog', 'Zeer hoog', 'Buitengewoon'];
+const SEA_HS = ['0 m', '0–0,1 m', '0,1–0,5 m', '0,5–1,25 m', '1,25–2,5 m', '2,5–4 m', '4–6 m', '6–9 m', '9–14 m', '> 14 m'];
+const nlNum = (v, d = 1) => (v == null ? '—' : (+v).toFixed(d).replace('.', ','));
+// The wave glyph: the higher the sea state, the taller and steeper the crests.
+function waveSvg(state) {
+  const s = clamp(state == null ? 2 : state, 0, 9);
+  const a = 1.5 + s * 1.1; // amplitude
+  const d = `M2 ${16 + a / 2}c4 0 4-${a} 8-${a}s4 ${a} 8 ${a} 4-${a} 8-${a} 4 ${a} 8 ${a}`;
+  return h('span', { class: 'sea-wave', html: `<svg viewBox="0 0 36 24" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" transform="translate(0 5)" fill="none" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/></svg>` });
+}
+function seaRow() {
+  const row = h('div', { class: 'eham-sea' });
+  const d = sea.data;
+  const ref = d && d.ref;
+  if (!ref) {
+    row.append(h('span', { class: 'sea-label' }, 'NOORDZEE'), h('span', { class: 'sea-none' }, sea.fail ? 'Sea state en zeewatertemperatuur zijn tijdelijk niet beschikbaar (Rijkswaterstaat).' : 'Sea state en zeewatertemperatuur worden opgehaald…'));
+    return row;
+  }
+  const st = ref.state, now = Date.now();
+  const age = ref.hsAt ? Math.round((now - ref.hsAt) / 60000) : null;
+  const stale = age != null && age > 90;
+  row.classList.toggle('stale', stale);
+  const lines = d.stations.filter((s) => s.hs != null || s.tw != null).map((s) => `${s.name.padEnd(22)} ${s.state != null ? 'sea state ' + s.state : '         '}${s.hs != null ? ` · Hs ${nlNum(s.hs, 2)} m` : ''}${s.tm02 != null ? ` · Tm ${nlNum(s.tm02)} s` : ''}${s.tw != null ? ` · water ${nlNum(s.tw)} °C` : ''}${s.windMs != null ? ` · wind ${Math.round(s.windDir || 0).toString().padStart(3, '0')}°/${Math.round(s.windMs * 1.94384)} kt` : ''} · ${zulu(s.at)}`);
+  row.title = `Sea state (Douglas-schaal) en zeewatertemperatuur, gemeten door Rijkswaterstaat op ${ref.name}${age != null ? `, waarneming ${zulu(ref.hsAt)} (${age} min oud)` : ''}.\n`
+    + (st != null ? `Sea state ${st} = ${SEA_NAMES[st].toLowerCase()}: significante golfhoogte ${SEA_HS[st]}.\n` : '')
+    + (d.range ? `Alle Noordzeestations nu: sea state ${d.range[0]}${d.range[1] !== d.range[0] ? '–' + d.range[1] : ''}.\n` : '')
+    + 'Referentiestation te kiezen onder Instellingen › Weerradar.\n\n' + lines.join('\n');
+  row.append(
+    h('span', { class: 'sea-label' }, 'NOORDZEE'),
+    h('span', { class: 'sea-state s' + (st == null ? 'x' : Math.min(st, 6)) }, waveSvg(st), h('b', {}, st == null ? '—' : String(st)), h('span', { class: 'sea-words' }, h('em', {}, 'SEA STATE'), h('u', {}, st == null ? 'onbekend' : SEA_NAMES[st]))),
+    h('span', { class: 'sea-kv', title: `Significante golfhoogte Hs (Hm0) en gemiddelde golfperiode Tm02${ref.tmax != null ? `; maximale periode ${nlNum(ref.tmax)} s` : ''}` }, h('small', {}, 'Hs'), h('b', {}, nlNum(ref.hs, ref.hs != null && ref.hs < 1 ? 2 : 1)), h('small', {}, 'm'), ref.tm02 != null ? h('i', {}, `${nlNum(ref.tm02)} s`) : null),
+    h('span', { class: 'mp-sep' }),
+    h('span', { class: 'sea-kv', title: 'Zeewatertemperatuur aan het oppervlak' }, h('small', {}, 'ZEEWATER'), h('b', {}, nlNum(ref.tw)), h('small', {}, '°C')),
+    h('span', { class: 'sea-src' }, `${ref.name} ${ref.hsAt ? zulu(ref.hsAt) : ref.at ? zulu(ref.at) : ''}${stale ? ' · VEROUDERD' : ''}${d.range && d.range[1] !== d.range[0] ? ` · sector ${d.range[0]}–${d.range[1]}` : ''}`)
+  );
+  return row;
+}
+async function refreshSea() {
+  const res = await window.palv.data.seaOverview(state.settings.seaStation || 'europlatform').catch(() => ({ ok: false }));
+  if (res && res.ok) { sea.data = res; sea.fail = false; sea.at = Date.now(); } else sea.fail = true;
+  const ok = !!(sea.data && sea.data.ref && sea.data.ref.hsAt && Date.now() - sea.data.ref.hsAt < 3 * 3600e3);
+  report('sea', 'Sea state Noordzee', ok || !sea.fail, sea.fail ? 'Rijkswaterstaat geeft geen antwoord' : sea.data && sea.data.ref ? `waarneming ${zulu(sea.data.ref.hsAt || sea.data.ref.at)}` : '', 20 * 60000);
+  renderEham();
+}
+
 let ehamBadge = null;
 function renderEham() {
   const root = $('#eham');
@@ -430,6 +508,7 @@ function renderEham() {
     head.append(ehamBadge);
     wx.append(head, h('div', { class: 'rwy-none' }, eham.metarFail ? 'Luchtvaartweer is tijdelijk niet beschikbaar.' : 'Luchtvaartweer wordt opgehaald…'), h('div', {}));
   }
+  wx.append(seaRow());
   root.replaceChildren(wx);
 }
 

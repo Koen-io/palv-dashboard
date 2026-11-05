@@ -281,8 +281,17 @@ function mpProgress(mid, ph, sec) {
 }
 function mpNewMission(name) {
   const id = OPS.uid();
-  OPS.put('missions', 'missions', id, { name, status: 'planning', createdAt: tmNow(), by: OPS.screen.name });
+  const order = Math.max(0, ...mpMissions().map((m) => m.order ?? m.createdAt ?? 0)) + 1;
+  OPS.put('missions', 'missions', id, { name, status: 'planning', createdAt: tmNow(), by: OPS.screen.name, order });
   return id;
+}
+// The missions in the order of the list: the order given by hand, else the moment they were made.
+const mpOrdered = () => mpMissions().sort((a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0) || (a.createdAt || 0) - (b.createdAt || 0));
+const MP_STATUS = { planning: 'In planning', ready: 'Gereed', active: 'Lopend', done: 'Afgerond', archived: 'Archief' };
+// Everything of one mission gone: the mission and every field of it, on every screen.
+function mpDelete(m) {
+  const fields = OPS.list('missions', 'fields').filter((f) => f.id.startsWith(m.id + ':'));
+  OPS.putMany('missions', [{ list: 'missions', id: m.id, item: null }, ...fields.map((f) => ({ list: 'fields', id: f.id, item: null }))]);
 }
 
 /* ---------- the tab ---------- */
@@ -313,10 +322,12 @@ function mpCreate(body, w) {
   };
   const statusSel = h('select', { class: 'input zp-sel', title: 'Status van de missie', onchange: () => { const m = mission(); if (m) OPS.put('missions', 'missions', m.id, { ...m, status: statusSel.value }); } }, [['planning', 'In planning'], ['ready', 'Gereed'], ['active', 'Lopend'], ['done', 'Afgerond'], ['archived', 'Archief']].map(([v, n]) => h('option', { value: v }, n)));
   const renameBtn = h('button', { class: 'btn zp-btn', title: 'Naam wijzigen', onclick: () => { const m = mission(); if (!m) return; pageNameDialog('Missie hernoemen', m.name, (n) => OPS.put('missions', 'missions', m.id, { ...m, name: n })); } }, icon('edit'));
-  const delBtn = h('button', { class: 'btn zp-btn danger', title: 'Missie verwijderen (ook op de andere schermen)', onclick: () => { const m = mission(); if (!m) return; confirmDialog('Missie verwijderen', `"${m.name}" met alles wat is ingevuld verwijderen, ook op de andere schermen?`, 'Verwijderen', () => { const fields = OPS.list('missions', 'fields').filter((f) => f.id.startsWith(m.id + ':')); OPS.putMany('missions', [{ list: 'missions', id: m.id, item: null }, ...fields.map((f) => ({ list: 'fields', id: f.id, item: null }))]); cfg.missionId = null; save(); paint(); }); } }, icon('trash'));
+  const delBtn = h('button', { class: 'btn zp-btn danger', title: 'Missie verwijderen (ook op de andere schermen)', onclick: () => { const m = mission(); if (!m) return; confirmDialog('Missie verwijderen', `"${m.name}" met alles wat is ingevuld verwijderen, ook op de andere schermen? Dit is niet ongedaan te maken.`, 'Verwijderen', () => { mpDelete(m); cfg.missionId = null; save(); paint(); }); } }, icon('trash'));
+  const homeBtn = h('button', { class: 'btn zp-btn', title: 'Alle missies: de lijst om te kiezen, te ordenen, te hernoemen of te verwijderen', onclick: () => { cfg.missionId = null; cfg.phase = 'overview'; save(); paint(); } }, icon('folder'), 'Missies');
+  const lockBtn = lockButton(mission, () => { const m = mission(); if (m) lockDialog('missions', m, () => paint()); });
   const timingsBtn = h('button', { class: 'btn zp-btn', title: 'De L-uur ketting (holding, 5-3-2-1, HAMMER) als wekkers in Timings zetten', onclick: () => { const m = mission(); const L = m && mpField(m.id, 'order', 'timeline', 'lhour'); if (!L) return toast('Vul eerst het L-uur in onder Opdracht › Tijdlijn', true); mpLhourToTimings(m, L); } }, icon('clock'), 'L-uur → Timings');
   const exportBtn = h('button', { class: 'btn zp-btn', title: 'Het hele plan als PDF (A4)', onclick: () => { const m = mission(); if (m) mpExport(m); } }, icon('download'), 'PDF');
-  bar.append(h('span', { class: 'mp-title' }, icon('shield'), 'MISSION PLANNING'), sel, newBtn, renameBtn, statusSel, progress, h('span', { class: 'zp-spacer' }), timingsBtn, exportBtn, delBtn);
+  bar.append(h('span', { class: 'mp-title' }, icon('shield'), 'MISSION PLANNING'), homeBtn, sel, newBtn, renameBtn, statusSel, lockBtn, progress, h('span', { class: 'zp-spacer' }), timingsBtn, exportBtn, delBtn);
 
   // Navigation: the overview and every phase, each with its progress.
   function paintNav() {
@@ -390,16 +401,50 @@ function mpCreate(body, w) {
         h('section', { class: 'mp-sec' }, h('div', { class: 'mp-sec-head' }, h('h3', {}, 'Laatst gewijzigd')),
           fields.length ? h('div', { class: 'mp-recent' }, fields.map((f) => { const [, key] = f.id.split(':'); const [phId, secId, itId] = key.split('.'); const ph = MP_PHASES.find((x) => x.id === phId), sec = ph && ph.sections.find((x) => x.id === secId), it = sec && sec.items.find((x) => x.id === itId); return h('div', { class: 'mp-recent-row' }, h('b', {}, it ? it.label.replace(/\s\*$/, '') : key), h('small', {}, `${ph ? ph.name : ''} · ${f.by || '—'} · ${ltFmt.format(f.updatedAt)}`)); })) : h('p', { class: 'zp-hint' }, 'Nog niets ingevuld.'))));
   }
-  function empty() {
-    const list = mpMissions();
-    return h('div', { class: 'mp-empty' }, icon('shield'), h('h2', {}, 'Mission Planning'), h('p', {}, 'De Scheme Of Maneuver Planning van de TACSOP, digitaal: opdracht, fase 1, initial guidance, ICM, fase 2, SOMP, post-SOMP, fase 3, FCM, mission briefing, uitvoering en de missiekaart. Alles wat je invult staat direct op alle schermen van de eenheid.'),
-      h('div', { class: 'tm-quick' }, h('button', { class: 'btn primary', onclick: newMission }, icon('plus'), 'Nieuwe missie'), ...list.slice(0, 6).map((m) => h('button', { class: 'btn', onclick: () => { cfg.missionId = m.id; save(); paint(); } }, m.name))));
+  // The home page: a new mission, and every mission of the unit in a list to open, order, rename or remove.
+  function home() {
+    const list = mpOrdered();
+    const open = (m) => { cfg.missionId = m.id; cfg.phase = 'overview'; save(); paint(); };
+    const move = (m, dir) => {
+      const i = list.findIndex((x) => x.id === m.id), j = i + dir;
+      if (j < 0 || j >= list.length) return;
+      const a = list[i], b = list[j];
+      const oa = a.order ?? a.createdAt ?? 0, ob = b.order ?? b.createdAt ?? 0;
+      OPS.putMany('missions', [{ list: 'missions', id: a.id, item: { ...a, order: ob } }, { list: 'missions', id: b.id, item: { ...b, order: oa } }].map((x) => { delete x.item.id; return x; }));
+      if (oa === ob) OPS.put('missions', 'missions', a.id, { ...a, order: ob - dir, id: undefined });
+    };
+    const rows = list.map((m, i) => {
+      const all = MP_PHASES.map((ph) => mpProgress(m.id, ph));
+      const done = all.reduce((n, p) => n + p.done, 0), total = all.reduce((n, p) => n + p.total, 0);
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      const L = mpField(m.id, 'order', 'timeline', 'lhour');
+      const shut = !!(m.lock && !m.lockOpen);
+      return h('div', { class: 'mp-mission' + (m.status === 'archived' ? ' archived' : '') + (m.lock ? ' locked' : '') },
+        h('button', { class: 'mp-mission-main', title: shut ? 'Vergrendeld: pincode nodig' : 'Missie openen', onclick: () => open(m) },
+          h('i', { class: 'mp-navnum' }, shut ? icon('lock') : String(i + 1)),
+          h('div', { class: 'mp-mission-text' },
+            h('div', { class: 'mp-mission-top' }, h('b', {}, m.name), m.lock ? h('span', { class: 'mp-lock', title: m.lockOpen ? 'Vergrendeld, zichtbaar op dit scherm' : 'Vergrendeld op een ander scherm' }, icon('lock'), m.lockOpen ? 'VERGRENDELD' : 'PINCODE') : null, h('span', { class: 'mp-status ' + m.status }, (MP_STATUS[m.status] || m.status).toUpperCase())),
+            h('small', {}, `${shut ? 'inhoud vergrendeld' + (m.lock.hint ? ' · ' + m.lock.hint : '') : `${pct}% · ${done} van ${total}`}${L && !shut ? ' · L-uur ' + String(L).replace('T', ' ') : ''} · aangemaakt ${new Date(m.createdAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}${m.by ? ' op ' + m.by : ''}`),
+            shut ? null : h('div', { class: 'mp-prog' + (total && done === total ? ' done' : '') }, h('i', { style: `width:${pct}%` })))),
+        h('div', { class: 'mp-mission-acts' },
+          h('button', { class: 'w-tool', title: 'Naam wijzigen', onclick: () => pageNameDialog('Missie hernoemen', m.name, (n) => OPS.put('missions', 'missions', m.id, { ...m, name: n, id: undefined })) }, icon('edit')),
+          h('button', { class: 'w-tool', title: 'Omhoog in de lijst', disabled: i === 0 || null, onclick: () => move(m, -1) }, icon('arrowUp')),
+          h('button', { class: 'w-tool', title: 'Omlaag in de lijst', disabled: i === list.length - 1 || null, onclick: () => move(m, 1) }, icon('arrowDown')),
+          h('button', { class: 'w-tool danger', title: 'Missie verwijderen', onclick: () => confirmDialog('Missie verwijderen', `"${m.name}" met alles wat is ingevuld (${OPS.list('missions', 'fields').filter((f) => f.id.startsWith(m.id + ':')).length} velden) verwijderen, ook op de andere schermen? Dit is niet ongedaan te maken.`, 'Verwijderen', () => { mpDelete(m); if (cfg.missionId === m.id) cfg.missionId = null; save(); paint(); }) }, icon('trash'))));
+    });
+    return h('div', { class: 'mp-home' },
+      h('div', { class: 'mp-home-head' }, icon('shield'), h('h2', {}, 'Mission Planning'), h('p', {}, 'De Scheme Of Maneuver Planning van de TACSOP, digitaal: van de opdracht tot en met de missiekaart. Alles wat je invult staat direct op alle schermen van de eenheid.')),
+      h('button', { class: 'btn primary mp-newbtn', onclick: newMission }, icon('plus'), 'Nieuwe missie'),
+      h('div', { class: 'mp-list' }, h('div', { class: 'mp-list-head' }, h('b', {}, 'Missies'), h('span', { class: 'zp-fold-badge' }, String(list.length))),
+        rows.length ? rows : h('p', { class: 'zp-hint' }, 'Nog geen missies. Maak er een met Nieuwe missie.')));
   }
   function paint() {
     paintSel();
     const m = mission();
     statusSel.value = m ? m.status || 'planning' : 'planning';
     statusSel.disabled = renameBtn.disabled = delBtn.disabled = exportBtn.disabled = timingsBtn.disabled = !m;
+    lockBtn.paint();
+    if (m && m.lock && !m.lockOpen) exportBtn.disabled = timingsBtn.disabled = true;
     if (m) {
       const all = MP_PHASES.map((ph) => mpProgress(m.id, ph));
       const done = all.reduce((n, p) => n + p.done, 0), total = all.reduce((n, p) => n + p.total, 0);
@@ -413,7 +458,8 @@ function mpCreate(body, w) {
     if (main.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { pending = true; return; }
     pending = false;
     const scroll = main.scrollTop;
-    if (!m) main.replaceChildren(empty());
+    if (!m) main.replaceChildren(home());
+    else if (m.lock && !m.lockOpen) main.replaceChildren(lockedCover('missions', m, paint));
     else if (cfg.phase === 'overview' || !MP_PHASES.some((p) => p.id === cfg.phase)) main.replaceChildren(overview(m));
     else main.replaceChildren(phasePage(m, MP_PHASES.find((p) => p.id === cfg.phase)));
     main.scrollTop = scroll;

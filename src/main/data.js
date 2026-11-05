@@ -6,16 +6,17 @@ const fleet = require('../fleet');
 const traffic = require('../traffic');
 const opensky = require('../opensky');
 const share = require('../share');
+const sea = require('../sea');
 const log = require('./log');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
 
-async function fetchText(url, timeoutMs = 20000, ua = UA, extra = {}) {
+async function fetchText(url, timeoutMs = 20000, ua = UA, extra = {}, { method = 'GET', body = null } = {}) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': ua, 'Cache-Control': 'no-cache', ...extra }, signal: ctl.signal });
+    const res = await fetch(url, { method, body, headers: { 'User-Agent': ua, 'Cache-Control': 'no-cache', ...extra }, signal: ctl.signal });
     if (!res.ok) {
       // A refusal carries how long to wait, when the source says so.
       const err = new Error(`HTTP ${res.status}`);
@@ -77,6 +78,11 @@ ipcMain.handle('data:wxmap', async () => {
   }
   return wxPending;
 });
+
+// Sea state and sea water temperature: Rijkswaterstaat's North Sea stations and the Open-Meteo wave model.
+sea.start({ fetchJson: async (url, opts = {}) => JSON.parse(await fetchText(url, opts.timeoutMs || 20000, APP_UA, opts.headers || {}, { method: opts.method || 'GET', body: opts.body || null })), log: { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) } });
+ipcMain.handle('sea:overview', async (_e, ref) => { try { return await sea.overview(String(ref || 'europlatform')); } catch (err) { return { ok: false, error: String(err.message || err) }; } });
+ipcMain.handle('sea:at', async (_e, lat, lon) => { try { return await sea.at(+lat, +lon); } catch (err) { return { ok: false, error: String(err.message || err) }; } });
 
 // Live traffic for the Vluchtradar and the own aircraft for "In de lucht": one feed, pushed to the
 // dashboard after every round. The renderer renews what it watches every few seconds; without that the

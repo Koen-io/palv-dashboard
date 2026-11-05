@@ -281,7 +281,47 @@ function osCreate(body, w) {
     else { sel = { kind, item, lat: item.lat, lon: item.lon }; paintCard(); }
     ctx.cv.request();
     if (cfg.sideTab === 'ships') paintSoon();
+    if (sel && sel.lat != null) loadSea(sel.lat, sel.lon, kind === 'point' ? null : kind === 'ship' ? osName(item) : item.name || item.icao || null);
   }
+
+  /* ---------- sea state and water temperature at the chosen spot, in the bar ---------- */
+  // The wave model of Open-Meteo at the point itself and the nearest Rijkswaterstaat observation beside it,
+  // so the figure at the spot and the measured one a few miles away can be compared.
+  const seaBox = h('div', { class: 'os-sea' });
+  const SEA_WORDS = ['Spiegelglad', 'Vlak', 'Kalm', 'Licht', 'Matig', 'Ruw', 'Zeer ruw', 'Hoog', 'Zeer hoog', 'Buitengewoon'];
+  const nl1 = (v, d = 1) => (v == null ? '—' : (+v).toFixed(d).replace('.', ','));
+  let seaSeq = 0, seaAt = null;
+  const paintSeaEmpty = (txt) => { seaBox.className = 'os-sea'; seaBox.title = ''; seaBox.replaceChildren(h('span', { class: 'os-sea-hint' }, icon('target'), txt)); };
+  paintSeaEmpty('Tik op de kaart voor de sea state en de zeewatertemperatuur op die plek');
+  async function loadSea(lat, lon, name) {
+    const my = ++seaSeq;
+    seaAt = { lat, lon, name };
+    seaBox.replaceChildren(h('span', { class: 'os-sea-hint' }, icon('refresh'), `Sea state op ${name || PlanCoords.fmt(lat, lon, 'ddm')} ophalen…`));
+    let r = null;
+    try { r = await window.palv.data.seaAt(lat, lon); } catch { r = null; }
+    if (my !== seaSeq) return;
+    if (!r || !r.ok || (!r.model && !(r.nearest && r.nearest.length))) return paintSeaEmpty(`Geen zeedata voor ${name || PlanCoords.fmt(lat, lon, 'ddm')}${r && r.modelError ? ` (${r.modelError})` : ''}`);
+    const m = r.model, n = r.nearest && r.nearest[0];
+    // On land Open-Meteo gives nothing: then only the nearest station tells.
+    const st = m && m.state != null ? m.state : n ? n.state : null;
+    const hs = m && m.hs != null ? m.hs : n ? n.hs : null;
+    const sst = m && m.sst != null ? m.sst : n && n.tw != null ? n.tw : null;
+    seaBox.className = 'os-sea s' + (st == null ? 'x' : Math.min(st, 6));
+    seaBox.title = `${name || 'Punt'} ${PlanCoords.fmt(lat, lon, 'ddm')}\n`
+      + (m ? `Golfmodel (Open-Meteo, ${m.at ? zulu(m.at) : ''}): significante golfhoogte ${nl1(m.hs, 2)} m, periode ${nl1(m.period)} s, richting ${m.dir == null ? '—' : Math.round(m.dir) + '°'}; deining ${nl1(m.swell, 2)} m / ${nl1(m.swellPeriod)} s, windgolven ${nl1(m.windWave, 2)} m; zeewater ${nl1(m.sst)} °C.\n` : 'Geen modelwaarde op dit punt (land of buiten het model).\n')
+      + (r.nearest || []).map((x) => `${x.name} (${nl1(x.km, 0)} km): ${x.hs != null ? `Hs ${nl1(x.hs, 2)} m, sea state ${x.state}` : 'geen golfmeting'}${x.tm02 != null ? `, Tm ${nl1(x.tm02)} s` : ''}${x.tw != null ? `, water ${nl1(x.tw)} °C` : ''} · ${zulu(x.at)}`).join('\n')
+      + '\n\nSea state volgens de Douglas-schaal; de meting van Rijkswaterstaat is leidend, het model vult de plek zelf in.';
+    seaBox.replaceChildren(
+      h('span', { class: 'os-sea-where' }, icon('target'), h('b', {}, name || PlanCoords.fmt(lat, lon, 'ddm'))),
+      h('span', { class: 'os-sea-state' }, waveSvg(st), h('b', {}, st == null ? '—' : String(st)), h('span', { class: 'os-sea-words' }, h('em', {}, 'SEA STATE'), h('u', {}, st == null ? 'onbekend' : SEA_WORDS[st]))),
+      h('span', { class: 'os-sea-kv' }, h('small', {}, 'Hs'), h('b', {}, nl1(hs, hs != null && hs < 1 ? 2 : 1)), h('small', {}, 'm'), m && m.period != null ? h('i', {}, `${nl1(m.period)} s`) : null, m && m.dir != null ? h('i', {}, `uit ${Math.round(m.dir).toString().padStart(3, '0')}°`) : null),
+      h('span', { class: 'os-sea-sep' }),
+      h('span', { class: 'os-sea-kv' }, h('small', {}, 'ZEEWATER'), h('b', {}, nl1(sst)), h('small', {}, '°C')),
+      n ? h('span', { class: 'os-sea-sep' }) : null,
+      n ? h('span', { class: 'os-sea-obs', title: 'Dichtstbijzijnde meetstation van Rijkswaterstaat' }, h('small', {}, 'GEMETEN'), h('b', {}, `${n.name} · ${nl1(n.km, 0)} km`), h('i', {}, `${n.hs != null ? `Hs ${nl1(n.hs, 2)} m` : ''}${n.tw != null ? ` · ${nl1(n.tw)} °C` : ''} · ${zulu(n.hsAt || n.at)}`)) : null,
+      h('span', { class: 'os-sea-src' }, m ? 'model op dit punt' : 'alleen meting'));
+  }
+  timers.push(setInterval(() => { if (seaAt && onScreen(body)) loadSea(seaAt.lat, seaAt.lon, seaAt.name); }, 10 * 60000));
   async function loadTrack(mmsi) {
     D.trackFor = mmsi; D.track = null;
     try { const t = await window.palv.ais.track(mmsi); if (D.trackFor === mmsi) { D.track = t; ctx.cv.request(); } } catch { /* none */ }
@@ -298,8 +338,8 @@ function osCreate(body, w) {
     const out = [];
     const bases = OPS.list('shared', 'bases');
     const base = bases[0] || ZP_BASES_DEFAULT[0];
-    out.push(zpRow(`Vanaf ${base.name}`, `${PlanUnits.hdg(PlanGeo.bearing(base, { lat, lon }))}° · ${PlanUnits.fmtDist(PlanGeo.dist(base, { lat, lon }), 'nm')}`));
-    if (D.snap) for (const a of D.snap.ac) { if (!a.group || a.lat == null) continue; const pos = vrNow(a, Date.now()); const here = { lat: pos[0], lon: pos[1] }; const nm = UNIT_NAMES(a.hex) || {}; out.push(zpRow(`Vanaf ${a.flight || a.reg || nm.reg || a.hex.toUpperCase()}`, `${PlanUnits.hdg(PlanGeo.bearing(here, { lat, lon }))}° · ${PlanUnits.fmtDist(PlanGeo.dist(here, { lat, lon }), 'nm')}${a.gs > 20 ? ` · ${PlanUnits.fmtDur((PlanGeo.dist(here, { lat, lon }) / 1852 / a.gs) * 60)}` : ''}`)); }
+    out.push(zpRow(`Vanaf ${base.name}`, `${PlanUnits.hdg(PlanGeo.bearing(base, { lat, lon }))} · ${PlanUnits.fmtDist(PlanGeo.dist(base, { lat, lon }), 'nm')}`));
+    if (D.snap) for (const a of D.snap.ac) { if (!a.group || a.lat == null) continue; const pos = vrNow(a, Date.now()); const here = { lat: pos[0], lon: pos[1] }; const nm = UNIT_NAMES(a.hex) || {}; out.push(zpRow(`Vanaf ${a.flight || a.reg || nm.reg || a.hex.toUpperCase()}`, `${PlanUnits.hdg(PlanGeo.bearing(here, { lat, lon }))} · ${PlanUnits.fmtDist(PlanGeo.dist(here, { lat, lon }), 'nm')}${a.gs > 20 ? ` · ${PlanUnits.fmtDur((PlanGeo.dist(here, { lat, lon }) / 1852 / a.gs) * 60)}` : ''}`)); }
     return out;
   };
   function paintCard() {
@@ -489,7 +529,7 @@ function osCreate(body, w) {
   const title = h('span', { class: 'mp-title' }, icon('globe'), 'OFFSHORE');
   const baseSeg = segmented([{ value: 'osm', label: 'Kaart' }, { value: 'sat', label: 'Satelliet' }, { value: 'none', label: 'Donker' }], ['osm', 'sat', 'none'].includes(cfg.base) ? cfg.base : 'osm', (v) => { cfg.base = v; save(); ctx.base.apply(); });
   const homeBtn = h('button', { class: 'btn zp-btn', title: 'Nederlandse sector in beeld', onclick: () => map.setView([53.35, 4.1], 7.2) }, icon('target'), 'NL-sector');
-  bar.append(title, baseSeg, homeBtn, h('span', { class: 'zp-spacer' }));
+  bar.append(title, baseSeg, homeBtn, seaBox, h('span', { class: 'zp-spacer' }));
 
   /* ---------- start ---------- */
   loadPlatforms(); loadPlaces(); loadDecks(); pollAis(); paintStatus(); paintSide();

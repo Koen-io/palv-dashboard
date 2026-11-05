@@ -1,5 +1,29 @@
 # Wijzigingen
 
+## 1.30.0
+
+### Kop van het dashboard
+- **Noordzee onder de METAR**: de **sea state** (Douglas-schaal 0–9, met een golf-icoontje dat meegroeit) uit de significante golfhoogte, de golfperiode en de **zeewatertemperatuur**, gemeten door Rijkswaterstaat op een Noordzeestation (standaard Europlatform; te kiezen onder Instellingen › Weerradar), met de waarnemingstijd en de spreiding over alle stations in de sector. Alle stations met hun waarden staan in de tooltip. Elke vijf minuten ververst; bij een oude waarneming kleurt de bron oranje
+- **Maanstand onder de maan**: azimut (graden en windrichting, met een kompasroos) en elevatie boven de horizon voor Nederland, elke halve minuut bijgewerkt. Gecontroleerd tegen de JPL-efemeride: azimut op 0,1° nauwkeurig, elevatie op 0,2° (met refractie, zoals je de maan ziet)
+
+### Weerradar
+- Het blauwe pulserende bolletje is weg: dat was Windy's eigen "mijn locatie" (een schatting uit het IP-adres, altijd aan op de radarlaag) en zei niets over het dashboard
+
+### Whiteboard
+- **Alle iconen opnieuw getekend, gedetailleerd**: één set van 215 iconen met herkenbare silhouetten, ramen, dekuitrusting, masten en echte verhoudingen. De AW139 en EC135 van boven met de juiste rotorschijf ten opzichte van de romp, vijf of vier bladen, sponsons en staartrotor aan bakboord (AW139) of skids en fenestron (EC135); AW189, H145, NH90, Dash 8, Cessna en drone; vaartuigen in zij- en bovenaanzicht met brug, luiken, kranen en helidek; politieauto, ME-bus en personenauto ook van boven; personen met uitrusting (agent, BOA, DSI, hondengeleider, hulpverlener); platforms, turbines en infra als technische tekeningen; tactische symbolen zoals de TACSOP ze bedoelt (LEAD en GATE zonder cijfer), plus cordon, wegversperring, windpijl en NVG. De keuze Eenvoudig/Gedetailleerd is vervallen; oude borden tonen hun iconen in de nieuwe versie
+- **Vergrendelen met een slot**: de knop Slot in de balk vergrendelt het bord met een pincode (6 tot 12 cijfers) en een geheugensteuntje. Daarna is de inhoud alleen op dat scherm te zien; de andere schermen tonen de naam, het slot en het geheugensteuntje, en krijgen de inhoud pas na de pincode (die blijft daar dan bekend). Verbergen op een scherm of het slot opheffen gaat via hetzelfde menu. De inhoud staat versleuteld in de gedeelde bestanden (AES-256-GCM, sleutel uit de pincode met scrypt), ook een streek die nog getekend wordt gaat niet live naar schermen zonder sleutel; na vijf foute pincodes wacht het slot een halve minuut
+
+### Mission Planning
+- Ook een **slot** voor een missie: alle velden versleuteld, de naam en status leesbaar; de missielijst toont het slot en het geheugensteuntje
+- De startpagina is opnieuw ingericht: de knop **Nieuwe missie** in het midden, daaronder alle missies **onder elkaar**, genummerd en klikbaar, met status, voortgang en L-uur; naast elke missie knoppen om de naam te wijzigen, hem omhoog of omlaag te zetten en te verwijderen (altijd met een bevestiging). De knop Missies in de balk brengt je er terug
+
+### Timings
+- Een positietimer kan zijn punt nu **op de kaart** krijgen: de knop Kies op de kaart opent een venster met de kaart (kaart, satelliet, topo NL of VFR, met zeekaart), tik waar het punt moet komen, de gele ring toont de straal, het dichtstbijzijnde dorp of de coördinaat wordt de naam; daarna vul je straal en moment in zoals altijd
+
+### Offshore
+- Tik op een plek op de kaart (of een schip, platform of station) en in de balk boven de kaart staan de **sea state** en de **zeewatertemperatuur** op die plek: het golfmodel van Open-Meteo op het punt zelf (golfhoogte, periode, richting, deining in de tooltip) naast de dichtstbijzijnde meting van Rijkswaterstaat met de afstand, zodat je model en meting kunt vergelijken
+- De dubbele gradentekens in de kaart ("334°°") zijn weg
+
 ## 1.29.0
 
 ### Whiteboard

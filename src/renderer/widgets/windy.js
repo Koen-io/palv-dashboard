@@ -120,6 +120,9 @@ function wxInject(p) {
       map.setView(b.c, b.z, { animate: true, duration: 0.3 });
     }, 0));
   }
+  // Windy's own "my location" dot (an estimate from the IP address, always on with the radar layer) is
+  // not this dashboard's position and says nothing operational: gone, also when Windy puts it back.
+  for (const d of document.querySelectorAll('.leaflet-marker-icon.mylocation, .icon-dot.mylocation, .pulsating-icon')) d.remove();
   S.scale = p.scale;
   S.all = !!p.all;
   if (S.size !== p.size) { S.size = p.size; document.documentElement.style.setProperty('--pw-size', String(p.size || 1)); }
@@ -145,6 +148,7 @@ function wxInject(p) {
 }
 
 const WX_CSS = `
+.leaflet-marker-icon.mylocation,.icon-dot.mylocation,.pulsating-icon{display:none!important;visibility:hidden!important}
 .pw-icon{overflow:visible!important}
 .pw{position:absolute;left:-11px;top:-11px;display:flex;align-items:center;white-space:nowrap;cursor:pointer;font:600 calc(12px * var(--pw-size, 1))/1 "Segoe UI",system-ui,sans-serif}
 .pw-dot{position:relative;width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-sizing:border-box;box-shadow:0 0 0 1.5px rgba(4,10,20,.85),0 2px 6px rgba(0,0,0,.6);display:grid;place-items:center;flex:none}
