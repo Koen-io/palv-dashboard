@@ -453,12 +453,49 @@ function zpSavedPanel(ctx) {
         zpBtn('Toon', () => { go(f.lat, f.lon, 13); ctx.select({ lat: f.lat, lon: f.lon, label: f.name, kind: 'fav' }); ctx.showPoint({ lat: f.lat, lon: f.lon, label: f.name, sub: 'Favoriet' }); }),
         h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => ctx.put('shared', 'favorites', id, null) }, icon('trash'))))) : h('p', { class: 'zp-hint' }, 'Klik een punt en kies de ster in de kaart van dat punt.')),
     h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Bases')),
-      h('p', { class: 'zp-hint' }, 'Vanaf deze plekken rekent "Wie is er het snelst" en de puntkaart. Zonder eigen bases geldt Schiphol-Oost.'),
+      h('p', { class: 'zp-hint' }, 'De steunpunten Schiphol-Oost, Volkel en Rotterdam, met het weer en de banen van hun veld; de basis van dit dashboard (Instellingen › Basis) staat bovenaan. Vanaf deze plekken rekent "Wie is er het snelst" en de puntkaart. Eigen punten zijn toe te voegen.'),
       sel ? zpBtn(`${sel.label || 'Geselecteerd punt'} als basis`, () => { const id = Math.random().toString(36).slice(2, 10); ctx.put('shared', 'bases', id, { name: String(sel.label || 'Basis').slice(0, 40), lat: sel.lat, lon: sel.lon, startMin: 10 }); }, { icon: 'plus' }) : null,
-      h('div', { class: 'zp-list' }, (bases.length ? bases : ZP_BASES_DEFAULT.map((b) => [null, b])).map(([id, b]) => h('div', { class: 'zp-li' },
-        h('div', {}, h('b', {}, b.name), h('small', {}, ctx.fmt.coord(b.lat, b.lon))),
-        field('Opstarten', zpNum(b.startMin, (v) => { if (id) ctx.put('shared', 'bases', id, { ...b, startMin: v || 0 }); else { const nid = Math.random().toString(36).slice(2, 10); ctx.put('shared', 'bases', nid, { ...b, startMin: v || 0 }); } }, { step: 1, min: 0, max: 60 }), 'min'),
-        id ? h('button', { class: 'w-tool', title: 'Verwijderen', onclick: () => ctx.put('shared', 'bases', id, null) }, icon('trash')) : null)))));
+      h('div', { class: 'zp-list zp-bases' }, ctx.bases().map((b) => zpBaseCard(ctx, b, bases.some(([id]) => id === b.id))))));
+}
+
+// One base in the list: position, start-up time, and for a standard base the live METAR of its field
+// (BOM verdict, wind, visibility, cloud base, temperature, QNH) and its runways with the ones into the wind.
+function zpBaseCard(ctx, b, hasOwn) {
+  const std = b.standard ? BASES_API.BASES[b.id] : null;
+  const active = std && std.id === activeBase().id;
+  const card = h('div', { class: 'zp-li zp-base' + (active ? ' on' : '') });
+  const head = h('div', { class: 'zp-base-head' },
+    h('div', {}, h('b', {}, b.name, active ? h('em', { class: 'zp-base-tag' }, 'DIT DASHBOARD') : null), h('small', {}, `${std ? std.long + ' · ' : ''}${ctx.fmt.coord(b.lat, b.lon)}`)),
+    zpBtn('Toon', () => { ctx.map.setView([b.lat, b.lon], Math.max(ctx.map.getZoom(), 12)); ctx.select({ lat: b.lat, lon: b.lon, label: b.name, kind: 'base' }); ctx.showPoint({ lat: b.lat, lon: b.lon, label: b.name, sub: std ? std.long : 'Basis' }); }, { icon: 'target' }),
+    field('Opstarten', zpNum(b.startMin, (v) => ctx.put('shared', 'bases', b.id, { name: b.name, lat: b.lat, lon: b.lon, startMin: v || 0 }), { step: 1, min: 0, max: 60 }), 'min'),
+    !std || hasOwn ? h('button', { class: 'w-tool', title: std ? 'Eigen instelling van deze basis wissen' : 'Verwijderen', onclick: () => ctx.put('shared', 'bases', b.id, null) }, icon('trash')) : null);
+  card.append(head);
+  if (!std) return card;
+  // Weather of the field, from the station feed the weather radar uses (every minute).
+  const wx = h('div', { class: 'zp-base-wx' }, h('small', { class: 'zp-hint' }, 'Weer wordt opgehaald…'));
+  const paintWx = () => {
+    const st = wxFeed.stations.find((s) => s.icao === std.icao);
+    if (!st) { wx.replaceChildren(h('small', { class: 'zp-hint' }, `${std.icao}: nu geen METAR beschikbaar${std.military ? ' (militair veld, buiten de openingstijden geen waarneming)' : ''}`)); return; }
+    const m = st.metar, now = Date.now();
+    const vis = m.vis == null ? '—' : m.cavok ? 'CAVOK' : m.vis >= 9999 ? '≥ 10 km' : `${m.vis} m`;
+    const cloud = m.layers.length ? m.layers.map((l) => `${l.cover} ${l.base}`).join(', ') : m.cloud === 'none' ? 'geen' : '—';
+    const wind = m.wind ? (m.wind.spd === 0 ? 'stil' : `${WX.windText(m.wind)} kt`) : '—';
+    const ends = m.wind && m.wind.dir !== 'VRB' && m.wind.spd > 0 ? BASES_API.intoWind(std, +m.wind.dir, m.wind.spd) : [];
+    const best = ends.length ? ends.filter((e) => e.head >= ends[0].head - 2).map((e) => e.id).join(' / ') : null;
+    wx.replaceChildren(
+      h('div', { class: 'zp-base-wxhead' }, bomChips(st, now), h('small', {}, `${zulu(st.obsTime)} · ${Math.max(0, Math.round((now - st.obsTime) / 60000))} min`)),
+      h('div', { class: 'zp-rows' }, zpRow('Wind', wind), zpRow('Zicht', vis), zpRow('Bewolking', cloud), m.temp != null ? zpRow('Temp / dauwpunt', `${m.temp}° / ${m.dew ?? '—'}°`) : null, m.qnh ? zpRow('QNH', `${m.qnh} hPa`) : null),
+      h('div', { class: 'zp-rows' }, h('h4', { class: 'zp-sub' }, 'Banen'), ...std.runways.map((r) => zpRow(`${r.a}/${r.b}`, `${r.name}${best && (best.includes(r.a) || best.includes(r.b)) ? ' · in de wind: ' + [r.a, r.b].filter((x) => best.split(' / ').includes(x)).join('/') : ''}`)),
+        best ? h('small', { class: 'zp-hint' }, `Baan in de wind volgens de METAR (tegenwind ${ends[0].head} kt${ends[0].cross ? `, dwars ${ends[0].cross} kt` : ''}); het werkelijke baangebruik staat in de widget Baangebruik.`) : null),
+      h('pre', { class: 'os-raw' }, st.raw));
+  };
+  paintWx();
+  const unwatch = watchWx(paintWx);
+  // The panel is rebuilt now and then; the watcher goes when the card is gone.
+  const mo = new MutationObserver(() => { if (!card.isConnected) { unwatch(); mo.disconnect(); } });
+  mo.observe(ctx.el.closest('.zp') || document.body, { childList: true, subtree: true });
+  card.append(wx);
+  return card;
 }
 
 /* ---------- sources ---------- */

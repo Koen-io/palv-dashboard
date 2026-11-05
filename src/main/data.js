@@ -97,7 +97,7 @@ function start(getWin) {
       snap.fleet = { ok: snap.ok, reserve: snap.reserve, lastOk: snap.lastOk, startedAt: snap.startedAt, tracked: snap.tracked, src: snap.src, via: snap.via || null, aircraft: fleet.snapshot(groups, snap.now) };
       const win = getWin();
       // The runways in use, read from the same feed while it covers Schiphol.
-      if (traffic.covers(52.31, 4.76, 14, snap.now)) runways.ingest(traffic.records(), snap.now);
+      { const f = runways.field(); if (traffic.covers(f.lat, f.lon, 14, snap.now)) runways.ingest(traffic.records(), snap.now); }
       if (win && !win.isDestroyed()) win.webContents.send('traffic:update', snap);
     },
     { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) },
@@ -111,7 +111,8 @@ ipcMain.handle('opensky:setKey', (_e, id, secret) => opensky.setKey(id, secret))
 ipcMain.handle('traffic:route', (_e, hex) => fleet.route(hex).catch(() => []));
 
 // Runways actually in use: per flight from Casper (the BAS flight tracker), live ADS-B as fallback.
-ipcMain.handle('data:runways', () => {
+ipcMain.handle('data:runways', (_e, baseId) => {
+  if (baseId && baseId !== runways.baseId()) runways.configure(String(baseId));
   runways.start(traffic.request, async (url) => JSON.parse(await fetchText(url, 20000)));
   return runways.snapshot();
 });

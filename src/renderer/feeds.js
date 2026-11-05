@@ -127,7 +127,7 @@ const runwayViews = new Set();
 async function refreshRunways() {
   // Only asked while a runway widget is on screen: Casper is then asked once a minute, otherwise not at all.
   if (!runwayViews.size) { report('runways'); return; }
-  const res = await window.palv.data.runways().catch(() => null);
+  const res = await window.palv.data.runways(activeBase().id).catch(() => null);
   if (res) eham.live = res;
   else if (eham.live) eham.live.ok = false;
   for (const paint of runwayViews) paint();
@@ -146,8 +146,10 @@ async function refreshRunways() {
 const NL_WATCH = { lat: 52.9, lon: 4.6, nm: 150 };
 const emergency = { watch: SQUAWK.createWatch(), ack: new Map(), unwatch: null, audio: null };
 
+// Distance and direction from the base the dashboard runs from.
 function distanceFromSchiphol(a) {
-  const dLat = (a.lat - 52.3086) * 60, dLon = (a.lon - 4.7639) * 60 * Math.cos((52.3 * Math.PI) / 180);
+  const B = activeBase();
+  const dLat = (a.lat - B.lat) * 60, dLon = (a.lon - B.lon) * 60 * Math.cos((B.lat * Math.PI) / 180);
   const nm = Math.hypot(dLat, dLon);
   const brg = (Math.atan2(dLon, dLat) * 180) / Math.PI;
   const dirs = ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW'];
@@ -162,7 +164,7 @@ function checkEmergencies(snap) {
   let fresh = false;
   for (const t of started) {
     const where = distanceFromSchiphol(t.a), inside = SQUAWK.inFir(t.a.lat, t.a.lon);
-    plog(inside ? 'warn' : 'info', `NOODSQUAWK ${t.code} (${SQUAWK.MEANING[t.code]}) bevestigd${inside ? '' : ' buiten FIR Amsterdam'}: ${emName(t.a)} ${t.a.type || ''}, ${t.a.alt} ft, ${where.nm} NM ${where.dir} van Schiphol, ${t.hits} berichten in ${Math.round((t.lastMsg - t.firstAt) / 1000)} s`);
+    plog(inside ? 'warn' : 'info', `NOODSQUAWK ${t.code} (${SQUAWK.MEANING[t.code]}) bevestigd${inside ? '' : ' buiten FIR Amsterdam'}: ${emName(t.a)} ${t.a.type || ''}, ${t.a.alt} ft, ${where.nm} NM ${where.dir} van ${activeBase().name}, ${t.hits} berichten in ${Math.round((t.lastMsg - t.firstAt) / 1000)} s`);
     if (inside) fresh = true;
   }
   for (const t of ended) plog('info', `noodsquawk beëindigd: ${emName(t.a)}`);
@@ -210,7 +212,7 @@ function paintEmergency() {
       h('span', { class: 'em-code' }, e.code),
       h('div', { class: 'em-main' },
         h('b', {}, `${e.meaning.toUpperCase()} · ${name}`),
-        h('span', {}, [a.reg && a.reg !== name ? a.reg : null, a.type, a.alt != null ? `${Number(a.alt).toLocaleString('nl-NL')} ft` : null, a.gs != null ? `${Math.round(a.gs)} kt` : null, `${where.nm} NM ${where.dir} van Schiphol`, `sinds ${zulu(e.since)}`].filter(Boolean).join(' · '))),
+        h('span', {}, [a.reg && a.reg !== name ? a.reg : null, a.type, a.alt != null ? `${Number(a.alt).toLocaleString('nl-NL')} ft` : null, a.gs != null ? `${Math.round(a.gs)} kt` : null, `${where.nm} NM ${where.dir} van ${activeBase().name}`, `sinds ${zulu(e.since)}`].filter(Boolean).join(' · '))),
       h('button', { class: 'em-btn', title: 'Toon het toestel op de Vluchtradar', onclick: () => showOnRadar(hex) }, icon('target'), 'Toon op radar'),
       h('button', { class: 'em-btn ghost', title: 'Melding bevestigen; komt terug als de code verandert', onclick: () => { emergency.ack.set(hex, e.code); plog('info', `noodsquawkmelding weggeklikt: ${name}`); paintEmergency(); } }, icon('check'), 'Bevestigen'));
   }));

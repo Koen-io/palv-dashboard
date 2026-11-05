@@ -486,7 +486,11 @@ body.touch select.input.wx-pick { height: 2.2rem; }
 .rwy-num { font-family: var(--font-display); font-size: 2.7rem; font-weight: 700; line-height: 1.12; color: var(--text); font-variant-numeric: tabular-nums; }
 .rwy-name { font-size: 0.95rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .rwy-item.secondary .rwy-num { font-size: 1.9rem; font-weight: 500; }
-.rwy-src { grid-area: src; font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 0.45rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rwy-src { grid-area: src; font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 0.45rem; font-variant-numeric: tabular-nums; white-space: nowrap; flex-wrap: wrap; }
+.rwy-wind { flex: 1 0 100%; display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: 0.2rem; }
+.rwy-wind span { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.14em; color: var(--accent); }
+.rwy-wind b { font: 600 1.15rem var(--font-display); color: var(--text); }
+.rwy-wind i { font-style: normal; font-size: 0.78rem; color: var(--muted); }
 .rwy-map { grid-area: map; width: 100%; height: 100%; min-height: 0; overflow: visible; }
 /* The backdrop runs on under the text around the map, up to the edge of the widget. */
 .rwy-cols, .rwy-src { position: relative; z-index: 1; }
@@ -755,5 +759,5 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 /* While the wheel glides the zoom (wheelzoom.js) the tile levels and canvas layers are only scaled, as
    bitmaps on the GPU, instead of drawn anew at every frame; at rest they are drawn sharp again. */
 .vr-wheel .leaflet-tile-container, .vr-wheel .leaflet-zoom-animated, .vr-wheel .zp-canvas { will-change: transform; }
-.lock-modal hr { width: 100%; margin: 0; border: 0; border-top: 1px solid var(--border); }
+.modal-body hr { width: 100%; margin: 0; border: 0; border-top: 1px solid var(--border); }
 .lock-pin::placeholder { font: 400 0.9rem var(--font-ui); letter-spacing: 0.02em; }

@@ -492,6 +492,15 @@ function tmPointOnMap(geo, onPick) {
   void close;
 }
 
+// A position timer in one tap: the dialog opens on Positie, with the own aircraft that is flying now
+// (or the only one in view) already chosen, so only the point and the radius are left to fill in.
+function tmPositionQuick() {
+  const own = (trafficFeed.snap && trafficFeed.snap.ac ? trafficFeed.snap.ac : []).filter((a) => a.group);
+  const flying = own.filter((a) => a.alt == null || a.alt > 100 || (a.gs || 0) > 30);
+  const pick = flying.length === 1 ? flying[0] : own.length === 1 ? own[0] : flying.find((a) => a.group === 'police') || null;
+  tmEditDialog({ ...tmNew('geo'), label: '', geo: { hex: pick ? pick.hex : '', name: '', lat: null, lon: null, label: '', radiusNm: 1, mode: 'enter' } });
+}
+
 // L-hour: the TACSOP ingress chain as one set of alarms.
 function tmLhourDialog() {
   const d = new Date(tmNow() + 60 * 60000);
@@ -546,6 +555,7 @@ function tmCreate(body, w) {
     ...TM_QUICK.map((q) => h('button', { class: 'zp-linkbtn', title: q.hint, onclick: () => { tmEditDialog({ ...tmNew('timer', { label: q.label, durationMs: q.min * 60000, cat: q.cat, note: q.hint }) }); quickPop.hidden = true; } }, h('b', {}, q.label), h('small', {}, `${q.min} min · ${TM_CATS[q.cat].name} · ${q.hint}`))),
     h('button', { class: 'zp-linkbtn', onclick: () => { tmLhourDialog(); quickPop.hidden = true; } }, h('b', {}, 'L-uur ketting'), h('small', {}, 'Holding, 5-3-2-1 en HAMMER volgens de TACSOP-ingress')));
   const quickBtn = h('button', { class: 'btn zp-btn', title: 'Snelle timers en voorkeuzes', onclick: () => { paintQuick(); quickPop.hidden = !quickPop.hidden; } }, icon('history'), 'Snel');
+  const posBtn = h('button', { class: 'btn zp-btn', title: 'Een positietimer voor de kist: gaat af als het toestel een punt bereikt of een gebied verlaat', onclick: () => tmPositionQuick() }, icon('plane'), 'Positie');
   const lBtn = h('button', { class: 'btn zp-btn', title: 'Wekkers rond L-uur volgens de TACSOP', onclick: tmLhourDialog }, icon('target'), 'L-uur');
   const sortSel = h('select', { class: 'input zp-sel', title: 'Sorteren', onchange: () => { cfg.sort = sortSel.value; save(); paint(); } }, Object.entries(TM_SORTS).map(([k, n]) => h('option', { value: k, selected: cfg.sort === k || null }, n)));
   const filterSeg = segmented([{ value: 'all', label: 'Alles' }, { value: 'running', label: 'Lopend' }, { value: 'done', label: 'Afgegaan' }, ...Object.entries(TM_CATS).map(([k, c]) => ({ value: 'cat:' + k, label: c.name }))], cfg.filter || 'all', (v) => { cfg.filter = v; save(); paint(); });
@@ -556,7 +566,7 @@ function tmCreate(body, w) {
   } }, icon('trash'), 'Opruimen');
   const settingsBtn = h('button', { class: 'btn zp-btn', title: 'Geluiden en standaardwaarden', onclick: () => tmSettingsDialog() }, icon('gear'), 'Geluiden');
   const sideBtn = h('button', { class: 'btn zp-btn', title: 'Tijdlijn tonen of verbergen', onclick: () => { cfg.side = cfg.side === false; root.classList.toggle('side-off', cfg.side === false); save(); } }, icon('layout'), 'Tijdlijn');
-  bar.append(addBtn, quickBtn, lBtn, h('span', { class: 'zp-spacer' }), filterSeg, sortSel, clearBtn, settingsBtn, sideBtn);
+  bar.append(addBtn, quickBtn, posBtn, lBtn, h('span', { class: 'zp-spacer' }), filterSeg, sortSel, clearBtn, settingsBtn, sideBtn);
   main.append(quickPop);
   const closePop = (e) => { if (!quickPop.hidden && !quickPop.contains(e.target) && !quickBtn.contains(e.target)) quickPop.hidden = true; };
   document.addEventListener('pointerdown', closePop, true);

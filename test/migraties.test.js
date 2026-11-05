@@ -12,7 +12,7 @@ test('standaardindeling blijft zichzelf na normaliseren', () => {
   assert.strictEqual(out.version, M.VERSION);
   assert.deepStrictEqual(out.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing']);
   assert.deepStrictEqual(types(out.pages[2]), ['plan']);
-  assert.deepStrictEqual(types(out.pages[0]), ['fleet', 'radar', 'runway', 'tile', 'tile', 'windy']);
+  assert.deepStrictEqual(types(out.pages[0]), ['fleet', 'radar', 'runway', 'windy']);
   assert.strictEqual(out.settings.keepAwake, true);
   assert.strictEqual(out.settings.oledCare, true);
   assert.strictEqual(out.settings.emergencyAlert, true);

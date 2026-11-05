@@ -3,6 +3,27 @@
 /* ============================================================
    Instellingen
    ============================================================ */
+// Another base: the header, the runway use, the radar rings, the METAR widgets of the old base and the
+// Vluchtradar centre follow at once; the choice is saved with the rest of the settings.
+function applyBase(id) {
+  const old = activeBase();
+  const next = BASES_API.baseOf(id);
+  if (!next || next.id === old.id) return;
+  state.settings.base = next.id;
+  for (const p of state.pages) for (const w of p.widgets) {
+    if (w.type === 'metar' && String(w.cfg.icao || '').toUpperCase() === old.icao) { w.cfg.icao = next.icao; if (!w.title || w.title === old.station || w.title === old.airport) w.title = next.station; }
+    if (w.type === 'runway' && (!w.title || /^Baangebruik/.test(w.title))) w.title = `Baangebruik ${next.name === 'Schiphol-Oost' ? 'Schiphol' : next.name}`;
+    if (w.type === 'radar') { w.cfg.lat = next.field.lat; w.cfg.lon = next.field.lon; }
+  }
+  save();
+  eham.metar = null; eham.live = null; eham.history.length = 0;
+  refreshMetar();
+  renderEham();
+  remountType('metar'); remountType('runway'); remountType('radar'); remountType('fleet');
+  if (typeof refreshRunways === 'function') refreshRunways();
+  toast(`Basis: ${next.long}`);
+}
+
 function openSettings(startTab) {
   const s = state.settings;
   const pane = h('div', { class: 'settings-pane' });
@@ -19,7 +40,7 @@ function openSettings(startTab) {
         const paintAuto = () => {
           autoBox.replaceChildren();
           if (s.theme !== 'auto') return;
-          const { rise, set } = ASTRO.sunTimes(new Date(), 52.31, 4.76);
+          const { rise, set } = ASTRO.sunTimes(new Date(), activeBase().field.lat, activeBase().field.lon);
           const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
           const times = h('div', { class: 'row' },
             field('Licht vanaf', h('input', { class: 'input', type: 'time', value: s.lightFrom, onchange: changed((e) => { s.lightFrom = e.target.value; applyTheme(true); }) })),
@@ -28,7 +49,7 @@ function openSettings(startTab) {
           autoBox.append(
             h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Automatisch schakelen op basis van'),
               segmented([{ value: 'sun', label: 'Zonsopkomst en -ondergang' }, { value: 'times', label: 'Vaste tijden' }], s.autoMode, changed((v) => { s.autoMode = v; times.style.display = v === 'times' ? '' : 'none'; applyTheme(true); })),
-              h('div', { class: 'hint' }, `Vandaag: zon op ${hm(rise)}, zon onder ${hm(set)} (Schiphol). De overgang verloopt met een vloeiende fade.`)),
+              h('div', { class: 'hint' }, `Vandaag: zon op ${hm(rise)}, zon onder ${hm(set)} (${activeBase().name}). De overgang verloopt met een vloeiende fade.`)),
             times
           );
         };
@@ -46,6 +67,32 @@ function openSettings(startTab) {
         ];
         paintAuto();
         return el;
+      },
+    },
+    basis: {
+      label: 'Basis', icon: 'target',
+      build: () => {
+        const cur = activeBase();
+        const info = h('div', { class: 'sys-ver' });
+        const paintInfo = () => {
+          const b = activeBase();
+          info.replaceChildren(
+            h('div', {}, h('span', {}, 'Station in de kop'), h('b', {}, `${b.icao} · ${b.station}${b.military ? ' (militair)' : ''}`)),
+            h('div', {}, h('span', {}, 'Baangebruik'), h('b', {}, `${b.airport}: ${b.runways.map((r) => `${r.a}/${r.b}`).join(', ')}${b.casper ? ' · per vlucht via de BAS-flighttracker, ADS-B als terugval' : ' · uit het live verkeer (ADS-B) en de baan in de wind uit de METAR'}`)),
+            h('div', {}, h('span', {}, 'Positie van de basis'), h('b', {}, PlanCoords.fmt(b.lat, b.lon, 'ddm'))),
+            h('div', {}, h('span', {}, 'Afstanden en ringen'), h('b', {}, `"x NM van ${b.name}" bij noodsquawks en In de lucht; afstandsringen op de Vluchtradar rond ${b.name}; Offshore en Zoek & Plan rekenen vanaf ${b.name}`)));
+        };
+        paintInfo();
+        return [
+          h('h3', {}, 'Vanaf welke basis draait dit dashboard?'),
+          h('p', {}, 'De basis bepaalt het luchtvaartweer in de kop (METAR en BOM-toets van het veld), het baangebruik, de afstandsringen en de afstanden in meldingen, de eerste basis in Zoek & Plan en het referentiepunt van Offshore. De METAR-widgets van de oude basis op de pagina Weer wisselen mee naar de nieuwe.'),
+          h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Basis'),
+            segmented(BASES_API.ORDER.map((id) => ({ value: id, label: BASES_API.BASES[id].long.replace(/^Steunpunt /, ''), icon: 'target' })), cur.id, (v) => { applyBase(v); paintInfo(); })),
+          h('hr'),
+          h('h3', {}, 'Wat er nu geldt'),
+          info,
+          h('p', { class: 'hint' }, 'De gedeelde bestanden (timers, borden, missies, routes) zijn van de hele eenheid en veranderen niet met de basis; alleen wat dit scherm toont wordt afgestemd.'),
+        ];
       },
     },
     scherm: {
@@ -352,7 +399,7 @@ function openSettings(startTab) {
           h('h3', {}, 'Gegevensbronnen'),
           h('p', {}, 'Versheid: elke widget met gegevens toont in zijn titelbalk een bolletje met de tijd en de leeftijd van wat hij laat zien. Groen: actueel. Oranje: vertraagd, of de verbinding hapert. Rood: verouderd of geen verbinding. Beweeg de muis erover voor de grenzen per bron.'),
           h('p', {}, 'Luchtvaartweer (METAR/TAF): aviationweather.gov — elke minuut ververst, ook de meetstations op de weerradar.'),
-          h('p', {}, 'Schiphol in de kop en de METAR-widgets: de wolkenbasis is die van het BOM (Deel A §8.2.4.1, note 1): de laagste laag van 3/8 (SCT) of meer. FEW telt niet als wolkenbasis, maar staat wel in de regel met alle lagen eronder, oranje als hij onder de basis ligt: bij Single pilot EC en Advanced Operations geldt "geen bewolking (incl. FEW)". De BOM-chips geven per profiel van het moment het oordeel: overdag (binnen UDP) Multi pilot en Single pilot, ’s nachts (buiten UDP) Unaided, Aided, Advanced en SP buiten UDP; ze schakelen op de UDP-grenzen vanzelf om. Beweeg de muis erover voor de minima en de trend. De vliegcategorie (VFR/MVFR/IFR/LIFR) is de Amerikaanse indeling van aviationweather.gov en zegt niets over het BOM. In de titelbalk van elke METAR-widget kies je het station: alle luchthavens, vliegbases en Noordzeestations van Nederland en de stations net over de grens.'),
+          h('p', {}, 'Het veld van de basis in de kop en de METAR-widgets: de wolkenbasis is die van het BOM (Deel A §8.2.4.1, note 1): de laagste laag van 3/8 (SCT) of meer. FEW telt niet als wolkenbasis, maar staat wel in de regel met alle lagen eronder, oranje als hij onder de basis ligt: bij Single pilot EC en Advanced Operations geldt "geen bewolking (incl. FEW)". De BOM-chips geven per profiel van het moment het oordeel: overdag (binnen UDP) Multi pilot en Single pilot, ’s nachts (buiten UDP) Unaided, Aided, Advanced en SP buiten UDP; ze schakelen op de UDP-grenzen vanzelf om. Beweeg de muis erover voor de minima en de trend. De vliegcategorie (VFR/MVFR/IFR/LIFR) is de Amerikaanse indeling van aviationweather.gov en zegt niets over het BOM. In de titelbalk van elke METAR-widget kies je het station: alle luchthavens, vliegbases en Noordzeestations van Nederland en de stations net over de grens.'),
           h('p', {}, 'Meetstations op de weerradar: getoetst aan de weerminima uit de tabel van het BOM, per gekozen profiel. Groen: binnen limieten. Oranje: binnen limieten maar marginaal (minder marge dan ingesteld onder Weerradar, standaard 200 ft of 1000 m) of volgens de trend binnen 2 uur eronder. Rood: buiten limieten. Grijs: zicht of bewolking niet gemeten, of waarneming ouder dan 90 minuten. Verticaal zicht (VV) telt niet als wolkenbasis. Pijl: trend uit de METAR, anders uit de TAF, anders het waargenomen verloop. Plus: buiten Aided Nacht maar binnen Advanced Operations, alleen AW139.'),
           h('p', {}, 'Temperatuur en dauwpunt: naast de waarden staat het verschil (Δ) en de relatieve vochtigheid. Bij 3 °C of minder verschil kleurt het oranje (kans op mist), bij 1 °C of minder rood.'),
           h('p', {}, 'UDP: 15 minuten vóór zonsopkomst tot 15 minuten na zonsondergang op 52°N 005°E, volgens de KNMI-tabellen voor 2026 en 2027. Voor latere jaren wordt gerekend (hooguit één minuut verschil met de tabel) en staat er "BEREKEND" in de balk, tot de tabel van dat jaar is toegevoegd. Het profiel op de weerradar schakelt op deze tijden automatisch tussen het laatst gebruikte dag- en nachtprofiel.'),

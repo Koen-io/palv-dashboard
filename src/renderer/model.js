@@ -35,7 +35,7 @@
     web: { name: 'Website', defaults: { url: 'https://www.knmi.nl/nederland-nu/luchtvaart', refreshMin: 0 } },
     tile: { name: 'App-tegel', defaults: { kind: 'app', target: '', args: '', icon: null } },
     metar: { name: 'METAR / TAF', defaults: { icao: 'EHAM' } },
-    runway: { name: 'Baangebruik Schiphol', defaults: {} },
+    runway: { name: 'Baangebruik', defaults: {} },
     fleet: { name: 'In de lucht', defaults: { groups: ['police', 'hems', 'coastguard'], hide: [], ground: true } },
     note: { name: 'Notitie', defaults: { text: '' } },
     plan: { name: 'Zoek & Plan', defaults: {} },
@@ -94,11 +94,12 @@
     timings: { sound: 'alarm', warnSound: 'chime', warnMin: 5, popup: true, volume: 0.8, repeatS: 20 },
     // 1.30: the Rijkswaterstaat station whose sea state and water temperature the header shows.
     seaStation: 'europlatform',
+    // 1.31: the base (steunpunt) this dashboard runs from: eham, ehvk or ehrd (src/bases.js).
+    base: 'eham',
   };
 
   function defaultState() {
     const widget = (type, x, y, w, h, z, extra = {}) => ({ id: uid(), type, x, y, w, h, z, title: WIDGET_META[type].name, ...extra, cfg: { ...WIDGET_META[type].defaults, ...(extra.cfg || {}) } });
-    const tile = (x, y, title, kind, target) => ({ id: uid(), type: 'tile', x, y, w: 12, h: 9, z: 1, title, cfg: { kind, target, args: '', icon: null } });
     return {
       version: VERSION,
       settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
@@ -107,13 +108,13 @@
         {
           id: uid(),
           name: 'Operationeel',
+          // The layout of the Mac Mini Flightroom (1.31): radar left, runway use and own units in the
+          // middle, the weather radar right.
           widgets: [
-            widget('radar', 0, 0, 36, 54, 1, { cfg: { cats: ['police', 'hems', 'coastguard'], labels: true } }),
-            widget('windy', 36, 0, 36, 54, 2, { title: 'Weerradar' }),
-            tile(72, 0, 'LVNL Baangebruik', 'url', 'https://www.lvnl.nl/omgeving/actueel-baangebruik-schiphol'),
-            tile(84, 0, 'KNMI Luchtvaart', 'url', 'https://www.knmi.nl/nederland-nu/luchtvaart'),
-            widget('runway', 72, 9, 24, 27, 3),
-            widget('fleet', 72, 36, 24, 18, 3),
+            widget('radar', 0, 0, 36, 54, 1, { cfg: { cats: ['police', 'hems', 'coastguard'], labels: true, base: 'osmLight' } }),
+            widget('runway', 36, 0, 24, 33, 4, { title: 'Baangebruik Schiphol' }),
+            widget('fleet', 36, 33, 24, 21, 2, { cfg: { groups: ['police'] } }),
+            widget('windy', 60, 0, 36, 54, 3, { title: 'Weerradar' }),
           ],
         },
         {
@@ -122,8 +123,8 @@
           widgets: [
             widget('windy', 0, 0, 62, 54, 1, { title: 'Weerradar' }),
             widget('metar', 62, 0, 34, 18, 1, { title: 'Schiphol', cfg: { icao: 'EHAM' } }),
-            widget('metar', 62, 18, 34, 18, 1, { title: 'Rotterdam', cfg: { icao: 'EHRD' } }),
-            widget('metar', 62, 36, 34, 18, 1, { title: 'Eindhoven Airport', cfg: { icao: 'EHEH' } }),
+            widget('metar', 62, 18, 34, 18, 1, { title: 'Volkel', cfg: { icao: 'EHVK' } }),
+            widget('metar', 62, 36, 34, 18, 1, { title: 'Deelen', cfg: { icao: 'EHDL' } }),
           ],
         },
         { id: uid(), name: 'Zoek & Plan', widgets: [widget('plan', 0, 0, 96, 54, 1)] },

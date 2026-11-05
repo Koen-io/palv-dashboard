@@ -336,8 +336,9 @@ function osCreate(body, w) {
   const fromRef = (lat, lon) => {
     // Distance and bearing from the nearest own aircraft, and from the first base.
     const out = [];
-    const bases = OPS.list('shared', 'bases');
-    const base = bases[0] || ZP_BASES_DEFAULT[0];
+    const B = activeBase();
+    const own = OPS.get('shared', 'bases', B.id);
+    const base = { name: B.name, lat: own ? own.lat : B.lat, lon: own ? own.lon : B.lon };
     out.push(zpRow(`Vanaf ${base.name}`, `${PlanUnits.hdg(PlanGeo.bearing(base, { lat, lon }))} · ${PlanUnits.fmtDist(PlanGeo.dist(base, { lat, lon }), 'nm')}`));
     if (D.snap) for (const a of D.snap.ac) { if (!a.group || a.lat == null) continue; const pos = vrNow(a, Date.now()); const here = { lat: pos[0], lon: pos[1] }; const nm = UNIT_NAMES(a.hex) || {}; out.push(zpRow(`Vanaf ${a.flight || a.reg || nm.reg || a.hex.toUpperCase()}`, `${PlanUnits.hdg(PlanGeo.bearing(here, { lat, lon }))} · ${PlanUnits.fmtDist(PlanGeo.dist(here, { lat, lon }), 'nm')}${a.gs > 20 ? ` · ${PlanUnits.fmtDur((PlanGeo.dist(here, { lat, lon }) / 1852 / a.gs) * 60)}` : ''}`)); }
     return out;

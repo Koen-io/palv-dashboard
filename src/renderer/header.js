@@ -15,7 +15,7 @@ function resolveTheme() {
     const from = toMin(s.lightFrom), to = toMin(s.darkFrom);
     return from <= to ? (mins >= from && mins < to ? 'light' : 'dark') : (mins >= to && mins < from ? 'dark' : 'light');
   }
-  const { rise, set } = ASTRO.sunTimes(now, 52.31, 4.76);
+  const { rise, set } = ASTRO.sunTimes(now, activeBase().field.lat, activeBase().field.lon);
   return now >= rise && now < set ? 'light' : 'dark';
 }
 
@@ -302,12 +302,14 @@ function renderMoonPos(m, now) {
   );
 }
 
-/* ---------- Schiphol: METAR in the header ---------- */
+/* ---------- the base: METAR in the header ---------- */
 // The METAR is read by WX.parseMetar (wx.js), the same parser that judges the stations on the radar, so
 // the header can never tell a different story than the station layer. Earlier observations are kept for
 // the observed trend when the METAR carries no trend and there is no TAF.
-const eham = { metar: null, metarFail: false, fetchedAt: 0, live: null, history: [], period: null };
-const EHAM_POS = { name: 'Schiphol', lat: 52.31, lon: 4.76 };
+// `eham` is the station block of the base the dashboard runs from (Schiphol, Volkel or Rotterdam): the name
+// stayed from the days it was Schiphol only.
+const eham = { metar: null, metarFail: false, fetchedAt: 0, live: null, history: [], period: null, icao: null };
+const EHAM_POS = () => { const b = activeBase(); return { name: b.station, lat: b.field.lat, lon: b.field.lon }; };
 const HISTORY_KEEP = 3 * 3600e3;
 
 // Day inside the UDP, night outside it: which rows of the BOM table apply right now.
@@ -488,16 +490,17 @@ function renderEham() {
   const root = $('#eham');
   const { metar } = eham;
   const wx = h('div', { class: 'eham-wx' });
-  const head = h('div', { class: 'eham-head' }, h('span', { class: 'eham-id' }, 'EHAM'), h('span', { class: 'eham-name' }, 'Schiphol'));
+  const B = activeBase();
+  const head = h('div', { class: 'eham-head' }, h('span', { class: 'eham-id' }, B.icao), h('span', { class: 'eham-name' }, B.station));
   if (ehamBadge) ehamBadge.dispose();
   ehamBadge = freshBadge(() => ({
     t: eham.metar && eham.metar.obsTime, warn: 40 * 60000, bad: 75 * 60000, fail: eham.metarFail, loading: !eham.metar,
-    label: 'METAR Schiphol (waarnemingstijd)', note: `Elke minuut opgehaald bij aviationweather.gov${eham.fetchedAt ? `, laatst ${zuluSec(eham.fetchedAt)}` : ''}. Schiphol geeft elk half uur een nieuwe METAR uit.`,
+    label: `METAR ${B.station} (waarnemingstijd)`, note: `Elke minuut opgehaald bij aviationweather.gov${eham.fetchedAt ? `, laatst ${zuluSec(eham.fetchedAt)}` : ''}. ${B.station} geeft elk half uur een nieuwe METAR uit${B.military ? ' (militair veld: buiten de openingstijden soms geen METAR)' : ''}.`,
   }));
   ehamBadge.classList.add('hd');
   if (metar) {
     const now = Date.now();
-    const st = WX.station('EHAM', metar.raw, metar.obsTime, metar.taf, eham.history, now, EHAM_POS);
+    const st = WX.station(B.icao, metar.raw, metar.obsTime, metar.taf, eham.history, now, EHAM_POS());
     const p = st.metar;
     if (metar.fltCat) head.append(h('span', { class: 'cat ' + metar.fltCat, title: 'Vliegcategorie volgens de Amerikaanse indeling van aviationweather.gov (plafond BKN/OVC en zicht). Zegt niets over de BOM-minima: zie de toetsing ernaast.' }, metar.fltCat));
     head.append(bomChips(st, now), ehamBadge);
@@ -522,10 +525,12 @@ function rememberObs(history, res) {
 }
 
 async function refreshMetar() {
-  const res = await window.palv.data.metar('EHAM').catch(() => ({ ok: false }));
-  if (res.ok) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; rememberObs(eham.history, res); } else eham.metarFail = true;
+  const B = activeBase();
+  if (eham.icao !== B.icao) { eham.icao = B.icao; eham.metar = null; eham.history.length = 0; }
+  const res = await window.palv.data.metar(B.icao).catch(() => ({ ok: false }));
+  if (res.ok && activeBase().icao === B.icao) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; rememberObs(eham.history, res); } else if (!res.ok) eham.metarFail = true;
   renderEham();
   const m = eham.metar, obsAge = m && m.obsTime ? Date.now() - m.obsTime : Infinity;
-  report('metar', 'METAR Schiphol', !eham.metarFail && obsAge < 75 * 60000,
+  report('metar', `METAR ${B.station}`, !eham.metarFail && obsAge < 75 * 60000,
     eham.metarFail ? (m ? `geen verbinding, laatste ${zulu(m.obsTime)}` : 'geen verbinding') : `waarneming ${zulu(m.obsTime)}`, 10 * 60000);
 }

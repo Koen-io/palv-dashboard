@@ -19,7 +19,7 @@ const vrFade = (a) => (a.src === 'OpenSky' ? VR_FADE_RESERVE_S : VR_FADE_S);
 // so then once a second (with every new round) is enough; zoomed in on a helicopter up to ten times.
 const vrFrameMs = (zoom) => clamp(Math.round(250 * 2 ** (11 - zoom)), 100, 1000);
 const VR_TRAIL_MIN = 15;        // minutes of route kept for other traffic
-const VR_SCHIPHOL = [52.3086, 4.7639];
+const VR_SCHIPHOL = () => [activeBase().lat, activeBase().lon];
 const VR_NL = [[50.6, 3.0], [53.7, 7.4]];
 
 /* ---------- maps ---------- */
@@ -46,7 +46,7 @@ const vrBase = (key) => VR_BASES[VR_BASE_ALIAS[key] || key] || VR_BASES.osm;
 const VR_OVERLAYS = {
   aero: { name: 'Luchtruim (VFR-kaart)', hint: 'CTR\'s, TMA\'s, verboden en beperkte gebieden van openFlightMaps' },
   wx: { name: 'Neerslagradar', hint: 'RainViewer, elke 10 minuten een nieuw beeld' },
-  rings: { name: 'Afstandsringen Schiphol', hint: 'Elke 10 NM rond Schiphol' },
+  rings: { name: 'Afstandsringen basis', hint: 'Elke 10 NM rond de basis (Instellingen › Basis)' },
   legend: { name: 'Hoogtelegenda', hint: 'Kleur van de toestellen naar hoogte' },
 };
 const VR_SYMBOLS = {
@@ -468,8 +468,9 @@ function vrCreate(body, w) {
     const dpr = L.Browser.retina ? 2 : 1;
 
     if ((w.cfg.overlays || []).includes('rings')) {
-      const c = P(...VR_SCHIPHOL);
-      const pxPerNm = Math.abs(vrProj(VR_SCHIPHOL[0] + 1 / 60, VR_SCHIPHOL[1], zoom)[1] - vrProj(VR_SCHIPHOL[0], VR_SCHIPHOL[1], zoom)[1]);
+      const S = VR_SCHIPHOL();
+      const c = P(...S);
+      const pxPerNm = Math.abs(vrProj(S[0] + 1 / 60, S[1], zoom)[1] - vrProj(S[0], S[1], zoom)[1]);
       ctx.save();
       ctx.strokeStyle = 'rgba(255,185,65,0.6)';
       ctx.fillStyle = 'rgba(255,185,65,0.9)';

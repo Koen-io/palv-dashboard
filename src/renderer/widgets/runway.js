@@ -1,31 +1,35 @@
 'use strict';
 
-/* Baangebruik Schiphol: runways in use, per flight from Casper (BAS flight tracker), live ADS-B as fallback. */
-const RUNWAYS = [
-  { name: 'Polderbaan', a: '18R', b: '36L', pa: [52.36025, 4.71183], pb: [52.32862, 4.70889] },
-  { name: 'Zwanenburgbaan', a: '18C', b: '36C', pa: [52.33139, 4.74003], pb: [52.30186, 4.7375] },
-  { name: 'Aalsmeerbaan', a: '18L', b: '36R', pa: [52.32123, 4.78012], pb: [52.29069, 4.77747] },
-  { name: 'Kaagbaan', a: '06', b: '24', pa: [52.28792, 4.73422], pb: [52.30462, 4.77752] },
-  { name: 'Buitenveldertbaan', a: '09', b: '27', pa: [52.31667, 4.74636], pb: [52.31842, 4.79689] },
-  { name: 'Oostbaan', a: '04', b: '22', pa: [52.30036, 4.78348], pb: [52.31403, 4.80302] },
-];
-// Bundled OpenStreetMap tiles around the field (assets/schiphol/<x>-<y>.png), the backdrop of the runway map.
+/* Baangebruik: the runways in use at the base the dashboard runs from (Instellingen › Basis). Schiphol:
+   per flight from Casper (BAS flight tracker), live ADS-B as fallback; Volkel and Rotterdam: live ADS-B,
+   with the runway into the wind from the METAR of the field. Runway geometry: src/bases.js. */
+// Bundled OpenStreetMap tiles around Schiphol (assets/schiphol/<x>-<y>.png); the other fields draw their
+// backdrop from the dashboard's own tile store (palvtile://osm), zoom 13 as well.
 const SCHIPHOL_TILES = { z: 13, x0: 4200, y0: 2691, cols: 8, rows: 6 };
-const rwyName = (id) => { const r = RUNWAYS.find((r) => r.a === id || r.b === id); return r ? r.name : ''; };
+const rwyName = (id) => { const r = activeBase().runways.find((r) => r.a === id || r.b === id); return r ? r.name : ''; };
 
 function runwayMap(landing, departure) {
-  // Web Mercator on the pixel grid of the bundled tiles, so the runways and the backdrop are one drawing
+  // Web Mercator on the pixel grid of the zoom-13 tiles, so the runways and the backdrop are one drawing
   // and stay locked together however the widget is sized.
-  const CX = 60, CY = 50, K = 0.1154, T = SCHIPHOL_TILES, N = 256 * 2 ** T.z;
+  const B = activeBase(), RUNWAYS = B.runways;
+  const CX = 60, CY = 50, K = B.mapK || 0.2, Z = 13, N = 256 * 2 ** Z;
   const mx = (lon) => ((lon + 180) / 360) * N;
   const my = (lat) => { const r = (lat * Math.PI) / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * N; };
-  const X0 = mx(4.757), Y0 = my(52.326);
+  const centre = B.id === 'eham' ? [52.326, 4.757] : [B.field.lat, B.field.lon];
+  const X0 = mx(centre[1]), Y0 = my(centre[0]);
   const proj = ([lat, lon]) => [CX + (mx(lon) - X0) * K, CY + (my(lat) - Y0) * K];
   let tiles = '';
-  for (let i = 0; i < T.cols; i += 1) for (let j = 0; j < T.rows; j += 1) {
+  const tile = (x, y, href) => `<image href="${href}" x="${(CX + (x * 256 - X0) * K).toFixed(2)}" y="${(CY + (y * 256 - Y0) * K).toFixed(2)}" width="${(256 * K + 0.05).toFixed(2)}" height="${(256 * K + 0.05).toFixed(2)}" preserveAspectRatio="none"/>`;
+  if (B.tiles === 'schiphol') {
+    const T = SCHIPHOL_TILES;
     // A sliver of overlap keeps hairlines from showing between tiles at odd scales; the mask further down
     // lets the backdrop fade out before the tiles end.
-    tiles += `<image href="../../assets/schiphol/${T.x0 + i}-${T.y0 + j}.png" x="${(CX + ((T.x0 + i) * 256 - X0) * K).toFixed(2)}" y="${(CY + ((T.y0 + j) * 256 - Y0) * K).toFixed(2)}" width="${(256 * K + 0.05).toFixed(2)}" height="${(256 * K + 0.05).toFixed(2)}" preserveAspectRatio="none"/>`;
+    for (let i = 0; i < T.cols; i += 1) for (let j = 0; j < T.rows; j += 1) tiles += tile(T.x0 + i, T.y0 + j, `../../assets/schiphol/${T.x0 + i}-${T.y0 + j}.png`);
+  } else {
+    // The tiles that cover the drawing (viewBox 16..106 × -8..106), from the tile store.
+    const tx0 = Math.floor((X0 + (16 - CX) / K) / 256), tx1 = Math.floor((X0 + (106 - CX) / K) / 256);
+    const ty0 = Math.floor((Y0 + (-8 - CY) / K) / 256), ty1 = Math.floor((Y0 + (106 - CY) / K) / 256);
+    for (let x = tx0; x <= tx1; x += 1) for (let y = ty0; y <= ty1; y += 1) tiles += tile(x, y, `palvtile://osm/${Z}/${x}/${y}`);
   }
   const landIds = new Set(landing.map((r) => r.rwy));
   const depIds = new Set(departure.map((r) => r.rwy));
@@ -69,12 +73,30 @@ function runwayMap(landing, departure) {
     .filter((l) => l.active || !labels.some((o) => o.active && Math.hypot(o.x - l.x, o.y - l.y) < 10))
     .map((l) => `<text${l.active ? '' : ' class="idle"'} x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}">${l.id}</text>`)
     .join('');
-  const svg = `<svg class="rwy-map" viewBox="16 -8 90 114" role="img" aria-label="Baangebruik op de kaart van Schiphol"><defs><radialGradient id="rwy-fade" gradientUnits="userSpaceOnUse" cx="${CX}" cy="${CY}" r="84"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient><mask id="rwy-mask" maskUnits="userSpaceOnUse" x="-70" y="-40" width="250" height="190"><rect x="-70" y="-40" width="250" height="190" fill="url(#rwy-fade)"/></mask></defs><g class="osm" mask="url(#rwy-mask)">${tiles}</g>${lines}${arrows}${texts}</svg>`;
+  const svg = `<svg class="rwy-map" viewBox="16 -8 90 114" role="img" aria-label="Baangebruik op de kaart van ${B.airport}"><defs><radialGradient id="rwy-fade" gradientUnits="userSpaceOnUse" cx="${CX}" cy="${CY}" r="84"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient><mask id="rwy-mask" maskUnits="userSpaceOnUse" x="-70" y="-40" width="250" height="190"><rect x="-70" y="-40" width="250" height="190" fill="url(#rwy-fade)"/></mask></defs><g class="osm" mask="url(#rwy-mask)">${tiles}</g>${lines}${arrows}${texts}</svg>`;
   return h('div', { style: 'display:contents', html: svg }).firstChild;
+}
+
+// The runway ends into the wind, from the METAR of the field in the header: what the tower will most
+// likely use, next to what is actually observed.
+function runwayWind() {
+  const B = activeBase(), m = eham.metar;
+  if (!m || !m.raw || eham.icao !== B.icao) return null;
+  let wind = null;
+  try { wind = WX.station(B.icao, m.raw, m.obsTime, null, [], Date.now(), { name: B.station, lat: B.field.lat, lon: B.field.lon }).metar.wind; } catch { return null; }
+  if (!wind) return null;
+  if (wind.dir === 'VRB' || !(wind.spd > 0)) return h('div', { class: 'rwy-wind', title: 'Wind volgens de METAR van het veld' }, h('span', {}, 'WIND'), h('b', {}, wind.spd > 0 ? `variabel ${wind.spd} kt` : 'stil'), h('i', {}, 'geen voorkeursbaan'));
+  const ends = BASES_API.intoWind(B, +wind.dir, wind.spd);
+  if (!ends.length) return null;
+  // Every runway end that is within a few knots of the best headwind (parallel runways at Volkel, say).
+  const best = ends.filter((e) => e.head >= ends[0].head - 2);
+  return h('div', { class: 'rwy-wind', title: `Wind ${String(wind.dir).padStart(3, '0')}° / ${wind.spd} kt${wind.gust ? ` (vlagen ${wind.gust})` : ''} uit de METAR: de baan met de meeste tegenwind. Zegt niets over wat de toren werkelijk gebruikt; dat staat links.` },
+    h('span', {}, 'IN DE WIND'), h('b', {}, best.map((e) => e.id).join(' / ')), h('i', {}, `${String(wind.dir).padStart(3, '0')}°/${wind.spd} kt · tegenwind ${ends[0].head} kt${ends[0].cross ? `, dwars ${ends[0].cross} kt` : ''}`));
 }
 
 function renderRunwayUse(root) {
   const live = eham.live;
+  const B = activeBase();
   const connected = live && live.ok;
   const starting = !live || (!live.lastOk && Date.now() - live.startedAt < 45000) || (connected && Date.now() - live.watchingSince < 4 * 60000);
   const land = live ? live.landing : [], dep = live ? live.departure : [];
@@ -87,6 +109,7 @@ function renderRunwayUse(root) {
   let dot = '', srcText;
   const viaCasper = live && live.source === 'casper';
   if (connected && (land.length || dep.length)) srcText = viaCasper ? `Schiphol-radar (BAS) · ${zulu(live.lastOk)}` : `Live waargenomen (ADS-B) · ${zulu(live.lastOk)}`;
+  else if (!B.casper && connected && B.military) { dot = 'warn'; srcText = 'Geen start- of landingsverkeer gezien (militair verkeer zendt vaak geen ADS-B)'; }
   else if (starting) { dot = 'warn'; srcText = 'Baangebruik wordt bepaald…'; }
   else if (connected) { dot = 'warn'; srcText = 'Geen start- of landingsverkeer'; }
   else { dot = 'bad'; srcText = live.lastOk ? `Geen verbinding · laatst ${zulu(live.lastOk)}` : 'Geen verbinding met live-bron'; }
@@ -97,12 +120,12 @@ function renderRunwayUse(root) {
       runwayMap(land, dep),
       h('div', { class: 'rwy-src', title: viaCasper
         ? 'Per vlucht de start- of landingsbaan volgens de radar, uit de flighttracker van het Bewoners Aanspreekpunt Schiphol (Casper), over het laatste kwartier. Valt die bron weg, dan neemt het live vliegverkeer (ADS-B) het over.'
-        : 'Afgeleid uit het live vliegverkeer (ADS-B): toestellen op eindnadering en net na de start, over het laatste kwartier. De flighttracker van het BAS (Casper) is nu niet bereikbaar.' }, h('span', { class: 'dot ' + dot }), srcText, h('span', { class: 'rwy-credit' }, '© OpenStreetMap')))
+        : `Afgeleid uit het live vliegverkeer (ADS-B) rond ${B.airport}: toestellen op eindnadering en net na de start, over het laatste kwartier.${B.casper ? ' De flighttracker van het BAS (Casper) is nu niet bereikbaar.' : ''}` }, runwayWind(), h('span', { class: 'dot ' + dot }), srcText, h('span', { class: 'rwy-credit' }, '© OpenStreetMap')))
   );
 }
 
 defineWidget('runway', {
-  desc: 'Actuele start- en landingsbanen van Schiphol, per vlucht volgens de radar (BAS-flighttracker), met live ADS-B als terugval.',
+  desc: 'Actuele start- en landingsbanen van de basis (Instellingen › Basis): Schiphol per vlucht volgens de radar (BAS-flighttracker) met live ADS-B als terugval; Volkel en Rotterdam uit het live verkeer, met de baan in de wind uit de METAR.',
   icon: 'plane',
   size: [24, 36],
   mount(w, body) {

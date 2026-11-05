@@ -32,7 +32,9 @@ const ZP_DEFAULTS = {
 };
 
 // Standard bases for "Wie is er het snelst"; editable under Opgeslagen.
-const ZP_BASES_DEFAULT = [{ id: 'eham', name: 'Schiphol-Oost (basis)', lat: 52.3124, lon: 4.7862, startMin: 10 }];
+// The standard bases (src/bases.js), the one this dashboard runs from first.
+const zpStandardBases = () => { const a = activeBase().id; return [a, ...BASES_API.ORDER.filter((id) => id !== a)].map((id) => { const b = BASES_API.BASES[id]; return { id: b.id, name: b.name, lat: b.lat, lon: b.lon, startMin: b.startMin, icao: b.icao, standard: true }; }); };
+const ZP_BASES_DEFAULT = zpStandardBases();
 
 function zpCfg(w) {
   const c = w.cfg;
@@ -185,7 +187,8 @@ function zpCreate(body, w) {
   ctx.put = (kind, list, id, item) => window.palv.plan.put(kind, list, id, item).then((st) => { if (st && st[list] !== undefined) { ctx.store[kind] = st; ctx.emit('store'); } return st; });
   ctx.bases = () => {
     const own = Object.entries(ctx.store.shared.bases || {}).map(([id, b]) => ({ id, ...b }));
-    return own.length ? own : ZP_BASES_DEFAULT;
+    const std = zpStandardBases().map((b) => { const o = own.find((x) => x.id === b.id); return o ? { ...b, ...o, standard: true } : b; });
+    return [...std, ...own.filter((o) => !BASES_API.BASES[o.id])];
   };
 
   /* ---------- selection: the point the tools work from ---------- */

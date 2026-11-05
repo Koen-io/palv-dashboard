@@ -464,3 +464,14 @@ body.touch .zp-coord-main .zp-coord { padding: 0.55rem 0.6rem; }
 .zp-rhead .zp-sec-tools .zp-btn { width: 1.95rem; padding: 0; justify-content: center; }
 body.touch .zp-rhead .zp-sec-tools .zp-btn { width: 2.4rem; height: 2.4rem; }
 body.touch .zp-rhead .zp-save { height: 2.4rem; }
+
+/* bases with live weather and runways */
+.zp-base { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+.zp-base.on { border-color: var(--accent); }
+.zp-base-head { display: flex; align-items: center; gap: 0.5rem; }
+.zp-base-head > div:first-child { flex: 1; min-width: 0; }
+.zp-base-tag { font-style: normal; margin-left: 0.5rem; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.12em; color: var(--accent); }
+.zp-base-wx { display: flex; flex-direction: column; gap: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border); }
+.zp-base-wxhead { display: flex; align-items: center; gap: 0.6rem; justify-content: space-between; }
+.zp-base-wxhead small { color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.zp-base .os-raw { font-size: 0.66rem; }

@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 1.31.0
+
+### Basis van het dashboard
+- Nieuw onder **Instellingen › Basis**: vanaf welk steunpunt dit dashboard draait: **Schiphol-Oost**, **Volkel** (Vliegbasis Volkel) of **Rotterdam** (Rotterdam The Hague Airport). De basis bepaalt het luchtvaartweer in de kop (METAR en BOM-toets van het veld), het baangebruik, de afstandsringen op de Vluchtradar en de afstanden in meldingen ("x NM van Volkel"), de eerste basis in Zoek & Plan en het referentiepunt van Offshore. De METAR-widgets van de oude basis op de pagina Weer wisselen mee, de Vluchtradar centreert op het veld
+- **Baangebruik** werkt nu voor elk veld: Schiphol zoals altijd per vlucht via de BAS-flighttracker; Volkel en Rotterdam uit het live verkeer (ADS-B) op de banen van dat veld, met de **baan in de wind** uit de METAR (tegenwind en dwarswind) erbij. De kaart in de widget komt uit de eigen tegelopslag
+- De standaardindeling van een nieuw dashboard is nu die van de Mac Mini Flightroom: Vluchtradar links, Baangebruik en In de lucht in het midden, Weerradar rechts; op Weer de METAR van Schiphol, Volkel en Deelen
+
+### Zoek & Plan
+- Onder Opgeslagen › **Bases** staan de drie steunpunten, de basis van dit dashboard bovenaan, elk met het **actuele weer van het veld** (BOM-toets, wind, zicht, bewolking, temperatuur, QNH en de ruwe METAR, elke minuut ververst) en de **banen** met de baan in de wind. Eigen bases blijven mogelijk; "Wie is er het snelst" en de puntkaart rekenen vanaf alle drie
+
+### Timings
+- Knop **Positie** tussen Snel en L-uur: in één tik een positietimer voor de kist, met het eigen toestel dat nu vliegt al gekozen
+
+### Overal
+- De scheidingslijnen in dialoogvensters waren een stipje: hersteld
+
 ## 1.30.0
 
 ### Kop van het dashboard

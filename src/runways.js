@@ -14,33 +14,39 @@
 // from the south and departs to the south). An aircraft that departs 36C and turns right climbs out close
 // to the extended centreline of 36R, which is how "departure 36R" used to show up.
 
-const FIELD = { lat: 52.31, lon: 4.76 };
+// 1.31: the field is the base the dashboard runs from (src/bases.js): Schiphol with Casper, Volkel or
+// Rotterdam with ADS-B only. `configure(base)` sets the geometry; the module starts on Schiphol.
+const BASES_API = require('./bases');
 const NM_PER_DEG_LAT = 60;
-const NM_PER_DEG_LON = 60 * Math.cos((FIELD.lat * Math.PI) / 180);
-
-const STRIPS = [
-  { a: '18R', b: '36L', pa: [52.36025, 4.71183], pb: [52.32862, 4.70889] },
-  { a: '18C', b: '36C', pa: [52.33139, 4.74003], pb: [52.30186, 4.7375] },
-  { a: '18L', b: '36R', pa: [52.32123, 4.78012], pb: [52.29069, 4.77747] },
-  { a: '06', b: '24', pa: [52.28792, 4.73422], pb: [52.30462, 4.77752] },
-  { a: '09', b: '27', pa: [52.31667, 4.74636], pb: [52.31842, 4.79689] },
-  { a: '04', b: '22', pa: [52.30036, 4.78348], pb: [52.31403, 4.80302] },
-];
-const RUNWAY_IDS = new Set(STRIPS.flatMap((s) => [s.a, s.b]));
-const NEVER = { landing: new Set(['36L', '18L']), departure: new Set(['18R', '36R']) };
+let FIELD = { lat: 52.31, lon: 4.76 }, NM_PER_DEG_LON = 60 * Math.cos((FIELD.lat * Math.PI) / 180);
+let STRIPS = [], RUNWAY_IDS = new Set(), ENDS = [];
+const NEVER = { landing: new Set(), departure: new Set() };
+let baseId = null, useCasper = true;
 
 const toXY = ([lat, lon]) => [(lon - FIELD.lon) * NM_PER_DEG_LON, (lat - FIELD.lat) * NM_PER_DEG_LAT];
 
-// One entry per runway direction: threshold T, far end F, unit vector u (direction of movement), heading.
-const ENDS = STRIPS.flatMap((s) => {
-  const A = toXY(s.pa), B = toXY(s.pb);
-  const mk = (id, T, F) => {
-    const len = Math.hypot(F[0] - T[0], F[1] - T[1]);
-    const u = [(F[0] - T[0]) / len, (F[1] - T[1]) / len];
-    return { id, T, F, u, hdg: (Math.atan2(u[0], u[1]) * 180) / Math.PI };
-  };
-  return [mk(s.a, A, B), mk(s.b, B, A)];
-});
+function configure(base) {
+  const b = typeof base === 'string' ? BASES_API.baseOf(base) : base || BASES_API.baseOf(null);
+  FIELD = { lat: b.field.lat, lon: b.field.lon };
+  NM_PER_DEG_LON = 60 * Math.cos((FIELD.lat * Math.PI) / 180);
+  STRIPS = b.runways.map((r) => ({ a: r.a, b: r.b, pa: r.pa, pb: r.pb }));
+  RUNWAY_IDS = new Set(STRIPS.flatMap((s) => [s.a, s.b]));
+  NEVER.landing = new Set((b.never && b.never.landing) || []);
+  NEVER.departure = new Set((b.never && b.never.departure) || []);
+  useCasper = !!b.casper;
+  // One entry per runway direction: threshold T, far end F, unit vector u (direction of movement), heading.
+  ENDS = STRIPS.flatMap((s) => {
+    const A = toXY(s.pa), B = toXY(s.pb);
+    const mk = (id, T, F) => {
+      const len = Math.hypot(F[0] - T[0], F[1] - T[1]);
+      const u = [(F[0] - T[0]) / len, (F[1] - T[1]) / len];
+      return { id, T, F, u, hdg: (Math.atan2(u[0], u[1]) * 180) / Math.PI };
+    };
+    return [mk(s.a, A, B), mk(s.b, B, A)];
+  });
+  if (baseId !== b.id) { baseId = b.id; reset(); }
+  return b;
+}
 
 const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
@@ -82,7 +88,8 @@ const CASPER = 'https://bas.flighttracking.casper.aero';
 const CASPER_EVERY_MS = 60000;
 const CASPER_FRESH_MS = 3.5 * 60000;
 const WATCH_MS = 30000; // Casper is only asked while someone looked at the runway use this recently
-const SOURCES = [['lol', 'https://api.adsb.lol/v2/point/52.31/4.76/14'], ['fi', 'https://opendata.adsb.fi/api/v3/lat/52.31/lon/4.76/dist/14']];
+const sources = () => [['lol', `https://api.adsb.lol/v2/point/${FIELD.lat}/${FIELD.lon}/14`], ['fi', `https://opendata.adsb.fi/api/v3/lat/${FIELD.lat}/lon/${FIELD.lon}/dist/14`]];
+const field = () => FIELD;
 
 // Per source and mode: rwy -> Map(key -> time). The key is the aircraft (ADS-B) or the flight (Casper);
 // one key sits on one runway per mode at a time.
@@ -214,7 +221,7 @@ async function poll(request) {
   const now = Date.now();
   if (now - fedAt < 20000) return; // the live feed is doing it
   status.lastTry = now;
-  for (const [src, url] of SOURCES) {
+  for (const [src, url] of sources()) {
     const data = await request(src, url);
     if (!data || !Array.isArray(data.ac)) continue;
     for (const ac of data.ac) ingestAircraft(ac, ac.hex, now);
@@ -234,7 +241,7 @@ function start(request, casperJson, intervalMs = 12000) {
   status.startedAt = Date.now();
   const tick = () => {
     poll(request);
-    if (getJson && Date.now() - askedAt < WATCH_MS) pollCasper(getJson);
+    if (useCasper && getJson && Date.now() - askedAt < WATCH_MS) pollCasper(getJson);
   };
   tick();
   timer = setInterval(tick, intervalMs);
@@ -266,8 +273,9 @@ function reset() {
   obs.adsb = newObs();
   obs.casper = newObs();
   Object.assign(casper, { lastOk: 0, lastTry: 0, firstOk: 0, flights: 0, error: null, busy: false });
-  Object.assign(status, { lastOk: 0, lastTry: 0, failures: 0, firstOk: 0, startedAt: 0 });
+  Object.assign(status, { lastOk: 0, lastTry: 0, failures: 0, firstOk: 0, startedAt: timer ? Date.now() : 0 });
   fedAt = 0;
 }
+configure(BASES_API.DEFAULT);
 
-module.exports = { start, snapshot, classify, ingest, ingestCasper, pollCasper, rwyId, reset, NEVER };
+module.exports = { start, snapshot, classify, ingest, ingestCasper, pollCasper, rwyId, reset, configure, field, NEVER, baseId: () => baseId };

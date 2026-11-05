@@ -71,7 +71,7 @@ contextBridge.exposeInMainWorld('palv', {
   data: {
     metar: (icao) => ipcRenderer.invoke('data:metar', icao),
     wxmap: () => ipcRenderer.invoke('data:wxmap'),
-    runways: () => ipcRenderer.invoke('data:runways'),
+    runways: (baseId) => ipcRenderer.invoke('data:runways', baseId),
     seaOverview: (ref) => ipcRenderer.invoke('sea:overview', ref),
     seaAt: (lat, lon) => ipcRenderer.invoke('sea:at', lat, lon),
   },

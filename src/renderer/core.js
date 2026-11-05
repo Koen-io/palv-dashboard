@@ -159,6 +159,9 @@ function paintFreshBadges() {
   }
 }
 
+/* ---------- the base this dashboard runs from (Instellingen › Basis) ---------- */
+const activeBase = () => BASES_API.baseOf(typeof state !== 'undefined' && state && state.settings ? state.settings.base : null);
+
 /* ---------- toasts & modals ---------- */
 function toast(msg, isError) {
   const el = h('div', { class: 'toast' + (isError ? ' error' : '') }, msg);
