@@ -5,8 +5,9 @@
    ============================================================ */
 // In this order: coordinates as typed (any format, also RD and MGRS), the unit's own favourites and
 // helidecks, platforms by name, then the search sources of the main process (PDOK for the Netherlands
-// incl. hectometre posts, OurAirports for every airfield and heliport, Photon for the rest of the world).
-const ZP_KIND_ICON = { coord: 'target', favoriet: 'star', platform: 'layers', luchthaven: 'plane', heliport: 'plane', adres: 'globe', weg: 'route', postcode: 'globe', woonplaats: 'globe', gemeente: 'globe', provincie: 'globe', hectometerpaal: 'route', plaats: 'globe', poi: 'info', water: 'globe', recent: 'history' };
+// incl. hectometre posts, OurAirports for every airfield and heliport, and Photon for the rest of the world
+// only when the unit allows it: Zoek & Plan › Bronnen › Zoeken).
+const ZP_KIND_ICON = { hint: 'info', coord: 'target', favoriet: 'star', platform: 'layers', luchthaven: 'plane', heliport: 'plane', adres: 'globe', weg: 'route', postcode: 'globe', woonplaats: 'globe', gemeente: 'globe', provincie: 'globe', hectometerpaal: 'route', plaats: 'globe', poi: 'info', water: 'globe', recent: 'history' };
 
 function zpSearch(ctx) {
   const { map, cfg } = ctx;
@@ -48,7 +49,11 @@ function zpSearch(ctx) {
       // Photon matches loosely (EHKD finds "Ehud" in Hebrew): a world result must contain a word of the query.
       const words = norm(q).split(/[^a-z0-9]+/).filter((x) => x.length >= 3);
       const remote = (Array.isArray(res) ? res : []).filter((r) => r.src !== 'Photon' || !words.length || words.some((wd) => norm(`${r.label} ${r.sub}`).includes(wd.slice(0, Math.max(3, wd.length - 2)))));
-      show(first.concat(remote.map((r) => ({ ...r }))));
+      const all = first.concat(remote.map((r) => ({ ...r })));
+      // Nothing found while searching abroad is off: say so, instead of an empty list.
+      const world = !!((ctx.store.private.settings || {}).search || {}).world;
+      if (!all.length && !world && q.length >= 3) all.push({ id: 'hint:world', kind: 'hint', label: 'Niets gevonden in Nederland', sub: 'Zoeken buiten Nederland staat uit · tik om de instelling te openen' });
+      show(all);
     } catch { /* keep the local results */ }
     if (my === seq) spin.hidden = true;
   }
@@ -62,7 +67,7 @@ function zpSearch(ctx) {
         icon(ZP_KIND_ICON[it.kind] || 'globe'),
         h('div', {}, h('b', {}, it.label), h('small', {}, it.sub || it.kind)),
         h('span', { class: 'zp-res-tools' },
-          h('button', { class: 'w-tool', title: 'Aan de route toevoegen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); choose(it, true); } }, icon('plus')),
+          it.kind === 'hint' ? null : h('button', { class: 'w-tool', title: 'Aan de route toevoegen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); choose(it, true); } }, icon('plus')),
           recent ? h('button', { class: 'w-tool zp-bin', title: 'Uit de zoekgeschiedenis verwijderen', onmousedown: (e) => { e.preventDefault(); e.stopPropagation(); forget(it.id); } }, icon('trash')) : null));
       return recent ? swipeAway(row, () => forget(it.id)) : row;
     });
@@ -127,6 +132,7 @@ function zpSearch(ctx) {
   }
   const paint = () => [...list.querySelectorAll('.zp-res')].forEach((el, i) => el.classList.toggle('on', i === active));
   async function choose(it, toRoute) {
+    if (it.kind === 'hint') { list.hidden = true; openSettings('zoekplan'); return; }
     list.hidden = true;
     let p = it;
     if ((it.lat == null || it.lon == null) && it.id) {

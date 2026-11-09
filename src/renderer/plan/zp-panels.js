@@ -502,7 +502,17 @@ function zpSourcesPanel(ctx) {
     const sec = (title, ...kids) => h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, title)), ...kids);
     const b = ctx.map.getBounds();
     const prefetchSel = zpSelect(Object.entries(ZP_T).filter(([, d]) => tiles && tiles.sources[d.src] && tiles.sources[d.src].prefetch).map(([k]) => ({ value: ZP_T[k].src, label: (Object.values(ZP_BASES).find((x) => x.day && x.day.src === ZP_T[k].src) || { name: k }).name })), 'brt', () => {});
+    const world = !!((ctx.store.private.settings || {}).search || {}).world;
     el.replaceChildren(
+      sec('Zoeken',
+        h('div', { class: 'zp-rows' },
+          zpRow('Nederland', 'PDOK Locatieserver (Kadaster): adressen, postcodes, plaatsen, hectometerpalen'),
+          zpRow('Vliegvelden', 'OurAirports, op dit scherm opgeslagen: zoeken gaat niet naar buiten'),
+          zpRow('Buiten Nederland', world ? 'Aan: Photon (komoot, Duitsland)' : 'Uit')),
+        checkbox('Zoeken buiten Nederland toestaan (Photon)', world, (on) => {
+          ctx.put('private', 'settings', 'search', { world: !!on }).then(() => { toast(on ? 'Zoeken buiten Nederland staat aan, op alle schermen' : 'Zoeken buiten Nederland staat uit, op alle schermen'); });
+        }),
+        h('p', { class: 'zp-hint' }, 'Uit (aanbevolen): wat je typt en een aangetikt punt gaan alleen naar PDOK, de Nederlandse overheid. Aan: ook naar Photon van komoot, een bedrijf in Duitsland, voor plaatsen en adressen in het buitenland. Geldt voor alle schermen van de eenheid.')),
       sec('Luchtvaartgegevens (openAIP)',
         h('div', { class: 'zp-rows' }, zpRow('Status', aero ? (aero.ok || (aero.configured && !aero.lastError) ? 'Werkt (sleutel ingesteld)' : aero.configured ? `Fout: ${aero.lastError}` : 'Geen sleutel ingesteld') : '—'),
           ...(aero && aero.fetchedAt ? Object.entries(aero.fetchedAt).map(([cc, t]) => zpRow(cc, `${t ? new Date(t).toLocaleString('nl-NL') : '—'}${aero.counts && aero.counts[cc] ? ` · ${aero.counts[cc].airspaces} luchtruimen, ${aero.counts[cc].airports} vliegvelden` : ''}`)) : [])),
@@ -529,7 +539,6 @@ function zpSourcesPanel(ctx) {
           if (r && r.total) toast(`${r.total} tegels worden opgeslagen…`); else toast((r && r.error) || 'Opslaan lukte niet', true);
         }, { icon: 'download' }))),
       sec('Overige bronnen', h('div', { class: 'zp-rows' },
-        zpRow('Zoeken', 'PDOK Locatieserver (NL), Photon/OpenStreetMap (wereld), OurAirports (vliegvelden)'),
         zpRow('Magnetische variatie', 'NOAA World Magnetic Model 2025'),
         zpRow('Weer', 'aviationweather.gov (METAR, TAF, SIGMET), RainViewer (neerslag)'),
         zpRow('Live verkeer', 'adsb.fi, adsb.lol, OpenSky (zoals de Vluchtradar)'),

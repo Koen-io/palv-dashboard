@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 
 const API = 'https://api.core.openaip.net/api/';
-const UA = 'P-ALV-Dashboard/1.17 (desktop dashboard)';
+const UA = require('../ua').APP;
 const ATTRIBUTION = '© openAIP (CC BY-NC 4.0)';
 const DEFAULT_COUNTRIES = ['NL', 'BE', 'DE', 'GB', 'DK', 'FR', 'LU'];
 const MAX_AGE = 7 * 86400e3;

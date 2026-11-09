@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 1.33.0
+
+### Privacy: wat het dashboard naar buiten stuurt
+- **Een schip aantikken stuurt niets meer naar buiten.** Tot nu toe ging bij elke tik de naam of het IMO-nummer naar Wikimedia Commons (voor de foto) en de exacte positie naar Open-Meteo (voor de sea state). Nu haalt het scherm met de AIS-stroom op de achtergrond, rustig, een foto op van **álle** schepen op de Noordzee en bewaart die op het scherm zelf. Een aangetikt schip komt alleen uit die eigen opslag (of van het scherm dat de stroom heeft, via de beveiligde verbinding van de eenheid). Buiten is dus niet te zien naar welk schip er gekeken wordt
+- Een schip dat net binnenkomt heeft nog even geen foto, tot het aan de beurt is. De voortgang staat in Instellingen › Offshore (Scheepsfoto's)
+- **De sea state bij een aangetikte plek** wordt gevraagd voor een vak van ongeveer 5 km (afgerond op 0,05°), niet meer voor het exacte punt
+- **Geen naam meer in het internetverkeer.** Alle verzoeken gaan onder een neutrale, algemene naam: niets meer dat naar het dashboard, de eenheid of de politie wijst (voorheen stond er bij de scheepsfoto's zelfs "police aviation unit" in). Ook het venster zelf laat de naam en versie van het dashboard weg
+- **Zoeken in Zoek & Plan blijft in Nederland.** Wat je typt en een aangetikt punt gaan alleen nog naar PDOK (Kadaster, Nederlandse overheid). Photon (komoot, een bedrijf in Duitsland) voor plaatsen in het buitenland staat standaard uit en is aan te zetten in Instellingen › Zoek & Plan › Zoeken, voor alle schermen tegelijk. Vindt de zoekbalk niets in Nederland, dan zegt hij dat en brengt een tik je naar die instelling
+- **Geen servers in Rusland meer:** de reserve-server voor OpenStreetMap-gegevens (maps.mail.ru) is geschrapt; overpass-api.de en kumi.systems (Duitsland) blijven
+- Een nieuwe test bewaakt dit alles: geen eigen naam in het verkeer, geen Russische servers, Photon alleen als het aan staat, sea state alleen afgerond en scheepsfoto's nooit bij een tik
+
 ## 1.32.1
 
 ### Werkplek

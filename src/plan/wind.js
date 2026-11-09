@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 
 const API = 'https://api.open-meteo.com/v1/forecast';
-const UA = 'P-ALV-Dashboard/1.17 (desktop dashboard)';
+const UA = require('../ua').APP;
 const LIMITS = { minute: 600, hour: 5000, day: 10000 };
 // Never closer to a limit than this share of it. The limits count per internet address, so they are
 // shared by every screen behind it: what the other screens report using is counted along (others()).

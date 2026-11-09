@@ -1,6 +1,7 @@
 // Zoek & Plan: what the tab keeps besides the dashboard layout, in two files in the user data folder.
 // - plan-private.json: the unit's own figures from its manuals (profile values laid over the public ones),
-//   the helideck list (heading, height, D/t, frequency ... per platform) and the openAIP key. Internal:
+//   the helideck list (heading, height, D/t, frequency ... per platform), the openAIP key and the unit's
+//   settings that every screen follows (1.33: whether Zoek & Plan may search outside the Netherlands). Internal:
 //   readable for this user only, never in the code, and only passed on to the unit's own screens.
 // - plan-shared.json: saved routes, favourite places and bases.
 // Both are lists of items with an `updatedAt`; between screens the newest version of each item wins and a
@@ -13,7 +14,7 @@ const crypto = require('crypto');
 // the whiteboards (one item per board, one per element, so two screens can draw on one board at once) and
 // the mission plans (one item per mission, one per field).
 const KINDS = {
-  private: { file: 'plan-private.json', mode: 0o600, lists: ['profiles', 'decks', 'keys', 'docs'] },
+  private: { file: 'plan-private.json', mode: 0o600, lists: ['profiles', 'decks', 'keys', 'docs', 'settings'] },
   shared: { file: 'plan-shared.json', mode: 0o644, lists: ['routes', 'favorites', 'bases'] },
   ops: { file: 'palv-timings.json', mode: 0o644, lists: ['timers', 'presets'] },
   boards: { file: 'palv-whiteboards.json', mode: 0o644, lists: ['boards', 'elements'] },

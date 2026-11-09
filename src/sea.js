@@ -149,11 +149,17 @@ async function observations() {
   return rws.pending;
 }
 
+// Only a rounded point goes out: on a grid of 0.05 degrees (about 5.5 by 3.5 km here), coarser than the wave
+// model itself. A tapped ship or spot cannot be told from the others in its square, so Open-Meteo never
+// learns which ship or which exact spot was looked at.
+const SNAP = 20; // steps per degree
+const snap = (v) => Math.round(v * SNAP) / SNAP;
 async function point(lat, lon) {
-  const key = `${(Math.round(lat * 20) / 20).toFixed(2)},${(Math.round(lon * 20) / 20).toFixed(2)}`;
+  const sLat = snap(lat), sLon = snap(lon);
+  const key = `${sLat.toFixed(2)},${sLon.toFixed(2)}`;
   const hit = points.get(key);
   if (hit && Date.now() - hit.at < OM_TTL) return hit.data;
-  const data = parseOm(await fetchJson(omUrl(lat, lon), { timeoutMs: 20000 }));
+  const data = parseOm(await fetchJson(omUrl(sLat, sLon), { timeoutMs: 20000 }));
   points.set(key, { at: Date.now(), data });
   if (points.size > 200) points.delete(points.keys().next().value);
   return data;
@@ -174,4 +180,4 @@ async function at(lat, lon) {
   return { ok: true, model: model && !model.error ? model : null, modelError: model && model.error ? model.error : null, nearest: nearest(r.obs, lat, lon, 3), fetchedAt: r.fetchedAt || null };
 }
 
-module.exports = { STATIONS, DOUGLAS, seaState, parseRws, parseOm, nearest, rwsBody, omUrl, start, observations, point, overview, at, _reset: () => { rws = { at: 0, obs: {}, pending: null, error: null }; points.clear(); } };
+module.exports = { snap, STATIONS, DOUGLAS, seaState, parseRws, parseOm, nearest, rwsBody, omUrl, start, observations, point, overview, at, _reset: () => { rws = { at: 0, obs: {}, pending: null, error: null }; points.clear(); } };

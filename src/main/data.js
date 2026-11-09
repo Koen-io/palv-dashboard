@@ -9,8 +9,8 @@ const share = require('../share');
 const sea = require('../sea');
 const log = require('./log');
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const APP_UA = 'P-ALV-Dashboard/1.0 (desktop dashboard)';
+const UA = require('../ua').BROWSER;
+const APP_UA = require('../ua').APP;
 
 async function fetchText(url, timeoutMs = 20000, ua = UA, extra = {}, { method = 'GET', body = null } = {}) {
   const ctl = new AbortController();

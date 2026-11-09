@@ -54,7 +54,7 @@ function zpCreate(body, w) {
     on(ev, fn) { if (!listeners.has(ev)) listeners.set(ev, new Set()); listeners.get(ev).add(fn); return () => listeners.get(ev).delete(fn); },
     emit(ev, data) { for (const fn of listeners.get(ev) || []) { try { fn(data); } catch (err) { plog('warn', `zoek & plan: ${ev} mislukt`, String(err && err.stack || err)); } } },
     save: () => save(),
-    store: { private: { profiles: {}, decks: {}, keys: {} }, shared: { routes: {}, favorites: {}, bases: {} } },
+    store: { private: { profiles: {}, decks: {}, keys: {}, settings: {} }, shared: { routes: {}, favorites: {}, bases: {} } },
     timers: [],
     cleanups: [],
   };

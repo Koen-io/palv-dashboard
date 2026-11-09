@@ -33,7 +33,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const UA = 'P-ALV-Dashboard/1.17 (desktop dashboard)';
+const UA = require('../ua').APP;
 const DAY = 86400000;
 const MAX_AGE = 7 * DAY;           // official sources: refresh weekly
 const RETRY_MS = 6 * 3600000;      // a failed source is asked again after this
@@ -66,7 +66,7 @@ const URLS = {
   boemStru: BOEM + 'Platform/Files/platstrufixed.zip',
   boemComp: BOEM + 'Company/Files/compallfixed.zip',
 };
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 
 // In merge priority: the national source of a country wins over the others.
 const SOURCES = [

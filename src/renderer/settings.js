@@ -374,7 +374,13 @@ function openSettings(startTab) {
           h('div', {}, h('span', {}, 'Sleutel'), h('b', {}, st.key ? 'Ingesteld (gedeeld met de schermen van de eenheid)' : 'Niet ingesteld')),
           h('div', {}, h('span', {}, 'Verbinding'), h('b', {}, st.connected ? (st.role === 'follow' ? `via ${st.via}` : 'live met aisstream.io') : st.lastErr || 'geen')),
           h('div', {}, h('span', {}, 'Schepen in het register'), h('b', {}, String(st.count || 0))),
-          h('div', {}, h('span', {}, 'Berichten per minuut'), h('b', {}, String(st.perMin || 0))));
+          h('div', {}, h('span', {}, 'Berichten per minuut'), h('b', {}, String(st.perMin || 0))),
+          st.photos ? h('div', { title: photoDetail(st.photos) }, h('span', {}, 'Scheepsfoto’s'), h('b', {}, photoText(st.photos))) : null);
+        // Photos are fetched in the background for every ship, never for the one that is tapped (ais.js).
+        const photoText = (p) => `${p.found} opgeslagen${p.fetching ? (p.paused ? ' · gepauzeerd' : p.queue ? ` · ${p.queue} te gaan` : ' · alles bij') : ''}`;
+        const photoDetail = (p) => [`${p.found} foto’s opgeslagen, ${p.none} schepen zonder foto op Wikimedia Commons.`,
+          p.fetching ? (p.paused ? `Gepauzeerd tot ${new Date(p.paused).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} op verzoek van Wikimedia.` : p.queue ? `${p.queue} schepen nog op te halen, één per 4 seconden.` : 'Alle schepen in de stroom zijn bij.') : 'Dit scherm haalt ze niet zelf op: het neemt ze over van het scherm met de stroom.',
+          p.lastErr && p.fetching ? `Laatste fout: ${p.lastErr}` : null].filter(Boolean).join(' ');
         window.palv.ais.status().then(paint).catch(() => {});
         return [
           h('h3', {}, 'Live schepen (AIS)'),
@@ -384,6 +390,7 @@ function openSettings(startTab) {
           h('hr'),
           h('h3', {}, 'Status'),
           info,
+          h('p', { class: 'hint' }, 'Wat buiten niet te zien is: aisstream.io stuurt alle schepen op de Noordzee en weet niet naar welk schip gezocht of gekeken wordt; zoeken in de scheepslijst gebeurt op dit scherm. De foto’s haalt het scherm met de stroom op de achtergrond op van álle schepen (Wikimedia Commons) en bewaart ze; een aangetikt schip komt alleen uit die eigen opslag. De sea state bij een aangetikte plek wordt afgerond op een vak van ongeveer 5 km gevraagd.'),
           h('hr'),
           h('h3', {}, 'Bronnen van de kaart'),
           h('p', {}, 'Platforms: NLOG (TNO), Rijkswaterstaat, Energistyrelsen/GEUS, NSTA, Sodir, BOEM, EMODnet en OpenStreetMap. Grenzen (EEZ, 12 NM): Marine Regions (VLIZ). Pijpleidingen, kabels, scheepsdichtheid, militaire gebieden en Natura 2000: EMODnet Human Activities. Zeekaart: OpenSeaMap. KNRM-stations, kustwachtposten, vuurtorens en havens: OpenStreetMap. Helidekken: openAIP (sleutel onder Zoek & Plan). Scheepsfoto\'s: Wikimedia Commons, per IMO-nummer of op naam, met fotograaf en licentie. Vlag: uit de MMSI (ITU MID-tabel).'),

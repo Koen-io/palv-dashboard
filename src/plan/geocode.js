@@ -1,9 +1,10 @@
 // Zoek & Plan: the search box of the planning map. Autocomplete over three sources, merged into one list:
 // - PDOK Locatieserver (the Netherlands: addresses, streets, postcodes, places, municipalities, provinces,
 //   and hectometre posts, which only the /free endpoint knows: "A2 hmp 45,3" finds post A2-453);
-// - Photon by komoot (worldwide, OpenStreetMap). A free service that throttles heavy use, so it is only
-//   asked from 3 characters on, when world search is on or PDOK finds little, one request at a time with
-//   a minimum gap, and every answer is kept for a day;
+// - Photon by komoot (worldwide, OpenStreetMap), a company in Germany. OFF unless the unit turns it on
+//   (Instellingen › Zoek & Plan › Zoeken): what is typed, and a tapped point outside the
+//   Netherlands, would otherwise go to a foreign company. When on: only from 3 characters, when world
+//   search is asked or PDOK finds little, one request at a time with a minimum gap, every answer kept a day;
 // - OurAirports (public domain), downloaded monthly into dir/ourairports/ and searched locally.
 // Coordinates typed into the box (DMS, RD, MGRS) are parsed in the renderer, not here.
 //
@@ -13,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const UA = 'P-ALV-Dashboard/1.17 (desktop dashboard)';
+const UA = require('../ua').APP;
 const PDOK = 'https://api.pdok.nl/bzk/locatieserver/search/v3_1';
 const PHOTON = 'https://photon.komoot.io';
 const OA = 'https://davidmegginson.github.io/ourairports-data/';
@@ -281,8 +282,16 @@ function photonItem(f) {
 const parsePhoton = (data) => ((data && data.features) || []).filter((f) => f && f.geometry).map(photonItem);
 
 let photonSeq = 0, photonLast = 0, photonPause = 0, photonError = null;
+let worldOn = false; // Photon may be asked at all: a setting of the unit, off by default
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const photonAllowed = (q) => q.length >= 3 && Date.now() >= photonPause;
+const photonAllowed = (q) => worldOn && q.length >= 3 && Date.now() >= photonPause;
+// Turning it off also forgets what Photon answered before, so nothing of it shows up any more.
+function setWorld(on) {
+  const next = !!on;
+  if (next === worldOn) return;
+  worldOn = next;
+  if (!worldOn) { photonSeq += 1; for (const [k, v] of caches.reverse) if (v && v.src === 'Photon') caches.reverse.delete(k); }
+}
 
 // One Photon request at a time, at most one per PHOTON_GAP_MS; a request overtaken by a newer one
 // while it waits is dropped (the user has typed on). Returns null when dropped.
@@ -676,7 +685,7 @@ async function reverse(lat, lon) {
       }
     } catch (err) { log.warn('geocode', 'PDOK omgekeerd: ' + errText(err)); }
   }
-  if (Date.now() >= photonPause) {
+  if (worldOn && Date.now() >= photonPause) {
     try {
       const data = await photonGet(`${PHOTON}/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`);
       const it = data && parsePhoton(data)[0];
@@ -695,14 +704,14 @@ async function reverse(lat, lon) {
 function status() {
   return {
     airports: { count: apt ? apt.list.length : 0, updated: apt && apt.built ? new Date(apt.built).toISOString() : null, checked: aptMeta.checked ? new Date(aptMeta.checked).toISOString() : null, busy: aptBusy, error: aptError },
-    photon: { cached: caches.photon.size, paused: Date.now() < photonPause ? new Date(photonPause).toISOString() : null, error: photonError },
+    photon: { on: worldOn, cached: caches.photon.size, paused: Date.now() < photonPause ? new Date(photonPause).toISOString() : null, error: photonError },
     cache: { reverse: caches.reverse.size, resolve: caches.resolve.size },
   };
 }
 
 // autoUpdate: false keeps the monthly download off (tests); airportsDelayMs delays the first check so
 // it does not compete with the start-up of the screens.
-function start({ dir: d, fetchJson: fj, fetchText: ft, log: l, autoUpdate = true, airportsDelayMs = 30000 } = {}) {
+function start({ dir: d, fetchJson: fj, fetchText: ft, log: l, autoUpdate = true, airportsDelayMs = 30000, world = false } = {}) {
   dir = d || null;
   fetchJson = fj || defaultJson;
   fetchText = ft || defaultFetch;
@@ -711,6 +720,7 @@ function start({ dir: d, fetchJson: fj, fetchText: ft, log: l, autoUpdate = true
   pdokCache.clear(); recent.clear();
   apt = null; aptDetails = null; aptMeta = { checked: 0, built: 0, files: {} }; aptError = null;
   photonSeq = 0; photonLast = 0; photonPause = 0; photonError = null;
+  worldOn = !!world;
   if (timer) { clearInterval(timer); timer = null; }
   if (dir) {
     loadCaches();
@@ -730,7 +740,7 @@ function stop() {
 }
 
 module.exports = {
-  start, stop, suggest, resolve, reverse, airport, status, refreshAirports,
+  start, stop, suggest, resolve, reverse, airport, status, refreshAirports, setWorld, world: () => worldOn,
   // Pure parts, for the tests.
   parseCsv, csvObjects, parseHmp, parsePdok, parsePhoton, buildAirportIndex, searchAirports, merge, wktBbox, useIndex, saveCaches,
 };

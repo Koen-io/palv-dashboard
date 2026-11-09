@@ -30,7 +30,7 @@ function fake(routes) {
 // Writes the fixture CSVs as a downloaded OurAirports folder and builds the index there.
 async function withAirports(dir, extra = {}) {
   const fetchText = async (url) => csv(url.split('/').pop());
-  geocode.start({ dir, fetchJson: extra.fetchJson || fake([]), fetchText, log: quiet, autoUpdate: false });
+  geocode.start({ dir, fetchJson: extra.fetchJson || fake([]), fetchText, log: quiet, autoUpdate: false, world: true });
   await geocode.refreshAirports();
 }
 
@@ -75,7 +75,7 @@ test('hectometre posts: what is typed and how it is asked', async () => {
   for (const q of ['A2', 'Kerkstraat 12', 'Utrecht', '3512JE', 'A2 hmp']) assert.strictEqual(geocode.parseHmp(q), null, q);
 
   const fetchJson = fake([[/\/free\?.*hectometerpaal/, fixture('pdok-free-hmp.json')]]);
-  geocode.start({ fetchJson, log: quiet, autoUpdate: false });
+  geocode.start({ fetchJson, log: quiet, autoUpdate: false, world: true });
   const one = await geocode.suggest('A2 hmp 45,3', UTRECHT);
   assert.strictEqual(fetchJson.count(/identificatie%3AA2-453\*/), 1);
   assert.strictEqual(fetchJson.count(/photon/), 0, 'a post is never asked of Photon');
@@ -160,7 +160,7 @@ test('airports: index, code and name search, ranking, details', async () => {
   assert.strictEqual(geocode.airport('XXXX'), null);
 
   // A restart reads the index from disk, without downloading.
-  geocode.start({ dir, fetchJson: fake([]), fetchText: async () => { throw new Error('no network in tests'); }, log: quiet, autoUpdate: false });
+  geocode.start({ dir, fetchJson: fake([]), fetchText: async () => { throw new Error('no network in tests'); }, log: quiet, autoUpdate: false, world: true });
   assert.strictEqual(geocode.status().airports.count, 50);
   assert.strictEqual(geocode.airport('EHAM').runways.length, 6);
 });
@@ -173,17 +173,17 @@ test('airports: the monthly check sends the validators and keeps the index on 30
     if (opts.headers['If-None-Match']) return { status: 304, text: '' };
     return { status: 200, text: csv(url.split('/').pop()), etag: '"v1"', lastModified: 'Fri, 16 Oct 2026 01:54:04 GMT' };
   };
-  geocode.start({ dir, fetchJson: fake([]), fetchText, log: quiet, autoUpdate: false });
+  geocode.start({ dir, fetchJson: fake([]), fetchText, log: quiet, autoUpdate: false, world: true });
   assert.strictEqual(await geocode.refreshAirports(), true);
   assert.strictEqual(seen.length, 4);
-  assert.strictEqual(seen[0].headers['User-Agent'], 'P-ALV-Dashboard/1.17 (desktop dashboard)');
+  assert.strictEqual(seen[0].headers['User-Agent'], require('../src/ua').APP);
   assert.strictEqual(await geocode.refreshAirports(), false, 'nothing changed');
   assert.strictEqual(seen.length, 8);
   assert.strictEqual(seen[4].headers['If-None-Match'], '"v1"');
   assert.strictEqual(seen[4].headers['If-Modified-Since'], 'Fri, 16 Oct 2026 01:54:04 GMT');
   assert.strictEqual(geocode.status().airports.count, 50);
   // A failed download keeps what there is and is reported.
-  geocode.start({ dir, fetchJson: fake([]), fetchText: async () => { throw new Error('HTTP 503'); }, log: quiet, autoUpdate: false });
+  geocode.start({ dir, fetchJson: fake([]), fetchText: async () => { throw new Error('HTTP 503'); }, log: quiet, autoUpdate: false, world: true });
   assert.strictEqual(await geocode.refreshAirports({ force: true }), false);
   assert.strictEqual(geocode.status().airports.error, 'HTTP 503');
   assert.strictEqual(geocode.status().airports.count, 50);
@@ -246,7 +246,7 @@ test('suggest: sources, gating of Photon, caching and failure of one source', as
   assert.strictEqual(fetchJson.count(/photon.*q=schiphol/), 1, 'cached');
   geocode.saveCaches();
   const again = fake(routes);
-  geocode.start({ dir, fetchJson: again, log: quiet, autoUpdate: false });
+  geocode.start({ dir, fetchJson: again, log: quiet, autoUpdate: false, world: true });
   r = await geocode.suggest('schiphol', UTRECHT);
   assert.strictEqual(again.count(/photon/), 0, 'cache read back from disk');
   assert.ok(r.some((i) => i.src === 'Photon'));
@@ -311,7 +311,7 @@ test('reverse: PDOK in the Netherlands, Photon elsewhere and when PDOK is far of
     [/photon\.komoot\.io\/reverse\?lat=50\.85/, fixture('photon-reverse.json')],
     [/photon\.komoot\.io\/reverse/, () => { throw new Error('HTTP 502'); }],
   ]);
-  geocode.start({ fetchJson, log: quiet, autoUpdate: false });
+  geocode.start({ fetchJson, log: quiet, autoUpdate: false, world: true });
   const nl = await geocode.reverse(52.0907, 5.1214);
   assert.deepStrictEqual({ label: nl.label, sub: nl.sub, src: nl.src, distance: nl.distance }, { label: 'Domplein 21', sub: 'Adres · 3512JE Utrecht', src: 'PDOK', distance: 10 });
   await geocode.reverse(52.09071, 5.12141);

@@ -19,7 +19,7 @@ const aero = require('../plan/aero');
 const platforms = require('../plan/platforms');
 const geocode = require('../plan/geocode');
 
-const UA = `P-ALV-Dashboard/${app.getVersion()} (desktop dashboard)`;
+const UA = require('../ua').APP;
 const lg = { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) };
 
 /* ---------- fetching ---------- */
@@ -364,7 +364,11 @@ function start(opts) {
     if (k && k.value && !aero.status().configured) aero.setKey(k.value).catch((err) => log.warn('plan', 'openAIP-sleutel uit het profielbestand geweigerd', err.message));
   };
   keyFromStore();
-  store.onChange((kind) => { if (kind === 'private') keyFromStore(); });
+  // Searching outside the Netherlands (Photon, a company in Germany): one setting for the whole unit,
+  // off unless someone turned it on.
+  const searchFromStore = () => { const st = store.get('private').settings.search; geocode.setWorld(!!(st && st.world)); };
+  searchFromStore();
+  store.onChange((kind) => { if (kind === 'private') { keyFromStore(); searchFromStore(); } });
 
   protocol.handle('palvtile', async (req) => {
     const u = new URL(req.url);

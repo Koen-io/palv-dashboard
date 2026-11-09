@@ -364,7 +364,9 @@ function osCreate(body, w) {
         v.dest ? ['Bestemming', v.dest] : null, v.eta ? ['ETA', osEtaText(v.eta)] : null, ['AIS-klasse', v.cls || '—'],
       ].filter(Boolean);
       const ph = D.photo;
-      const photoBox = h('div', { class: 'os-photo' }, ph && ph.img ? h('a', { href: '#', title: ph.img.title, onclick: (e) => { e.preventDefault(); } }, h('img', { src: ph.img.url, alt: '' })) : h('div', { class: 'os-photo-none' }, ph ? 'Geen foto gevonden op Wikimedia Commons' : 'Foto zoeken…'));
+      // Photos come only out of the unit's own store (ais.js): tapping a ship never asks anything outside.
+      const noPhoto = !ph ? 'Foto laden…' : ph.pending ? 'Nog geen foto: het dashboard haalt op de achtergrond foto’s op van álle schepen, zodat buiten niemand ziet welk schip hier bekeken wordt.' : ph.none || 'Geen foto gevonden op Wikimedia Commons';
+      const photoBox = h('div', { class: 'os-photo' }, ph && ph.img ? h('a', { href: '#', title: ph.img.title, onclick: (e) => { e.preventDefault(); } }, h('img', { src: ph.img.url, alt: '' })) : h('div', { class: 'os-photo-none' }, noPhoto));
       if (ph && ph.img) photoBox.append(h('small', {}, `${ph.img.author ? ph.img.author + ' · ' : ''}${ph.img.licence || ''} · Wikimedia Commons${ph.how ? ' (' + ph.how + ')' : ''}`));
       extra = [country ? h('div', { class: 'os-flagrow' }, h('span', { class: 'vr-flag', style: `background-image:url("vendor/flags/${country.cc.toLowerCase()}.svg")` }), h('b', {}, country.name), h('i', {}, country.cc)) : null, photoBox, h('div', { class: 'zp-rows' }, fromRef(pos ? pos[0] : v.lat, pos ? pos[1] : v.lon))];
       const pinned = cfg.pins.includes(v.mmsi);

@@ -14,9 +14,17 @@
 //
 // Photos: Wikimedia Commons keeps a category per IMO number ("Category:IMO 9321483") with photos of the
 // ship; the first good one is shown, with the photographer and the licence. Without an IMO number (most
-// small craft) the name is searched. Found and not-found answers are kept for a while.
+// small craft) the name is searched.
+//
+// Which ship is looked at must never leave the unit. So a tap never asks anything outside: the screen
+// that holds the stream fetches, slowly and in the background, a photo of EVERY ship in the stream (in the
+// order they were first heard, ships with an IMO number first), and keeps it on disk with the not-found
+// answers. A tapped ship is only looked up in that store, or in the store of the screen this one follows
+// (over the unit key). Wikimedia only ever sees the whole North Sea being worked through, under the
+// neutral name of ua.js. A ship heard for the first time has no photo until its turn comes.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const STREAM = 'wss://stream.aisstream.io/v0/stream';
 const COMMONS = 'https://commons.wikimedia.org/w/api.php';
@@ -27,13 +35,22 @@ const TRACK_MS = 6 * 3600e3;       // the track kept per vessel
 const TRACK_MAX = 900;             // points per vessel
 const TRACK_MIN_M = 25;            // a new point only after this much movement, or a minute
 const TRACK_MIN_S = 60;
-const STATIC_FILE = 'ais-static.json', PHOTO_FILE = 'ais-photos.json';
+const STATIC_FILE = 'ais-static.json', PHOTO_FILE = 'ais-fotos.json', PHOTO_DIR = 'ais-fotos';
+const OLD_PHOTO_FILE = 'ais-photos.json'; // up to 1.32: links to Commons, looked up per tap
 const STATIC_MAX = 30000;
-const PHOTO_OK_MS = 30 * 86400e3, PHOTO_BAD_MS = 2 * 86400e3;
+const PHOTO_OK_MS = 90 * 86400e3;  // a found photo is checked again after this long
+const PHOTO_BAD_MS = 21 * 86400e3; // a ship without a photo is asked again after this long
+const PHOTO_GAP_MS = 4000;         // between two lookups: at most about 900 an hour, gentle for Commons
+const PHOTO_IDLE_MS = 60000;       // nothing to do: look again after a minute
+const PHOTO_PAUSE_MS = 30 * 60000; // Commons asks to slow down (429/403): rest this long
+const PHOTO_RETRY_MS = 15 * 60000; // a lookup that failed (network) is tried again after this long
+const PHOTO_FILES_MAX = 5000;      // photos kept on disk (well under 1 GB), the oldest go first
+const PHOTO_INDEX_MAX = 40000;     // found and not-found answers kept
+const PHOTO_W = 960;               // width of the stored photo, enough for the card on a 4K screen
 const FOLLOW_MS = 2000;
 const WATCH_MS = 20000;            // a renderer that asked this recently keeps the follower polling
 const RECONNECT_MS = [3000, 6000, 12000, 30000, 60000];
-const UA = 'P-ALV-Dashboard (desktop dashboard for a police aviation unit; contact via github.com/Koen-io/palv-dashboard)';
+const UA = require('./ua').APP;
 
 let dir = null, log = { info() {}, warn() {} }, screens = null, share = null, store = null, peerGet = null;
 let key = null, ws = null, connected = false, lastMsg = 0, lastErr = null, retries = 0, reconnectTimer = null, stopping = false;
@@ -44,7 +61,9 @@ const tracks = new Map();    // mmsi -> [[t, lat, lon, sog, cog]]
 const gone = [];             // [mmsi, rev] of dropped vessels, for the followers
 let rev = 0;
 let staticData = {};         // mmsi -> { name, imo, callsign, type, a, b, c, d, draught, at }
-let photos = {};
+let photos = {};             // 'imo:<n>' | 'name:<name>' -> { img: { title, file, page, author, licence, desc, w, h } | null, how, at }
+let photosDirty = false, photoTimer = null, photoPauseUntil = 0, photoErr = null;
+const photoRetry = new Map(); // key -> not before (ms), after a failed lookup
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v) => { const s = String(v == null ? '' : v).replace(/@/g, '').trim(); return s || null; };
@@ -58,6 +77,9 @@ function distM(aLat, aLon, bLat, bLon) {
 function loadFiles() {
   try { staticData = JSON.parse(fs.readFileSync(path.join(dir, STATIC_FILE), 'utf8')) || {}; } catch { staticData = {}; }
   try { photos = JSON.parse(fs.readFileSync(path.join(dir, PHOTO_FILE), 'utf8')) || {}; } catch { photos = {}; }
+  try { fs.mkdirSync(path.join(dir, PHOTO_DIR), { recursive: true }); } catch { /* reported when a photo is written */ }
+  // The old store only held links that were looked up per tap: it goes.
+  try { fs.unlinkSync(path.join(dir, OLD_PHOTO_FILE)); } catch { /* not there */ }
 }
 function saveStatic() {
   if (!staticDirty) return;
@@ -69,7 +91,22 @@ function saveStatic() {
   } catch (err) { log.warn('ais', 'scheepsgegevens opslaan mislukt: ' + err.message); }
 }
 function savePhotos() {
-  try { fs.writeFileSync(path.join(dir, PHOTO_FILE), JSON.stringify(photos), 'utf8'); } catch { /* not essential */ }
+  if (!photosDirty) return;
+  photosDirty = false;
+  try {
+    // At most PHOTO_INDEX_MAX answers and PHOTO_FILES_MAX photos: the oldest go first, with their file.
+    const keys = Object.keys(photos).sort((a, b) => (photos[a].at || 0) - (photos[b].at || 0));
+    let total = keys.length, files = keys.filter((k) => photos[k].img).length;
+    for (const k of keys) {
+      if (total <= PHOTO_INDEX_MAX && !(photos[k].img && files > PHOTO_FILES_MAX)) continue;
+      if (photos[k].img) { removePhotoFile(photos[k].img.file); files -= 1; }
+      delete photos[k];
+      total -= 1;
+    }
+    const file = path.join(dir, PHOTO_FILE), tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(photos), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch (err) { log.warn('ais', 'fotolijst opslaan mislukt: ' + err.message); }
 }
 
 /* ---------- the register ---------- */
@@ -309,8 +346,8 @@ setInterval(() => { if (msgCount) { for (let i = 0; i < Math.min(msgCount, 5000)
 /* ---------- photos ---------- */
 async function commons(params) {
   const u = `${COMMONS}?${new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', ...params }).toString()}`;
-  const res = await fetch(u, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await fetch(u, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
   return res.json();
 }
 const strip = (s) => String(s || '').replace(/<[^>]*>/g, '').trim();
@@ -319,33 +356,172 @@ function pickImage(json, name) {
   const want = String(name || '').toLowerCase();
   const list = pages.filter((p) => p.imageinfo && p.imageinfo[0] && /\.(jpe?g|png|webp)$/i.test(p.title || '')).map((p) => {
     const ii = p.imageinfo[0], md = ii.extmetadata || {};
-    return { title: p.title, url: ii.thumburl || ii.url, full: ii.url, page: ii.descriptionurl, author: strip(md.Artist && md.Artist.value), licence: strip(md.LicenseShortName && md.LicenseShortName.value), desc: strip(md.ImageDescription && md.ImageDescription.value).slice(0, 200), w: ii.thumbwidth || ii.width, h: ii.thumbheight || ii.height };
+    return { title: p.title, url: ii.thumburl || ii.url, page: ii.descriptionurl, author: strip(md.Artist && md.Artist.value).slice(0, 120), licence: strip(md.LicenseShortName && md.LicenseShortName.value).slice(0, 60), desc: strip(md.ImageDescription && md.ImageDescription.value).slice(0, 200), w: ii.thumbwidth || ii.width, h: ii.thumbheight || ii.height };
   });
   // A photo whose title carries the ship's name first; a landscape one over a portrait one.
   list.sort((x, y) => ((want && y.title.toLowerCase().includes(want)) - (want && x.title.toLowerCase().includes(want))) || ((y.w > y.h) - (x.w > x.h)));
   return list[0] || null;
 }
-async function photo({ imo, name, mmsi }) {
-  const k = imo ? `imo:${imo}` : name ? `name:${String(name).toLowerCase()}` : mmsi ? `mmsi:${mmsi}` : null;
-  if (!k) return { ok: false, error: 'Geen naam of IMO-nummer' };
+
+// The key a photo is kept under: the IMO number, or else the name (at least 3 letters).
+function photoKey({ imo, name } = {}) {
+  const n = Number(imo);
+  if (imo != null && Number.isFinite(n) && n > 0) return `imo:${Math.round(n)}`;
+  const nm = String(name || '').trim().toLowerCase();
+  return nm.length >= 3 ? `name:${nm.slice(0, 60)}` : null;
+}
+const PHOTO_KEY_RE = /^(imo:\d{1,10}|name:.{3,60})$/;
+const photoPath = (file) => path.join(dir, PHOTO_DIR, path.basename(String(file || '')));
+function removePhotoFile(file) { if (file) try { fs.unlinkSync(photoPath(file)); } catch { /* gone already */ } }
+const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const extOf = (mime) => Object.keys(MIME).find((e) => MIME[e] === mime) || null;
+function writePhotoFile(k, ext, buf) {
+  const file = `${crypto.createHash('sha1').update(k).digest('hex').slice(0, 20)}.${ext}`;
+  fs.writeFileSync(photoPath(file), buf);
+  return file;
+}
+// A stored answer: a photo whose file is still there, or a "none". Null when there is nothing (usable).
+function storedPhoto(k) {
   const hit = photos[k];
-  if (hit && Date.now() - hit.at < (hit.img ? PHOTO_OK_MS : PHOTO_BAD_MS)) return { ok: true, ...hit, cached: true };
+  if (!hit) return null;
+  if (hit.img && !fs.existsSync(photoPath(hit.img.file))) { delete photos[k]; photosDirty = true; return null; }
+  return hit;
+}
+const photoFresh = (hit) => !!hit && Date.now() - (hit.at || 0) < (hit.img ? PHOTO_OK_MS : PHOTO_BAD_MS);
+const wantsPhoto = (r) => r.cls !== 'aton' && r.cls !== 'base' && !!staticData[r.mmsi];
+
+// The next ship to fetch a photo for. Never chosen by what anyone looks at: the ships with an IMO number
+// in the order they were first heard, then the other seagoing ships (class A) by name, then the rest.
+// A ship only counts once its static data has come in, so its IMO number is known before its name is used.
+function nextForPhoto() {
+  const now = Date.now();
+  const passes = [(r) => !!r.imo, (r) => r.cls === 'A', () => true];
+  for (const pass of passes) {
+    for (const r of vessels.values()) {
+      if (!wantsPhoto(r) || !pass(r)) continue;
+      const k = photoKey(r);
+      if (!k || (photoRetry.get(k) || 0) > now) continue;
+      if (photoFresh(photos[k])) continue; // a missing file is noticed when it is shown, and fetched again
+      return r;
+    }
+  }
+  return null;
+}
+function photoQueue() {
+  const seen = new Set();
+  for (const r of vessels.values()) {
+    if (!wantsPhoto(r)) continue;
+    const k = photoKey(r);
+    if (k && !photoFresh(photos[k])) seen.add(k);
+  }
+  return seen.size;
+}
+
+// Look one ship up on Commons and keep the answer, and the photo itself, on disk.
+async function fetchPhoto(r) {
+  const k = photoKey(r);
+  if (!k) return;
   let img = null, how = null;
+  if (r.imo) {
+    img = pickImage(await commons({ generator: 'categorymembers', gcmtitle: `Category:IMO ${r.imo}`, gcmtype: 'file', gcmlimit: '20', prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: String(PHOTO_W) }), r.name);
+    how = 'IMO-categorie';
+  }
+  if (!img && r.name && String(r.name).length >= 3) {
+    img = pickImage(await commons({ generator: 'search', gsrsearch: `"${r.name}" ship`, gsrnamespace: '6', gsrlimit: '10', prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: String(PHOTO_W) }), r.name);
+    how = 'zoeken op naam';
+  }
+  const old = photos[k];
+  if (img) {
+    const u = new URL(img.url);
+    if (u.protocol !== 'https:' || !/(^|\.)wikimedia\.org$/.test(u.hostname)) throw new Error('onverwacht fotoadres');
+    const res = await fetch(u, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    const ext = extOf(String(res.headers.get('content-type') || '').split(';')[0].trim());
+    if (!ext) throw new Error('geen foto');
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length || buf.length > 5e6) throw new Error('foto leeg of te groot');
+    const file = writePhotoFile(k, ext, buf);
+    if (old && old.img && old.img.file !== file) removePhotoFile(old.img.file);
+    const { title, page, author, licence, desc, w, h } = img;
+    photos[k] = { img: { title, page, author, licence, desc, w, h, file }, how, at: Date.now() };
+  } else {
+    if (old && old.img) removePhotoFile(old.img.file);
+    photos[k] = { img: null, how, at: Date.now() };
+  }
+  photosDirty = true;
+}
+
+// The background round: one lookup every few seconds while this screen holds the stream.
+async function photoTick() {
+  photoTimer = null;
+  if (stopping) return;
+  let wait = PHOTO_GAP_MS;
+  const r = role === 'lead' && key && connected && Date.now() >= photoPauseUntil ? nextForPhoto() : null;
+  if (!r) wait = PHOTO_IDLE_MS;
+  else {
+    try { await fetchPhoto(r); photoErr = null; } catch (err) {
+      photoErr = String((err && err.message) || err);
+      if (err && (err.status === 429 || err.status === 403)) { photoPauseUntil = Date.now() + PHOTO_PAUSE_MS; log.warn('ais', `Wikimedia vraagt om rustiger aan te doen (${photoErr}); foto's een half uur gepauzeerd`); }
+      else photoRetry.set(photoKey(r), Date.now() + PHOTO_RETRY_MS);
+      if (photoRetry.size > 5000) photoRetry.clear();
+    }
+  }
+  if (!stopping) { photoTimer = setTimeout(photoTick, wait); if (photoTimer.unref) photoTimer.unref(); }
+}
+
+// What a screen shows for a ship it taps: only from the store, never from outside. A screen that follows
+// another one asks that screen (over the unit key) and keeps the answer.
+function fromStore(k) {
+  const hit = storedPhoto(k);
+  if (!hit) return null;
+  if (!hit.img) return { ok: true, img: null, how: hit.how, at: hit.at };
   try {
-    if (imo) {
-      const j = await commons({ generator: 'categorymembers', gcmtitle: `Category:IMO ${imo}`, gcmtype: 'file', gcmlimit: '20', prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: '900' });
-      img = pickImage(j, name);
-      how = 'IMO-categorie';
-    }
-    if (!img && name && String(name).length >= 3) {
-      const j = await commons({ generator: 'search', gsrsearch: `"${name}" ship`, gsrnamespace: '6', gsrlimit: '10', prop: 'imageinfo', iiprop: 'url|extmetadata', iiurlwidth: '900' });
-      img = pickImage(j, name);
-      how = 'zoeken op naam';
-    }
-  } catch (err) { return { ok: false, error: err.message, ...(hit || {}) }; }
-  photos[k] = { img, how, at: Date.now() };
-  savePhotos();
-  return { ok: true, ...photos[k] };
+    const mime = MIME[path.extname(hit.img.file).slice(1)] || 'image/jpeg';
+    return { ok: true, img: { ...hit.img, url: `data:${mime};base64,${fs.readFileSync(photoPath(hit.img.file)).toString('base64')}` }, how: hit.how, at: hit.at };
+  } catch { return null; }
+}
+function photoForPeer(k) {
+  k = String(k || '');
+  const hit = PHOTO_KEY_RE.test(k) ? storedPhoto(k) : null;
+  if (!hit) return { ok: true, known: false };
+  if (!hit.img) return { ok: true, known: true, img: null, how: hit.how, at: hit.at };
+  try {
+    const mime = MIME[path.extname(hit.img.file).slice(1)] || 'image/jpeg';
+    return { ok: true, known: true, img: hit.img, how: hit.how, at: hit.at, mime, data: fs.readFileSync(photoPath(hit.img.file)).toString('base64') };
+  } catch { return { ok: true, known: false }; }
+}
+async function photo({ imo, name } = {}) {
+  const k = photoKey({ imo, name });
+  if (!k) return { ok: true, img: null, none: 'Geen naam of IMO-nummer' };
+  const own = fromStore(k);
+  if (own) return own;
+  if (role === 'follow' && via && peerGet) {
+    try {
+      const got = await peerGet(via, `/api/ais/photo?k=${encodeURIComponent(k)}`, 10000);
+      if (got && got.ok && got.known && !got.img) {
+        photos[k] = { img: null, how: got.how || null, at: +got.at || Date.now() };
+        photosDirty = true;
+        return { ok: true, img: null, how: got.how || null };
+      }
+      if (got && got.ok && got.known && got.img && typeof got.data === 'string') {
+        const buf = Buffer.from(got.data, 'base64');
+        if (buf.length && buf.length <= 5e6) {
+          const { title, page, author, licence, desc, w, h } = got.img;
+          photos[k] = { img: { title, page, author, licence, desc, w, h, file: writePhotoFile(k, extOf(got.mime) || 'jpg', buf) }, how: got.how || null, at: +got.at || Date.now() };
+          photosDirty = true;
+          const out = fromStore(k);
+          if (out) return out;
+        }
+      }
+    } catch { /* that screen is busy or gone: "not yet" */ }
+  }
+  return { ok: true, img: null, pending: true };
+}
+function photoStatus() {
+  let found = 0, none = 0;
+  for (const v of Object.values(photos)) { if (v.img) found += 1; else none += 1; }
+  const fetching = role === 'lead' && !!key;
+  return { found, none, queue: fetching ? photoQueue() : null, fetching, paused: Date.now() < photoPauseUntil ? photoPauseUntil : null, lastErr: photoErr };
 }
 
 /* ---------- start ---------- */
@@ -359,6 +535,11 @@ function setKey(k) {
   return status();
 }
 const routes = {
+  // A photo out of this screen's store, for a screen of the unit that follows this one.
+  '/api/ais/photo': (req, res, caller, respond) => {
+    if (!caller || !caller.secure) return respond(res, 403, 'text/plain', 'Niet toegestaan');
+    respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(photoForPeer(new URL(req.url, 'http://x').searchParams.get('k'))));
+  },
   '/api/ais/snap': (req, res, caller, respond) => {
     const u = new URL(req.url, 'http://x');
     if (!caller || !caller.secure) return respond(res, 403, 'text/plain', 'Niet toegestaan');
@@ -376,13 +557,16 @@ function start(opts) {
   store.onChange((kind) => { if (kind === 'private') readKey(); });
   const t1 = setInterval(() => { evaluate(); prune(); }, 5000);
   const t2 = setInterval(followOnce, FOLLOW_MS);
-  const t3 = setInterval(saveStatic, 5 * 60000);
+  const t3 = setInterval(() => { saveStatic(); savePhotos(); }, 2 * 60000);
   for (const t of [t1, t2, t3]) if (t.unref) t.unref();
   // A stream that goes quiet without closing: a fresh one after two minutes without a message.
   const t4 = setInterval(() => { if (role === 'lead' && ws && connected && Date.now() - lastMsg > 120000) { disconnect('stil'); scheduleReconnect(); } }, 30000);
   if (t4.unref) t4.unref();
+  // The photo round starts a while after the stream, when the first static messages are in.
+  photoTimer = setTimeout(photoTick, opts.photoDelayMs ?? 90000);
+  if (photoTimer.unref) photoTimer.unref();
   return { routes };
 }
-function stop() { stopping = true; disconnect('stop'); clearInterval(followTimer); saveStatic(); }
+function stop() { stopping = true; disconnect('stop'); clearInterval(followTimer); clearTimeout(photoTimer); saveStatic(); savePhotos(); }
 
-module.exports = { start, stop, status, snapshot, track, photo, setKey, routes, vessels: () => vessels, _ingest: ingest };
+module.exports = { start, stop, status, snapshot, track, photo, photoStatus, setKey, routes, vessels: () => vessels, _ingest: ingest, _photo: { photoKey, nextForPhoto, fetchPhoto, photoForPeer, photos: () => photos, setDir: (d) => { dir = d; loadFiles(); }, setRole: (r, v, g) => { role = r; via = v || null; if (g) peerGet = g; } } };

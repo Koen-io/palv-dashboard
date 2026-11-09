@@ -8,7 +8,7 @@ const { ipcMain } = require('electron');
 const FILE = 'offshore-places.json';
 const TTL = 30 * 86400e3;
 const BBOX = '50.5,2.3,54.2,7.6';
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const QUERY = `[out:json][timeout:90];(
 nwr["emergency"="lifeboat_station"](${BBOX});
 nwr["amenity"="coast_guard"](${BBOX});
@@ -68,7 +68,7 @@ function start(opts) {
   const safe = (fn) => async (...a) => { try { return await fn(...a); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; } };
   ipcMain.handle('offshore:places', safe((_e, force) => places(!!force)));
   ipcMain.handle('ais:snap', (_e, since) => ais.snapshot(Math.max(0, +since || 0)));
-  ipcMain.handle('ais:status', () => ais.status());
+  ipcMain.handle('ais:status', () => ({ ...ais.status(), photos: ais.photoStatus() }));
   ipcMain.handle('ais:track', (_e, mmsi) => ais.track(String(mmsi || '')));
   ipcMain.handle('ais:photo', safe((_e, q) => ais.photo(q && typeof q === 'object' ? q : {})));
   ipcMain.handle('ais:setKey', safe(async (_e, k) => {

@@ -158,7 +158,7 @@ test('pagination: all pages by totalPages, and bbox pages until a short one', as
   assert.strictEqual(f.count(/obstacles\?country=NL/), 3);
   assert.ok(f.calls.every((c) => /limit=1000/.test(c.url)));
   assert.strictEqual(f.calls[0].opts.headers['x-openaip-api-key'], KEY);
-  assert.match(f.calls[0].opts.headers['User-Agent'], /^P-ALV-Dashboard\//);
+  assert.strictEqual(f.calls[0].opts.headers['User-Agent'], require('../src/ua').APP);
   assert.ok(f.calls[0].opts.timeoutMs > 0);
   assert.strictEqual(d.attribution, '© openAIP (CC BY-NC 4.0)');
 

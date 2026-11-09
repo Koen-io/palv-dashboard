@@ -16,7 +16,7 @@ const offshore = require('./offshore');
 const docs = require('./main/docs');
 require('./main/tiles');
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+const { BROWSER: UA, APP: APP_UA } = require('./ua');
 const WEB_PARTITION = 'persist:palv-web';
 const isMac = process.platform === 'darwin';
 const pkg = require('../package.json');
@@ -28,6 +28,12 @@ const UPDATE_REPO = (pkg.palv && pkg.palv.updateRepo) || 'Koen-io/palv-dashboard
 if (isMac) app.commandLine.appendSwitch('use-mock-keychain');
 // The map tiles of Zoek & Plan come through a scheme of their own, which must be known before the app is ready.
 plan.registerScheme();
+// What the window itself sends (map tiles, radar images) goes as the Chrome it is: Electron adds the name
+// and version of the dashboard and its own version, which are taken out.
+{
+  const platform = (/\(([^)]+)\)/.exec(app.userAgentFallback) || [])[1];
+  app.userAgentFallback = platform ? `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${process.versions.chrome} Safari/537.36` : UA;
+}
 
 let win = null;
 
@@ -279,9 +285,10 @@ app.whenReady().then(() => {
   webSession.setUserAgent(UA);
   webSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'fullscreen'));
 
-  // OpenStreetMap asks every application that uses its tiles to identify itself.
+  // OpenStreetMap asks programs that use its tiles to say they are one (not a browser): the neutral name
+  // of ua.js, which does not tell who is asking.
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://tile.openstreetmap.org/*'] }, (details, cb) => {
-    details.requestHeaders['User-Agent'] = `P-ALV-Dashboard/${app.getVersion()} (Electron desktop dashboard)`;
+    details.requestHeaders['User-Agent'] = APP_UA;
     cb({ requestHeaders: details.requestHeaders });
   });
 

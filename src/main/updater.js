@@ -52,7 +52,7 @@ async function request(url, opts = {}, timeoutMs = 20000) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...opts, signal: ctl.signal, headers: { 'User-Agent': `P-ALV-Dashboard/${app.getVersion()}`, ...(opts.headers || {}) } });
+    return await fetch(url, { ...opts, signal: ctl.signal, headers: { 'User-Agent': require('../ua').APP, ...(opts.headers || {}) } });
   } finally {
     clearTimeout(t);
   }

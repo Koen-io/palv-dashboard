@@ -256,7 +256,7 @@ test('list(): first fetch, served from disk, background refresh, failing source 
   assert.strictEqual(r1.ok, true);
   assert.deepStrictEqual(r1.sources.map((s) => s.key), ['nlog', 'rws', 'geus', 'nsta', 'sodir', 'boem', 'emodnet']);
   assert.ok(r1.sources.every((s) => s.ok && s.count > 0 && s.fetchedAt && s.licence && s.url), JSON.stringify(r1.sources));
-  assert.ok(net.calls.every((c) => /P-ALV-Dashboard/.test(c.opts.headers['User-Agent'])));
+  assert.ok(net.calls.every((c) => c.opts.headers['User-Agent'] === require('../src/ua').APP));
   const n1 = r1.items.length;
   assert.ok(fs.existsSync(path.join(dir, 'plan-platforms.json')));
   assert.ok(!fs.readdirSync(dir).some((f) => f.endsWith('.tmp')));
@@ -345,7 +345,7 @@ test('osm(): tiles via Overpass with fallback servers, cached, official platform
   assert.match(calls[1].url, /kumi/);
   assert.match(calls[1].body, /\["man_made"="offshore_platform"\]\(50,0,55,5\)/);
   assert.strictEqual(calls[0].opts.method, 'POST');
-  assert.match(calls[0].opts.headers['User-Agent'], /P-ALV-Dashboard/);
+  assert.strictEqual(calls[0].opts.headers['User-Agent'], require('../src/ua').APP);
   // Asked again: from the tile cache, also after a restart.
   p.start({ dir, fetchText, fetchBuffer: fakeNet().fetchBuffer, log: quiet, osmGapMs: 0 });
   await p.osm([52, 3, 55, 7]);
