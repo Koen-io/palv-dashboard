@@ -14,6 +14,7 @@ const plan = require('./main/plan');
 const ais = require('./ais');
 const offshore = require('./offshore');
 const docs = require('./main/docs');
+const privBrowser = require('./main/privbrowser');
 require('./main/tiles');
 
 const { BROWSER: UA, APP: APP_UA } = require('./ua');
@@ -264,11 +265,20 @@ app.on('web-contents-created', (_e, contents) => {
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
+    // The private Browser tab (Windows, src/main/privbrowser.js): its own private session in memory, sandboxed, with the PDF viewer.
+    if (process.platform === 'win32' && /^palv-browser-(tor|direct)-\d+$/.test(params.partition || '')) {
+      privBrowser.sessionFor(params.partition);
+      Object.assign(webPreferences, { sandbox: true, nodeIntegrationInSubFrames: false, spellcheck: false, plugins: true, webSecurity: true, allowRunningInsecureContent: false, navigateOnDragDrop: false, safeDialogs: true });
+      return;
+    }
     params.partition = WEB_PARTITION;
   });
   // Dempen: a page embedded later stays silent too.
   if (muted) contents.setAudioMuted(true);
-  if (contents.getType() === 'webview') {
+  if (privBrowser.owns(contents)) {
+    privBrowser.adopt(contents);
+    if (contents.getType() === 'webview') watchdog.guardWebview(contents);
+  } else if (contents.getType() === 'webview') {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     watchdog.guardWebview(contents);
   }
@@ -293,6 +303,7 @@ app.whenReady().then(() => {
   });
 
   watchdog.start();
+  privBrowser.start({ getWin: () => win });
   createWindow();
   watchdog.attach(win);
   data.start(() => win);

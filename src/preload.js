@@ -37,6 +37,27 @@ contextBridge.exposeInMainWorld('palv', {
   osk: {
     key: (guestId, events) => ipcRenderer.send('osk:key', guestId || 0, events),
   },
+  // The private Browser tab (Windows only): see src/main/privbrowser.js.
+  privbrowser: {
+    status: () => ipcRenderer.invoke('privbrowser:status'),
+    open: (opts) => ipcRenderer.invoke('privbrowser:open', opts),
+    newIdentity: () => ipcRenderer.invoke('privbrowser:newIdentity'),
+    setBridges: (kind) => ipcRenderer.invoke('privbrowser:setBridges', kind),
+    shield: (url, on) => ipcRenderer.invoke('privbrowser:shield', url, on),
+    shieldState: (url) => ipcRenderer.invoke('privbrowser:shieldState', url),
+    allowHttp: (url) => ipcRenderer.invoke('privbrowser:allowHttp', url),
+    savePdf: (guestId) => ipcRenderer.invoke('privbrowser:savePdf', guestId),
+    showDownload: (id) => ipcRenderer.invoke('privbrowser:showDownload', id),
+    openDownloads: () => ipcRenderer.invoke('privbrowser:openDownloads'),
+    cancelDownload: (id) => ipcRenderer.invoke('privbrowser:cancelDownload', id),
+    isolated: (guestId, code) => ipcRenderer.invoke('privbrowser:isolated', guestId, code),
+    onStatus: (cb) => on('privbrowser:status', cb),
+    onOpen: (cb) => on('privbrowser:open', cb),
+    onKey: (cb) => on('privbrowser:key', cb),
+    onBlocked: (cb) => on('privbrowser:blocked', cb),
+    onDownload: (cb) => on('privbrowser:download', cb),
+    onRefused: (cb) => on('privbrowser:refused', cb),
+  },
   briefing: {
     sound: () => ipcRenderer.invoke('briefing:sound'),
     soundInfo: () => ipcRenderer.invoke('briefing:soundInfo'),

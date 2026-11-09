@@ -55,7 +55,7 @@ async function boot() {
   document.body.classList.toggle('mac', IS_MAC);
   const loaded = await window.palv.config.load();
   if (loaded && loaded.__restoredFrom) setTimeout(() => toast(`De indeling was onleesbaar; de reservekopie van ${new Date(loaded.__restoredFrom).toLocaleString('nl-NL')} is teruggezet.`, true), 1500);
-  state = normalize(loaded);
+  state = normalize(loaded, MODEL_OPTS);
   applyScale();
   applyTheme(false);
   onWinState(await window.palv.win.getState());

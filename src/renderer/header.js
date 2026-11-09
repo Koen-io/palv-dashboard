@@ -112,6 +112,8 @@ function renderTabs() {
       h(
         'button',
         { class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), title: i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
+        // A page that is one tool (the Browser) carries its icon before the name.
+        (() => { const ic = p.widgets.length === 1 && WIDGETS[p.widgets[0].type] && WIDGETS[p.widgets[0].type].tabIcon; return ic ? icon(ic, 'tab-ic') : null; })(),
         p.name,
         // A page with the Timings tab shows the nearest running timer in its tab; nothing when none runs.
         typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,

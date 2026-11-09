@@ -295,7 +295,7 @@ function openSettings(startTab) {
               if (res.error || !Array.isArray(res.pages)) return toast(res.error || 'Dit is geen geldige dashboard-indeling.', true);
               confirmImport(res);
             } }, 'Importeren…'),
-            h('button', { class: 'btn danger', onclick: () => confirmDialog('Standaardindeling herstellen', 'Alle pagina\'s, widgets en instellingen worden teruggezet naar de standaard. De huidige indeling wordt eerst als reservekopie bewaard.', 'Herstellen', () => replaceConfig(defaultState(), 'reset')) }, 'Standaardindeling herstellen')),
+            h('button', { class: 'btn danger', onclick: () => confirmDialog('Standaardindeling herstellen', 'Alle pagina\'s, widgets en instellingen worden teruggezet naar de standaard. De huidige indeling wordt eerst als reservekopie bewaard.', 'Herstellen', () => replaceConfig(defaultState(MODEL_OPTS), 'reset')) }, 'Standaardindeling herstellen')),
         ];
       },
     },
@@ -397,6 +397,8 @@ function openSettings(startTab) {
         ];
       },
     },
+    // The private Browser tab (Windows): connection, bridges, search engine, letterboxing (widgets/privbrowser.js).
+    privbrowser: HAS_PRIVBROWSER ? { label: 'Browser', icon: 'globe', build: () => privBrowserSettingsPane() } : null,
     // (De)Briefing: the documents of the tab. Choosing and removing is only here, not on the tab itself,
     // so nobody changes them by accident from the touchscreen.
     debrief: {
@@ -457,6 +459,7 @@ function openSettings(startTab) {
     [...nav.children].forEach((b) => b.classList.toggle('on', b.dataset.k === key));
     pane.replaceChildren(...tabs[key].build().filter(Boolean));
   };
+  for (const k of Object.keys(tabs)) if (!tabs[k]) delete tabs[k];
   for (const [key, t] of Object.entries(tabs)) nav.append(h('button', { 'data-k': key, onclick: () => show(key) }, icon(t.icon), t.label));
   openModal({ title: 'Instellingen', body: h('div', { class: 'settings' }, nav, pane), wide: true, bare: true });
   show(tabs[startTab] ? startTab : 'weergave');

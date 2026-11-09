@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 1.35.0
+
+### Nieuw tabblad Browser (Windows)
+- **Een privébrowser in het dashboard**, met een wereldbol in de tabbalk. Gebouwd op de Chromium van het dashboard zelf: video, pdf, downloads, afdrukken, pop-ups voor inloggen, volledig scherm, tabbladen, zoeken op de pagina, zoomen, het rechtermuisknopmenu en het schermtoetsenbord werken gewoon. Gratis en open source, zonder account
+- **Via Tor, standaard.** Alles van de browser (ook het opzoeken van adressen) gaat door Tor; sites zien een adres van het Tor-netwerk, niet dat van dit netwerk, en het netwerk hier ziet niet welke sites bezocht worden. .onion-sites werken. Tor zit in de installatie (Tor Expert Bundle 16.0 van het Tor Project, gecontroleerd tegen hun handtekening) en start pas als het tabblad opengaat. **Valt Tor weg, dan laadt er niets**: er gaat nooit iets langs Tor heen. Blokkeert een netwerk Tor, dan zijn er bruggen (Snowflake, obfs4, meek) in Instellingen › Browser. Bewust kiezen voor **Direct** kan ook (sneller, maar sites zien het IP-adres)
+- **Niets wordt bewaard.** Geen geschiedenis, cookies, cache of wachtwoorden op schijf: alles staat in het geheugen. **Nieuwe identiteit** (de bezem) sluit alle tabbladen, wist alles en laat Tor een nieuwe route kiezen. Alleen de favorieten op de startpagina en de instellingen blijven
+- **Trackers, advertenties en cookiemeldingen geblokkeerd** met de lijsten van uBlock Origin, EasyList en EasyPrivacy (de blokkeermotor van Ghostery). Cookies van andere sites worden nooit verstuurd of bewaard. Alleen https: een site die alleen onversleuteld werkt, opent pas na een waarschuwing
+- **Bescherming tegen vingerafdrukken**, zoals Mullvad Browser en Brave: tijdzone UTC en taal Engels, overal dezelfde gewone waarden voor processor, geheugen, scherm, videokaart, stemmen en batterij, en een heel klein beetje ruis in canvas, WebGL en audio die per site en per sessie anders is. **Letterboxing**: de pagina krijgt een maat in vaste stappen, met een rand eromheen. WebRTC lekt geen IP-adres, WebGPU staat uit
+- **Schild per site**: werkt een site niet goed, zet de bescherming dan alleen voor die site uit (tot de volgende nieuwe identiteit). Het schild toont hoeveel er geblokkeerd is
+- **Nooit deze computer of het lokale netwerk**: een website kan niet bij het dashboard zelf of andere apparatuur in het gebouw. Geen camera, microfoon, locatie, meldingen, USB of Bluetooth. Het schermtoetsenbord draait onzichtbaar voor de sites, zodat niets verraadt dat dit het dashboard is
+- Op de Mac Mini komt het tabblad niet: daar is geen browser nodig
+
+### Onder de motorkap
+- Windows draait nu op **Electron 45** (Chromium 156), de huidige versie met beveiligingsupdates; 38 kreeg die niet meer. De Mac Mini (macOS 12) blijft op Electron 43, de laatste die daar start
+- Nieuwe tests voor de adresbalk, letterboxing, de afscherming van het lokale netwerk, https, Tor en het tabblad (wel op Windows, niet op de Mac)
+
 ## 1.33.0
 
 ### Privacy: wat het dashboard naar buiten stuurt

@@ -16,7 +16,9 @@ const { downloadArtifact } = require('@electron/get');
 
 const root = path.join(__dirname, '..');
 const pkg = require(path.join(root, 'package.json'));
-const electronVersion = require('electron/package.json').version;
+// The Mac Mini runs macOS 12, and Electron 44 and later need macOS 13: the Mac keeps the last Electron line
+// that still starts there (package.json palv.macElectron), Windows follows the current one.
+const electronVersion = (pkg.palv && pkg.palv.macElectron) || require('electron/package.json').version;
 const APP_NAME = pkg.productName;
 const BUNDLE = `${APP_NAME}.app`;
 const APP_ID = pkg.build.appId;

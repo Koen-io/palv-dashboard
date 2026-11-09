@@ -18,7 +18,7 @@ for (const file of rendererFiles) {
 }
 // Set on window by model.js, astro.js, wx.js, squawk.js and suntable.js, and by Leaflet.
 for (const name of Object.keys(require('./src/renderer/model.js'))) shared[name] = 'readonly';
-Object.assign(shared, { BASES_API: 'readonly', ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', PLACES: 'readonly', BRIEFING: 'readonly', L: 'readonly', ICAO_LANDEN: 'readonly', MID_LANDEN: 'readonly' });
+Object.assign(shared, { PRIV_CORE: 'readonly', BASES_API: 'readonly', ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', PLACES: 'readonly', BRIEFING: 'readonly', L: 'readonly', ICAO_LANDEN: 'readonly', MID_LANDEN: 'readonly' });
 // Zoek & Plan: the pure modules in plan/ hang one namespace each on window (and are required by the tests).
 Object.assign(shared, { PlanGeo: 'readonly', PlanCoords: 'readonly', PlanWmm: 'readonly', PlanPerf: 'readonly', PlanUnits: 'readonly', PlanProfiles: 'readonly' });
 
@@ -41,6 +41,11 @@ module.exports = [
       'no-unused-vars': ['warn', { vars: 'local', args: 'none', caughtErrors: 'none' }],
       'no-redeclare': ['error', { builtinGlobals: false }],
     },
+  },
+  {
+    // Shared with the page (privbrowser-core.js) or running in the pages of the Browser tab (privbrowser-guard.js).
+    files: ['src/privbrowser-core.js', 'src/main/privbrowser-guard.js'],
+    languageOptions: { globals: { ...globals.browser } },
   },
   {
     // Runs inside embedded pages (Windy, ADS-B Exchange), where these are the sites' own globals.

@@ -10,6 +10,9 @@ const WEB_PARTITION = 'persist:palv-web';
 const IS_MAC = window.palv.platform === 'darwin';
 const MOD = IS_MAC ? '⌘' : 'Ctrl+';
 const FS_KEY = IS_MAC ? '⌃⌘F' : 'F11';
+// The private Browser tab is there on Windows only (the Mac Mini has no browser); the model needs to know.
+const HAS_PRIVBROWSER = window.palv.platform === 'win32';
+const MODEL_OPTS = { privbrowser: HAS_PRIVBROWSER };
 const APP_HINT = IS_MAC ? '/Applications/Programma.app of alleen de naam, bv. Safari' : 'C:\\Program Files\\…\\programma.exe';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -95,6 +98,12 @@ const ICONS = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>',
+  // 1.35: the private Browser tab.
+  home: '<path d="M3.5 11.5 12 4.5l8.5 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5.5h4V20"/>',
+  broom: '<path d="M15.5 3.5 11 11"/><path d="M7 11.5h8.5l2 9h-12.5Z"/><path d="M9 20.5l.8-4M13 20.5v-4"/>',
+  onion: '<path d="M12 3c.2 2.6-6.5 5.6-6.5 11a6.5 6.5 0 0 0 13 0c0-5.4-6.7-8.4-6.5-11Z"/><path d="M12 8.5c0 2-3.2 3.9-3.2 6.3a3.2 3.2 0 0 0 6.4 0c0-2.4-3.2-4.3-3.2-6.3Z"/>',
+  dots: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/>',
+  shieldOff: '<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6Z"/><path d="m4 4 16 16"/>',
 };
 const icon = (name, cls) =>
   h('span', { class: cls || '', style: 'display:contents', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${cls || ''}">${ICONS[name] || ''}</svg>` }).firstChild;

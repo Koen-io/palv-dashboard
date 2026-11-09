@@ -252,8 +252,10 @@ const OSK_GUEST_JS = "if (!window.__palvOsk) { window.__palvOsk = 1; let t = 0;"
   + " addEventListener('focusin', (e) => { if (ed(e.target) && Date.now() - t < 1500) console.log('\\u0001palv-osk:' + (num(e.target) ? 'num' : 'abc')); }, true);"
   + " addEventListener('click', (e) => { if (ed(e.target) && Date.now() - t < 1500 && document.activeElement === e.target) console.log('\\u0001palv-osk:' + (num(e.target) ? 'num' : 'abc')); }, true);"
   + " addEventListener('focusout', () => { setTimeout(() => { if (document.hasFocus() && !ed(document.activeElement)) console.log('\\u0001palv-osk:close'); }, 0); }, true); }";
-function oskWatchWebview(wv) {
-  wv.addEventListener('dom-ready', () => { wv.executeJavaScript(OSK_GUEST_JS).catch(() => {}); });
+// `inject` (optional): how the script gets into the page. The Browser tab runs it in a world of its own,
+// so the sites cannot see it (and with it, that this is the dashboard).
+function oskWatchWebview(wv, inject) {
+  wv.addEventListener('dom-ready', () => { Promise.resolve(inject ? inject(OSK_GUEST_JS) : wv.executeJavaScript(OSK_GUEST_JS)).catch(() => {}); });
   wv.addEventListener('console-message', (e) => {
     const m = String(e.message || '');
     if (!m.startsWith('\u0001palv-osk:')) return;
