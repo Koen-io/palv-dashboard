@@ -1,5 +1,22 @@
 # Wijzigingen
 
+## 1.32.0
+
+### Kop
+- De kop is een stuk lager zonder dat er iets uit verdwijnt: logo en naam klein bovenaan, de twee klokken eronder, en de regels **UDP** en **Maan** precies uitgelijnd naast de klokken (boven en onder gelijk). De METAR is iets kleiner
+- **Maanstand** en maan-info zijn samen één regel **Maan**: fase en percentage, azimut en elevatie, het lichtniveau (lux) en boven/onder de horizon. Op- en ondergang en de volgende volle en nieuwe maan staan in de tooltip
+- **De kop is aan te passen** in de bewerkmodus (Bewerken): onder de kop verschijnt een balk waarmee je per onderdeel (logo, klokken, UDP, maan, METAR, Noordzee) de grootte van het blok en van de tekst instelt. Buiten de bewerkmodus staat de kop vast
+
+### Werkplek
+- Uiterst rechts in de tabbladbalk: **Werkplek** met een keuzemenu voor Schiphol, Volkel of Rotterdam. Alles wisselt mee: het weer in de kop, het baangebruik, de ringen, de afstanden, Zoek & Plan en het automatische thema
+
+### (De)Briefing
+- Onder **Briefing** staat de crewbriefing (Aircrew briefing), net als de debriefing: in- en uitzoomen en verschuiven
+- Document kiezen en verwijderen staat niet meer op het tabblad, maar alleen onder **Instellingen › (De)Briefing**
+
+### Offshore en Zoek & Plan
+- Een gekozen schip, platform of punt krijgt een **blauwe pulserende cirkel**, zoals een GPS-positie; in Zoek & Plan net zo voor elke gekozen plek of elk object
+
 ## 1.31.0
 
 ### Basis van het dashboard

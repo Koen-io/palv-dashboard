@@ -21,6 +21,10 @@ function applyBase(id) {
   renderEham();
   remountType('metar'); remountType('runway'); remountType('radar'); remountType('fleet');
   if (typeof refreshRunways === 'function') refreshRunways();
+  // Zoek & Plan puts the new base first; the theme (automatic at sunrise and sunset) follows the field.
+  if (typeof ZP_LIVE !== 'undefined') for (const ctx of ZP_LIVE) { try { ctx.emit('store'); ctx.cv.request(); } catch { /* one tab */ } }
+  applyTheme(true);
+  renderWorkplace();
   toast(`Basis: ${next.long}`);
 }
 
@@ -384,6 +388,31 @@ function openSettings(startTab) {
           h('hr'),
           h('h3', {}, 'Bronnen van de kaart'),
           h('p', {}, 'Platforms: NLOG (TNO), Rijkswaterstaat, Energistyrelsen/GEUS, NSTA, Sodir, BOEM, EMODnet en OpenStreetMap. Grenzen (EEZ, 12 NM): Marine Regions (VLIZ). Pijpleidingen, kabels, scheepsdichtheid, militaire gebieden en Natura 2000: EMODnet Human Activities. Zeekaart: OpenSeaMap. KNRM-stations, kustwachtposten, vuurtorens en havens: OpenStreetMap. Helidekken: openAIP (sleutel onder Zoek & Plan). Scheepsfoto\'s: Wikimedia Commons, per IMO-nummer of op naam, met fotograaf en licentie. Vlag: uit de MMSI (ITU MID-tabel).'),
+        ];
+      },
+    },
+    // (De)Briefing: the documents of the tab. Choosing and removing is only here, not on the tab itself,
+    // so nobody changes them by accident from the touchscreen.
+    debrief: {
+      label: '(De)Briefing', icon: 'note',
+      build: () => {
+        const box = h('div', { class: 'db-set' });
+        const kind = (d) => `${d.type === 'application/pdf' ? 'pdf' : 'afbeelding'}, ${(d.size / 1024).toFixed(0)} kB`;
+        const paint = () => box.replaceChildren(...Object.entries(DB_SLOTS).map(([slot, m]) => {
+          const d = OPS.get('private', 'docs', slot);
+          return h('div', { class: 'db-set-row' },
+            h('span', { class: 'db-set-ic' }, icon(m.icon)),
+            h('div', { class: 'db-set-txt' }, h('b', {}, m.name), h('small', {}, d ? `${d.name} · ${kind(d)}${d.by ? ' · geladen op ' + d.by : ''}${d.updatedAt ? ' · ' + when(d.updatedAt) : ''}` : 'Geen document')),
+            h('button', { class: 'btn', onclick: async () => { const r = await window.palv.docs.pick(slot); if (r && r.error) toast(r.error, true); else if (r && r.ok) toast(`${m.name}: ${r.name} geladen`); } }, icon('folder'), 'Document kiezen…'),
+            h('button', { class: 'btn danger', disabled: !d, title: 'Dit document verwijderen, ook op de andere schermen', onclick: () => confirmDialog('Document verwijderen', `${m.name} "${d.name}" verwijderen, ook op de andere schermen?`, 'Verwijderen', () => window.palv.docs.remove(slot)) }, icon('trash')));
+        }));
+        paint();
+        const unsub = OPS.on('private', () => { if (!box.isConnected) return unsub(); paint(); });
+        return [
+          h('h3', {}, 'Documenten van het tabblad (De)Briefing'),
+          h('p', {}, 'Wat onder Briefing en Debriefing staat. Kiezen en verwijderen kan alleen hier, niet op het tabblad zelf. Een document gaat vanzelf naar alle schermen van de eenheid en staat nooit in de openbare code.'),
+          box,
+          h('p', { class: 'hint' }, 'Een afbeelding (png, jpg, webp) of pdf, getoond zoals hij is: in- en uitzoomen met het muiswiel of twee vingers, slepen om te verschuiven, dubbeltikken voor passend in beeld.'),
         ];
       },
     },

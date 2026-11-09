@@ -27,24 +27,28 @@
     </div>
 
     <header id="header">
-      <div class="hd-brand">
-        <img class="hd-logo" src="../../assets/logo.png" alt="Police Air Support Unit">
-        <div class="hd-title">
-          <div class="hd-name">P-ALV <span>DASHBOARD</span></div>
-          <div class="hd-sub">POLICE AIR SUPPORT UNIT</div>
-          <div class="hd-motto">OPERAM SUPER OMNIA</div>
+      <div class="hd-left">
+        <div class="hd-part" data-part="brand">
+          <div class="hd-brand">
+            <img class="hd-logo" src="../../assets/logo.png" alt="Police Air Support Unit">
+            <div class="hd-name">P-ALV <span>DASHBOARD</span></div>
+            <div class="hd-title">
+              <div class="hd-sub">POLICE AIR SUPPORT UNIT</div>
+              <div class="hd-motto">OPERAM SUPER OMNIA</div>
+            </div>
+          </div>
         </div>
+        <div class="hd-part" data-part="clocks"><div class="hd-clocks" id="clocks"></div></div>
       </div>
       <div class="hd-time">
-        <div class="hd-clocks" id="clocks"></div>
-        <div class="hd-udp" id="udp" aria-label="Uniforme daglichtperiode"></div>
-        <div class="hd-udp hd-moon" id="moon" aria-label="Maan en lichtniveau"></div>
-        <div class="hd-udp hd-moonpos" id="moonpos" aria-label="Maanstand: azimut en elevatie"></div>
+        <div class="hd-part" data-part="sun"><div class="hd-udp" id="udp" aria-label="Uniforme daglichtperiode"></div></div>
+        <div class="hd-part" data-part="moon"><div class="hd-udp hd-moon" id="moon" aria-label="Maan: fase, stand en lichtniveau"></div></div>
       </div>
-      <section class="hd-eham" id="eham" aria-label="Schiphol luchtvaartweer en baangebruik"></section>
+      <div class="hd-part hd-part-eham" data-part="metar"><section class="hd-eham" id="eham" aria-label="Luchtvaartweer van de basis en de Noordzee"></section></div>
     </header>
+    <div id="hd-tune-bar" hidden></div>
 
-    <nav id="page-bar" aria-label="Pagina's"><div id="page-tabs" role="tablist"></div><button id="mute-flag" type="button" title="Het dashboard is gedempt. Tik om het geluid weer aan te zetten." hidden></button><div id="health" role="alert" hidden></div></nav>
+    <nav id="page-bar" aria-label="Pagina's"><div id="page-tabs" role="tablist"></div><div class="pb-spacer"></div><div id="health" role="alert" hidden></div><button id="mute-flag" type="button" title="Het dashboard is gedempt. Tik om het geluid weer aan te zetten." hidden></button><div id="workplace"></div></nav>
 
     <div id="emergency" role="alert" hidden></div>
 

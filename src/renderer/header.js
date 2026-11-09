@@ -254,26 +254,42 @@ function renderMoon() {
   const m = ASTRO.moon(now), L = ASTRO.light(now), p = moonCache.pass;
   const lux = ASTRO.formatLux(L.lux), band = luxBand(L.lux);
   const pct = Math.round(m.fraction * 100);
-  const progress = p.up && p.rise && p.set ? clamp((now - p.rise) / (p.set - p.rise), 0, 1) : 0;
   const day = (t) => (t ? ltDateFmt.format(t).replace(/\./g, '') : '—');
+  const up = m.alt >= 0;
+  const az = Math.round(m.az) % 360, alt = m.alt;
+  const azTxt = az.toString().padStart(3, '0');
+  const altTxt = `${alt >= 0 ? '+' : '−'}${Math.abs(alt).toFixed(1).replace('.', ',')}°`;
   const root = $('#moon');
-  root.title = `Maan: ${m.phaseName.toLowerCase()}, ${pct} % verlicht, ${m.alt >= 0 ? `${m.alt.toFixed(0)}° boven` : `${(-m.alt).toFixed(0)}° onder`} de horizon (52°N 005°E).\n`
-    + `${p.up ? 'Op sinds' : 'Komt op'} ${p.rise ? ltFmt.format(p.rise) + ' LT' : '—'}, ${p.up ? 'gaat onder' : 'daarna onder'} ${p.set ? ltFmt.format(p.set) + ' LT' : '—'}.\n`
-    + `Volgende volle maan: ${day(moonCache.full)}${moonCache.full ? ' ' + ltFmt.format(moonCache.full) : ''} · nieuwe maan: ${day(moonCache.nw)}${moonCache.nw ? ' ' + ltFmt.format(moonCache.nw) : ''}.\n\n`
-    + `Verlichtingssterkte op de grond, geschat voor een onbewolkte hemel zonder lichtvervuiling: ${lux.value} ${lux.unit} (${LUX_WORD[band].toLowerCase()}).\n`
-    + `Zon ${L.sunAlt.toFixed(1)}° → ${ASTRO.formatLux(L.sky).value} ${ASTRO.formatLux(L.sky).unit} · maan → ${L.moon > 0 ? ASTRO.formatLux(L.moon).value + ' ' + ASTRO.formatLux(L.moon).unit : 'onder de horizon'}.\n`
-    + 'Bewolking en stadslicht kunnen de werkelijke waarde sterk veranderen.';
+  root.classList.toggle('up', up);
+  // One strip: phase and lit part, where it stands (azimuth and elevation), the light on the ground. Rise
+  // and set, the next full and new moon and the sums behind the light level are in the tooltip.
+  root.title = `Maan: ${m.phaseName.toLowerCase()}, ${pct} % verlicht (${ltFmt.format(now)} LT, gezien vanaf 52°N 005°E).
+`
+    + `Azimut ${azTxt}° ten opzichte van het ware noorden: de maan staat in het ${windName(m.az)}. Elevatie ${altTxt} (schijnbaar, met refractie; negatief is onder de horizon).
+`
+    + `${p.up ? 'Op sinds' : 'Komt op'} ${p.rise ? ltFmt.format(p.rise) + ' LT (' + zulu(p.rise) + ')' : '—'}, ${p.up ? 'gaat onder' : 'daarna onder'} ${p.set ? ltFmt.format(p.set) + ' LT (' + zulu(p.set) + ')' : '—'}.
+`
+    + `Volgende volle maan: ${day(moonCache.full)}${moonCache.full ? ' ' + ltFmt.format(moonCache.full) : ''} · nieuwe maan: ${day(moonCache.nw)}${moonCache.nw ? ' ' + ltFmt.format(moonCache.nw) : ''}.
+
+`
+    + `Verlichtingssterkte op de grond, geschat voor een onbewolkte hemel zonder lichtvervuiling: ${lux.value} ${lux.unit} (${LUX_WORD[band].toLowerCase()}).
+`
+    + `Zon ${L.sunAlt.toFixed(1)}° → ${ASTRO.formatLux(L.sky).value} ${ASTRO.formatLux(L.sky).unit} · maan → ${L.moon > 0 ? ASTRO.formatLux(L.moon).value + ' ' + ASTRO.formatLux(L.moon).unit : 'onder de horizon'}.
+`
+    + 'Bewolking en stadslicht kunnen de werkelijke waarde sterk veranderen. Maanstand berekend met de maantheorie van Meeus (azimut op 0,1°, elevatie op 0,2° nauwkeurig).';
   root.replaceChildren(
     h('span', { class: 'udp-label' }, 'MAAN'),
     h('span', { class: 'mo-phase' }, moonSvg(m), h('span', { class: 'mo-pct' }, h('span', { class: 'mo-num' }, h('b', {}, pct), h('small', {}, '%')), h('em', {}, m.phaseName))),
-    stripTime(h('span', { class: 'mo-ic', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M7 18a5 5 0 0 1 10 0"/><path d="M12 9V3M9 6l3-3 3 3"/></svg>' }), p.rise, p.up ? 'Maan opgekomen' : 'Maan komt op'),
-    h('div', { class: 'udp-track mo-track' + (p.up ? ' up' : '') }, h('i', { style: `width:${(progress * 100).toFixed(1)}%` })),
-    stripTime(h('span', { class: 'mo-ic', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18"/><path d="M7 18a5 5 0 0 1 10 0"/><path d="M12 3v6M9 6l3 3 3-3"/></svg>' }), p.set, 'Maan gaat onder'),
-    h('span', { class: 'lux ' + band },
+    h('span', { class: 'mp-sep' }),
+    compassSvg(m.az),
+    h('span', { class: 'mp-val', title: 'Azimut: richting van de maan ten opzichte van het ware noorden' }, h('small', {}, 'AZ'), h('b', {}, `${azTxt}°`), h('em', {}, windName(m.az))),
+    h('span', { class: 'mp-val', title: 'Elevatie: hoogte van de maan boven de horizon' }, h('small', {}, 'ELEV'), h('span', { class: 'mp-arr', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M3 20A12 12 0 0 1 21 20" stroke-dasharray="2.5 2.2"/><path d="M12 20L${(12 + 9 * Math.cos((Math.PI * (180 - clamp(alt, -10, 90))) / 180)).toFixed(1)} ${(20 - 9 * Math.sin((Math.PI * Math.max(alt, 2)) / 180)).toFixed(1)}"/></svg>` }), h('b', {}, altTxt)),
+    h('span', { class: 'mo-gap' }),
+    h('span', { class: 'lux ' + band, title: `Licht op de grond: ${LUX_WORD[band].toLowerCase()}` },
       h('span', { class: 'lux-meter' }, h('i', { style: `width:${(luxLevel(L.lux) * 100).toFixed(1)}%` })),
-      h('b', {}, lux.value), h('small', {}, lux.unit))
+      h('b', {}, lux.value), h('small', {}, lux.unit)),
+    h('span', { class: 'udp-badge ' + (up ? 'day' : 'night'), title: up ? 'De maan staat boven de horizon' : 'De maan staat onder de horizon' }, up ? 'BOVEN HORIZON' : 'ONDER HORIZON')
   );
-  renderMoonPos(m, now);
 }
 
 /* ---------- moon position: azimuth and elevation, for 52°N 005°E ---------- */
@@ -281,26 +297,6 @@ const WINDS16 = ['N', 'NNO', 'NO', 'ONO', 'O', 'OZO', 'ZO', 'ZZO', 'Z', 'ZZW', '
 const windName = (az) => WINDS16[Math.round((((az % 360) + 360) % 360) / 22.5) % 16];
 // A small compass rose with the needle on the moon's azimuth: where along the horizon to look.
 const compassSvg = (az) => h('span', { class: 'mp-rose', html: `<svg viewBox="-12 -12 24 24" aria-hidden="true"><circle r="10.5" class="mp-rose-ring"/><path d="M0-10.5v2.2M0 8.3v2.2M-10.5 0h2.2M8.3 0h2.2" class="mp-rose-ticks"/><text x="0" y="-5.6" class="mp-rose-n">N</text><g transform="rotate(${az.toFixed(1)})"><path d="M0-9.2 2.4 0H-2.4Z" class="mp-rose-needle"/><path d="M0 9.2 2.4 0H-2.4Z" class="mp-rose-tail"/></g><circle r="1.3" class="mp-rose-hub"/></svg>` });
-function renderMoonPos(m, now) {
-  const root = $('#moonpos');
-  if (!root) return;
-  const up = m.alt >= 0;
-  const az = Math.round(m.az) % 360, alt = m.alt;
-  const altTxt = `${alt >= 0 ? '+' : '−'}${Math.abs(alt).toFixed(1).replace('.', ',')}°`;
-  root.classList.toggle('up', up);
-  root.title = `Maanstand nu (${ltFmt.format(now)} LT), gezien vanaf 52°N 005°E (midden Nederland).\n`
-    + `Azimut ${az.toString().padStart(3, '0')}° ten opzichte van het ware noorden: de maan staat in het ${windName(m.az)}.\n`
-    + `Elevatie ${altTxt} boven de horizon (schijnbaar, met atmosferische refractie; negatief is onder de horizon).\n`
-    + 'Berekend met de maantheorie van Meeus; gecontroleerd tegen de JPL-efemeride (azimut op 0,1° nauwkeurig, elevatie op 0,2°).';
-  root.replaceChildren(
-    h('span', { class: 'udp-label' }, 'MAANSTAND'),
-    compassSvg(m.az),
-    h('span', { class: 'mp-val', title: 'Azimut: richting van de maan ten opzichte van het ware noorden' }, h('small', {}, 'AZ'), h('b', {}, `${az.toString().padStart(3, '0')}°`), h('em', {}, windName(m.az))),
-    h('span', { class: 'mp-sep' }),
-    h('span', { class: 'mp-val', title: 'Elevatie: hoogte van de maan boven de horizon' }, h('small', {}, 'ELEV'), h('span', { class: 'mp-arr', html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M3 20A12 12 0 0 1 21 20" stroke-dasharray="2.5 2.2"/><path d="M12 20L${(12 + 9 * Math.cos((Math.PI * (180 - clamp(alt, -10, 90))) / 180)).toFixed(1)} ${(20 - 9 * Math.sin((Math.PI * Math.max(alt, 2)) / 180)).toFixed(1)}"/></svg>` }), h('b', {}, altTxt)),
-    h('span', { class: 'udp-badge ' + (up ? 'day' : 'night') }, up ? 'BOVEN HORIZON' : 'ONDER HORIZON')
-  );
-}
 
 /* ---------- the base: METAR in the header ---------- */
 // The METAR is read by WX.parseMetar (wx.js), the same parser that judges the stations on the radar, so
@@ -533,4 +529,104 @@ async function refreshMetar() {
   const m = eham.metar, obsAge = m && m.obsTime ? Date.now() - m.obsTime : Infinity;
   report('metar', `METAR ${B.station}`, !eham.metarFail && obsAge < 75 * 60000,
     eham.metarFail ? (m ? `geen verbinding, laatste ${zulu(m.obsTime)}` : 'geen verbinding') : `waarneming ${zulu(m.obsTime)}`, 10 * 60000);
+}
+
+/* ---------- the header's own layout: adjustable in edit mode ---------- */
+// Every part of the header has a size (the whole part, its boxes and text together, via CSS zoom) and a
+// size for its figures (the clock, the times, the METAR values). Only in edit mode a small panel shows on
+// each part; outside it the header stays as it is. Kept per screen with the other settings.
+const HD_PARTS = { brand: 'Logo en naam', clocks: 'Klokken', sun: 'UDP', moon: 'Maan', metar: 'METAR', sea: 'Noordzee' };
+const HD_TUNE_IN = { brand: ['brand'], clocks: ['clocks'], sun: ['sun'], moon: ['moon'], metar: ['metar', 'sea'] };
+const HD_LIM = { z: [0.6, 1.8], t: [0.6, 1.8] };
+function hdCfg() {
+  const s = state.settings;
+  if (!s.header || typeof s.header !== 'object') s.header = { z: {}, t: {} };
+  if (!s.header.z || typeof s.header.z !== 'object') s.header.z = {};
+  if (!s.header.t || typeof s.header.t !== 'object') s.header.t = {};
+  return s.header;
+}
+const hdVal = (kind, k) => { const v = +hdCfg()[kind][k]; return Number.isFinite(v) && v > 0 ? clamp(v, ...HD_LIM[kind]) : 1; };
+function applyHeaderLayout() {
+  const hd = $('#header');
+  if (!hd) return;
+  for (const k of Object.keys(HD_PARTS)) { hd.style.setProperty('--z-' + k, String(hdVal('z', k))); hd.style.setProperty('--t-' + k, String(hdVal('t', k))); }
+  renderHeaderTune();
+}
+function setHeaderVal(kind, k, v) {
+  const val = Math.round(clamp(v, ...HD_LIM[kind]) * 100) / 100;
+  if (val === 1) delete hdCfg()[kind][k]; else hdCfg()[kind][k] = val;
+  applyHeaderLayout();
+  save();
+}
+function renderHeaderTune() {
+  const bar = $('#hd-tune-bar');
+  if (!bar) return;
+  bar.hidden = !editing;
+  if (!editing) { bar.replaceChildren(); return; }
+  const row = (k, kind, label) => {
+    const v = hdVal(kind, k), step = 0.05;
+    return h('div', { class: 'hd-tune-row' },
+      h('span', { class: 'hd-tune-l' }, label),
+      h('button', { type: 'button', title: `${HD_PARTS[k]}: ${kind === 'z' ? 'blok' : 'tekst'} kleiner`, disabled: v <= HD_LIM[kind][0], onclick: () => setHeaderVal(kind, k, v - step) }, '−'),
+      h('b', { title: 'Tik: terug naar 100 %', onclick: () => setHeaderVal(kind, k, 1) }, `${Math.round(v * 100)}%`),
+      h('button', { type: 'button', title: `${HD_PARTS[k]}: ${kind === 'z' ? 'blok' : 'tekst'} groter`, disabled: v >= HD_LIM[kind][1], onclick: () => setHeaderVal(kind, k, v + step) }, '+'));
+  };
+  bar.replaceChildren(
+    h('div', { class: 'hd-tune-title' }, h('b', {}, 'KOP AANPASSEN'), h('span', {}, 'Blok: het hele onderdeel. Tekst: de grote cijfers erin.')),
+    ...Object.keys(HD_PARTS).map((k) => h('div', { class: 'hd-tune-part', onmouseenter: () => hdMark(k, true), onmouseleave: () => hdMark(k, false) },
+      h('div', { class: 'hd-tune-name' }, HD_PARTS[k]), row(k, 'z', 'Blok'), row(k, 't', 'Tekst'))),
+    h('button', { type: 'button', class: 'hd-tune-reset', title: 'Alle onderdelen van de kop terug naar de standaardgrootte', onclick: () => { state.settings.header = { z: {}, t: {} }; applyHeaderLayout(); save(); toast('Kop terug naar de standaardgrootte'); } }, icon('restore'), 'Alles 100 %'));
+}
+// Hovering a group in the bar lights up its part in the header.
+function hdMark(k, on) {
+  const el = k === 'sea' ? $('#eham .eham-sea') : document.querySelector(`#header .hd-part[data-part="${k}"]`);
+  if (el) el.classList.toggle('hd-mark', on);
+}
+
+/* ---------- Werkplek: the base, chosen in the tab bar ---------- */
+// The same choice as Instellingen › Basis, at the far right of the tab bar, so the crew can switch the
+// dashboard to Schiphol-Oost, Volkel or Rotterdam in one tap. applyBase (settings.js) does the work.
+let wpOpen = null;
+const wpShort = (b) => (b.id === 'eham' ? 'Schiphol' : b.name);
+function renderWorkplace() {
+  const root = $('#workplace');
+  if (!root) return;
+  const B = activeBase();
+  const btn = h('button', { type: 'button', class: 'wp-btn', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', title: `Werkplek van dit dashboard: ${B.long}.\nKies een andere basis: het weer in de kop, het baangebruik, de ringen, de afstanden en Zoek & Plan wisselen mee.`, onclick: (e) => { e.stopPropagation(); toggleWorkplace(btn); } },
+    h('span', { class: 'wp-label' }, 'WERKPLEK'),
+    h('span', { class: 'wp-val' }, h('i', { class: 'wp-dot' }), wpShort(B), h('small', {}, B.icao)),
+    h('span', { class: 'wp-caret', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' }));
+  root.replaceChildren(btn);
+}
+function closeWorkplace() {
+  if (!wpOpen) return;
+  wpOpen.remove(); wpOpen = null;
+  const b = $('#workplace .wp-btn');
+  if (b) { b.setAttribute('aria-expanded', 'false'); b.classList.remove('open'); }
+  document.removeEventListener('pointerdown', wpOutside, true);
+  document.removeEventListener('keydown', wpKey, true);
+}
+function wpOutside(e) { if (wpOpen && !wpOpen.contains(e.target) && !e.target.closest('#workplace')) closeWorkplace(); }
+function wpKey(e) { if (e.key === 'Escape') closeWorkplace(); }
+function toggleWorkplace(btn) {
+  if (wpOpen) return closeWorkplace();
+  const cur = activeBase().id;
+  const menu = h('div', { class: 'wp-menu', role: 'listbox', 'aria-label': 'Werkplek kiezen' },
+    h('div', { class: 'wp-menu-head' }, 'Werkplek kiezen'),
+    ...BASES_API.ORDER.map((id) => {
+      const b = BASES_API.BASES[id], on = id === cur;
+      return h('button', { type: 'button', role: 'option', 'aria-selected': String(on), class: 'wp-opt' + (on ? ' on' : ''), onclick: () => { closeWorkplace(); if (!on) applyBase(id); } },
+        h('span', { class: 'wp-opt-ic' }, icon(on ? 'check' : 'target')),
+        h('span', { class: 'wp-opt-txt' }, h('b', {}, wpShort(b)), h('small', {}, b.long.replace(/^Steunpunt /, ''))),
+        h('span', { class: 'wp-opt-icao' }, b.icao));
+    }),
+    h('div', { class: 'wp-menu-foot' }, 'Het weer in de kop, het baangebruik, de ringen, de afstanden en Zoek & Plan wisselen mee.'));
+  document.body.append(menu);
+  const r = btn.getBoundingClientRect();
+  menu.style.top = `${Math.round(r.bottom + 6)}px`;
+  menu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+  wpOpen = menu;
+  btn.setAttribute('aria-expanded', 'true'); btn.classList.add('open');
+  document.addEventListener('pointerdown', wpOutside, true);
+  document.addEventListener('keydown', wpKey, true);
 }

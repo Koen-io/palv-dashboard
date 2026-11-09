@@ -125,7 +125,7 @@ function osCreate(body, w) {
     if (moving) { g.rotate(((hdg || 0) * Math.PI) / 180); g.beginPath(); g.moveTo(0, -px); g.lineTo(px * 0.55, px * 0.7); g.lineTo(0, px * 0.4); g.lineTo(-px * 0.55, px * 0.7); g.closePath(); }
     else { g.beginPath(); g.arc(0, 0, px * 0.5, 0, Math.PI * 2); }
     g.fillStyle = color; g.fill();
-    g.lineWidth = selected ? 2.5 : 1.2; g.strokeStyle = selected ? '#ffd21f' : pinned ? '#ffffff' : '#0a0f18'; g.stroke();
+    g.lineWidth = selected ? 2.5 : 1.2; g.strokeStyle = selected ? '#ffffff' : pinned ? '#ffffff' : '#0a0f18'; g.stroke();
     g.restore();
   }
   ctx.cv.add(30, (c) => {
@@ -245,12 +245,14 @@ function osCreate(body, w) {
         c.hit({ x: q[0], y: q[1], r: Math.max(12, px * 0.5), kind: 'aircraft', item: a, z: 8 });
       }
     }
-    // Selection ring.
-    if (sel && sel.lat != null) {
-      const live = sel.kind === 'ship' ? osNow(sel.item, now) : sel.kind === 'aircraft' ? vrNow(sel.item, now) : [sel.lat, sel.lon];
-      if (live) { const p = c.P(live[0], live[1]); g.lineWidth = 2.5; g.strokeStyle = '#ffd21f'; g.beginPath(); g.arc(p[0], p[1], 13, 0, Math.PI * 2); g.stroke(); }
-    }
+    // The selection: a blue pulsing circle around it, like a GPS position (a marker over the canvas, so
+    // it pulses by CSS without redrawing the map), moved along with the ship's dead reckoning.
+    const live = sel && sel.lat != null ? (sel.kind === 'ship' ? osNow(sel.item, now) : sel.kind === 'aircraft' ? vrNow(sel.item, now) : [sel.lat, sel.lon]) : null;
+    placePulse(live, sel && sel.kind);
   });
+  const pulse = zpPulse(map);
+  const placePulse = (at, kind) => pulse.place(at, kind);
+  cleanups.push(() => pulse.remove());
   // The picture moves with the dead reckoning: every second when zoomed in, slower when a second of
   // sailing is less than a pixel; the own fleet (fast) keeps its second while in view.
   let lastTick = 0;

@@ -475,3 +475,24 @@ body.touch .zp-rhead .zp-save { height: 2.4rem; }
 .zp-base-wxhead { display: flex; align-items: center; gap: 0.6rem; justify-content: space-between; }
 .zp-base-wxhead small { color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
 .zp-base .os-raw { font-size: 0.66rem; }
+
+/* ---------- the selection on a map (Zoek & Plan, Offshore): a blue pulsing circle, like a GPS position ---------- */
+.zp-pulse { position: relative; pointer-events: none; }
+.zp-pulse > i { position: absolute; left: 0; top: 0; border-radius: 50%; transform: translate(-50%, -50%); }
+.zp-pulse-ring {
+  width: 34px; height: 34px;
+  border: 3px solid #1f7bff; background: rgba(31, 123, 255, 0.16);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 14px 3px rgba(31, 123, 255, 0.85), inset 0 0 8px rgba(31, 123, 255, 0.6);
+  animation: zp-ring 1.8s ease-in-out infinite;
+}
+.zp-pulse-wave {
+  width: 34px; height: 34px;
+  background: radial-gradient(circle, rgba(31, 123, 255, 0.12) 30%, rgba(31, 123, 255, 0.6) 72%, rgba(31, 123, 255, 0.9) 100%);
+  border: 3px solid #3d95ff;
+  animation: zp-wave 2.4s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+.zp-pulse-wave.w2 { animation-delay: 0.8s; }
+.zp-pulse-wave.w3 { animation-delay: 1.6s; }
+@keyframes zp-wave { 0% { width: 34px; height: 34px; opacity: 0.95; } 100% { width: 130px; height: 130px; opacity: 0; } }
+@keyframes zp-ring { 0%, 100% { width: 34px; height: 34px; } 50% { width: 40px; height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .zp-pulse-wave { animation-duration: 4s; } .zp-pulse-ring { animation: none; } }

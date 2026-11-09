@@ -2,13 +2,15 @@
    P-ALV Dashboard — maan, versheid, noodsquawk, updates, schermen, OLED
    ============================================================ */
 
-/* ---------- moon strip under the UDP ---------- */
-/* The strip takes the width of the clocks above it and never pushes into the Schiphol block: when space
-   is short the moon's Zulu times and phase name go (both are in the tooltip), and it clips at its edge. */
-.hd-moon { gap: 0.7rem; min-width: 0; overflow: hidden; container-type: inline-size; }
-@container (max-width: 43rem) { .hd-moon .udp-t > span { display: none; } }
-@container (max-width: 37.5rem) { .hd-moon .mo-pct em { display: none; } }
-@container (max-width: 32rem) { .hd-moon .udp-t > small { display: none; } .hd-moon .mo-track { min-width: 0.8rem; } }
+/* ---------- moon strip under the UDP: phase, position and light in one line ---------- */
+/* When space is short the phase name, the wind name of the azimuth and the lux meter go (all of it is in
+   the tooltip), and the strip clips at its edge rather than pushing into the METAR block. */
+.hd-moon { gap: 0.65rem; min-width: 0; overflow: hidden; container-type: inline-size; }
+.mo-gap { flex: 1; min-width: 0; }
+@container (max-width: 40rem) { .hd-moon .mo-pct em { display: none; } }
+@container (max-width: 34rem) { .hd-moon .mp-val em { display: none; } }
+@container (max-width: 30rem) { .hd-moon .lux-meter { display: none; } .hd-moon .mp-arr { display: none; } }
+@container (max-width: 26rem) { .hd-moon .udp-badge { display: none; } }
 .mo-phase { display: flex; align-items: center; gap: 0.55rem; flex: none; }
 .mo-disc { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; flex: none; }
 .mo-disc svg { width: 100%; height: 100%; overflow: visible; }

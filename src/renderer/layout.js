@@ -178,6 +178,7 @@ function setEditing(on) {
     );
   }
   renderTitlebar();
+  renderHeaderTune();
 }
 
 /* ---------- add / configure ---------- */

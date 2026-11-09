@@ -7,7 +7,7 @@
 .tb-btn.tb-mute.muted:hover { background: var(--amber); color: #1a1200; }
 /* Also in fullscreen, where the menu bar is out of sight: a pill in the tab bar, one tap turns the sound back on. */
 #mute-flag {
-  position: relative; z-index: 2; margin-left: auto; align-self: center; flex: none;
+  position: relative; z-index: 2; margin-right: 0.6rem; align-self: center; flex: none;
   display: flex; align-items: center; gap: 0.45rem; height: 1.85rem; padding: 0 0.85rem 0 0.65rem;
   border: 1px solid color-mix(in srgb, var(--amber) 60%, transparent); border-radius: 99px;
   background: color-mix(in srgb, var(--amber) 16%, var(--hd-to)); color: var(--amber-soft);
@@ -16,7 +16,6 @@
 #mute-flag[hidden] { display: none; }
 #mute-flag svg { width: 1rem; height: 1rem; }
 #mute-flag:hover { background: var(--amber); color: #1a1200; }
-#mute-flag:not([hidden]) ~ #health { margin-left: 0.6rem; }
 
 /* ---------- touchscreen mode ---------- */
 /* No grey flash, no double-tap delay, and a tap shows at once: everything reacts on touch, not after it. */

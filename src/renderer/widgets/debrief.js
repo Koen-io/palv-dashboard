@@ -1,7 +1,8 @@
 'use strict';
 
 /* (De)Briefing: de briefing- en debriefingchecklist van de eenheid, als afbeelding of pdf, met twee
-   knoppen bovenin. De documenten staan in het profielbestand van de eenheid en gaan naar alle schermen. */
+   knoppen bovenin. De documenten staan in het profielbestand van de eenheid en gaan naar alle schermen.
+   Kiezen en verwijderen kan alleen onder Instellingen › (De)Briefing, niet op het tabblad zelf. */
 const DB_SLOTS = { briefing: { name: 'Briefing', icon: 'note' }, debriefing: { name: 'Debriefing', icon: 'check' } };
 
 defineWidget('debrief', {
@@ -21,10 +22,8 @@ defineWidget('debrief', {
     const seg = segmented(Object.entries(DB_SLOTS).map(([k, d]) => ({ value: k, label: d.name, icon: d.icon })), cfg.slot, (v) => { cfg.slot = v; save(); paint(); });
     seg.classList.add('db-seg');
     const info = h('span', { class: 'db-info' });
-    const pick = h('button', { class: 'btn zp-btn', title: 'Een afbeelding (png, jpg) of pdf kiezen voor dit document; gaat naar alle schermen van de eenheid', onclick: async () => { const r = await window.palv.docs.pick(cfg.slot); if (r && r.error) toast(r.error, true); else if (r && r.ok) toast(`${DB_SLOTS[cfg.slot].name}: ${r.name} geladen`); } }, icon('folder'), 'Document kiezen…');
-    const del = h('button', { class: 'btn zp-btn danger', title: 'Dit document verwijderen, ook op de andere schermen', onclick: () => { const d = doc(); if (!d) return; confirmDialog('Document verwijderen', `${DB_SLOTS[cfg.slot].name} "${d.name}" verwijderen, ook op de andere schermen?`, 'Verwijderen', () => window.palv.docs.remove(cfg.slot)); } }, icon('trash'));
     const fitBtn = h('button', { class: 'btn zp-btn', title: 'Passend in beeld', onclick: () => fit() }, icon('target'), 'Passend');
-    bar.append(h('span', { class: 'mp-title' }, icon('note'), '(DE)BRIEFING'), seg, info, h('span', { class: 'zp-spacer' }), fitBtn, pick, del);
+    bar.append(h('span', { class: 'mp-title' }, icon('note'), '(DE)BRIEFING'), seg, info, h('span', { class: 'zp-spacer' }), fitBtn);
 
     // The image viewer: fit to the stage, zoom with the wheel or two fingers, drag to pan.
     let view = { k: 1, x: 0, y: 0 }, img = null, nat = null;
@@ -53,13 +52,13 @@ defineWidget('debrief', {
     async function paint() {
       seg.setValue(cfg.slot);
       const d = doc();
-      del.disabled = !d;
-      info.textContent = d ? `${d.name} · ${(d.size / 1024).toFixed(0)} kB${d.by ? ' · geladen op ' + d.by : ''}` : '';
+      fitBtn.disabled = !d || d.type === 'application/pdf';
+      info.textContent = d ? `${d.name} · ${(d.size / 1024).toFixed(0)} kB` : '';
       const key = d ? `${cfg.slot}:${d.updatedAt}` : cfg.slot;
       if (key === shownKey) return;
       shownKey = key;
       img = null; nat = null;
-      if (!d) { stage.replaceChildren(h('div', { class: 'db-empty' }, icon(DB_SLOTS[cfg.slot].icon), h('b', {}, `Nog geen ${DB_SLOTS[cfg.slot].name.toLowerCase()}document`), h('span', {}, 'Kies een afbeelding (png, jpg) of een pdf met de knop Document kiezen; het komt dan op alle schermen van de eenheid.'))); return; }
+      if (!d) { stage.replaceChildren(h('div', { class: 'db-empty' }, icon(DB_SLOTS[cfg.slot].icon), h('b', {}, `Nog geen ${DB_SLOTS[cfg.slot].name.toLowerCase()}document`), h('span', {}, 'Het document wordt geladen onder Instellingen › (De)Briefing en komt dan op alle schermen van de eenheid.'))); return; }
       if (d.type === 'application/pdf') {
         const r = await window.palv.docs.file(cfg.slot);
         if (!r || !r.ok) { stage.replaceChildren(h('div', { class: 'db-empty' }, h('b', {}, 'Pdf niet te openen'), h('span', {}, (r && r.error) || ''))); return; }

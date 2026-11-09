@@ -96,6 +96,8 @@
     seaStation: 'europlatform',
     // 1.31: the base (steunpunt) this dashboard runs from: eham, ehvk or ehrd (src/bases.js).
     base: 'eham',
+    // 1.32: the header, adjustable in edit mode: per part the size (z) and the size of its figures (t).
+    header: { z: {}, t: {} },
   };
 
   function defaultState() {

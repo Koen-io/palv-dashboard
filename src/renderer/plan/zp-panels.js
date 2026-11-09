@@ -204,17 +204,9 @@ function zpPanels(ctx) {
     ctx.select({ lat: pt.lat, lon: pt.lon, label: null, kind: 'point' });
     ctx.showPoint({ lat: pt.lat, lon: pt.lon });
   });
-  // Selection marker.
-  ctx.cv.add(90, (c) => {
-    const s = ctx.selected;
-    if (!s) return;
-    const p = c.P(s.lat, s.lon), { g } = c;
-    g.lineWidth = 2.5; g.strokeStyle = '#ffffff';
-    g.beginPath(); g.arc(p[0], p[1], 11, 0, Math.PI * 2); g.stroke();
-    g.lineWidth = 1.5; g.strokeStyle = '#0a0f18';
-    g.beginPath(); g.arc(p[0], p[1], 13, 0, Math.PI * 2); g.stroke();
-    g.beginPath(); for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) { g.moveTo(p[0] + dx * 14, p[1] + dy * 14); g.lineTo(p[0] + dx * 20, p[1] + dy * 20); } g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.stroke();
-  });
+  // Selection: the blue pulsing circle, as on the Offshore tab (zpPulse in zp-map.js).
+  const pulse = zpPulse(ctx.map);
+  ctx.cv.add(90, () => { const s = ctx.selected; pulse.place(s && s.lat != null ? [s.lat, s.lon] : null, s && s.kind); });
 
   /* ---------- side panel ---------- */
   const tabs = h('div', { class: 'zp-tabs', role: 'tablist' });

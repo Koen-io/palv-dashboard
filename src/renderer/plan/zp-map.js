@@ -237,3 +237,19 @@ function zpPill(g, text, x, y, nx, ny, { font, accent = '#ffb941', gap = 9, avoi
   g.fillText(text, cx, cy + 0.5);
   return box;
 }
+
+// The selection on a map (Zoek & Plan, Offshore): a blue pulsing circle around it, like a GPS position.
+// A marker over the symbol canvas, so it pulses by CSS without redrawing the map; place(null) removes it.
+function zpPulse(map) {
+  let mk = null;
+  return {
+    place(at, kind) {
+      if (!at) { if (mk) { mk.remove(); mk = null; } return; }
+      if (!mk) mk = L.marker(at, { interactive: false, keyboard: false, pane: 'markerPane', icon: L.divIcon({ className: 'zp-pulse', iconSize: [0, 0], html: '<i class="zp-pulse-wave"></i><i class="zp-pulse-wave w2"></i><i class="zp-pulse-wave w3"></i><i class="zp-pulse-ring"></i>' }) }).addTo(map);
+      else mk.setLatLng(at);
+      const el = mk.getElement();
+      if (el) el.dataset.kind = kind || '';
+    },
+    remove() { if (mk) { mk.remove(); mk = null; } },
+  };
+}

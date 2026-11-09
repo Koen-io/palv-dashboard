@@ -12,7 +12,7 @@
 .os-ships { display: flex; flex-direction: column; gap: 0.2rem; }
 .os-ship { display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.5rem; align-items: center; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); text-align: left; }
 .os-ship:hover { border-color: var(--border-strong); background: var(--surface-3); }
-.os-ship.on { border-color: #ffd21f; }
+.os-ship.on { border-color: #2f8cff; background: color-mix(in srgb, #2f8cff 14%, var(--surface-2)); box-shadow: inset 3px 0 0 #2f8cff; }
 .os-ship .zp-dot { background: var(--c); }
 .os-ship b { display: block; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-ship small { display: block; font-size: 0.66rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -74,3 +74,13 @@ body.touch .os-ship { padding: 0.55rem 0.6rem; }
 .db-empty b { color: #e9eff8; font: 600 1.2rem var(--font-display); }
 .db-empty span { max-width: 36rem; line-height: 1.5; }
 body.touch .db-seg button { height: 2.7rem; }
+
+
+/* Instellingen › (De)Briefing */
+.db-set { display: flex; flex-direction: column; gap: 0.5rem; }
+.db-set-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); }
+.db-set-ic { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; flex: none; border-radius: 50%; background: var(--surface-3); color: var(--accent); }
+.db-set-ic svg { width: 1.1rem; height: 1.1rem; }
+.db-set-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.db-set-txt b { font-size: 0.92rem; }
+.db-set-txt small { font-size: 0.74rem; color: var(--muted); }

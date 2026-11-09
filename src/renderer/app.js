@@ -75,6 +75,8 @@ async function boot() {
   renderMoon();
   applyWxMargins();
   renderEham();
+  applyHeaderLayout();
+  renderWorkplace();
   setPage(state.activePage);
 
   refreshMetar();
