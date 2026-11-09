@@ -482,10 +482,12 @@ function zpBaseCard(ctx, b, hasOwn) {
       h('pre', { class: 'os-raw' }, st.raw));
   };
   paintWx();
-  const unwatch = watchWx(paintWx);
-  // The panel is rebuilt now and then; the watcher goes when the card is gone.
-  const mo = new MutationObserver(() => { if (!card.isConnected) { unwatch(); mo.disconnect(); } });
-  mo.observe(ctx.el.closest('.zp') || document.body, { childList: true, subtree: true });
+  // The panel is rebuilt now and then: the watcher goes with the card, or with the widget at the latest.
+  let unwatch = null;
+  const stop = () => { if (unwatch) { unwatch(); unwatch = null; } };
+  unwatch = watchWx(() => { if (card.isConnected) paintWx(); else if (card.dataset.shown) stop(); });
+  requestAnimationFrame(() => { if (card.isConnected) card.dataset.shown = '1'; else stop(); });
+  ctx.cleanups.push(stop);
   card.append(wx);
   return card;
 }

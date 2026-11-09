@@ -23,12 +23,6 @@
 .mo-pct b { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; color: #fff; }
 .mo-pct small { font-size: 0.72rem; font-weight: 600; color: var(--owl-300); }
 .mo-pct em { margin-top: 0.14rem; font-style: normal; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8ea2bf; white-space: nowrap; }
-.mo-ic { display: contents; }
-.mo-ic svg { width: 1.05rem; height: 1.05rem; align-self: center; color: #c9d6ea; }
-.mo-track { background: #1d2c47; }
-.mo-track i { background: linear-gradient(90deg, #5f7ca8, #dfe7f5); }
-.mo-track.up i::after { content: ""; position: absolute; right: -0.33rem; top: 50%; width: 0.66rem; height: 0.66rem; margin-top: -0.33rem; border-radius: 50%; background: #f7f3e3; box-shadow: 0 0 0.55rem rgba(247, 243, 227, 0.75); }
-.mo-track:not(.up) { background: repeating-linear-gradient(90deg, #22334e 0 0.35rem, transparent 0.35rem 0.6rem); }
 
 /* light on the ground: a meter on a logarithmic scale and the value in lux or millilux */
 .lux {

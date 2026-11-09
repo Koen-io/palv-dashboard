@@ -12,7 +12,7 @@ function runwayMap(landing, departure) {
   // Web Mercator on the pixel grid of the zoom-13 tiles, so the runways and the backdrop are one drawing
   // and stay locked together however the widget is sized.
   const B = activeBase(), RUNWAYS = B.runways;
-  const CX = 60, CY = 50, K = B.mapK || 0.2, Z = 13, N = 256 * 2 ** Z;
+  const CX = 60, CY = 50, K = B.mapK || 0.2, Z = 13, N = 256 * 2 ** Z, FADE_R = 84;
   const mx = (lon) => ((lon + 180) / 360) * N;
   const my = (lat) => { const r = (lat * Math.PI) / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * N; };
   const centre = B.id === 'eham' ? [52.326, 4.757] : [B.field.lat, B.field.lon];
@@ -26,9 +26,10 @@ function runwayMap(landing, departure) {
     // lets the backdrop fade out before the tiles end.
     for (let i = 0; i < T.cols; i += 1) for (let j = 0; j < T.rows; j += 1) tiles += tile(T.x0 + i, T.y0 + j, `../../assets/schiphol/${T.x0 + i}-${T.y0 + j}.png`);
   } else {
-    // The tiles that cover the drawing (viewBox 16..106 × -8..106), from the tile store.
-    const tx0 = Math.floor((X0 + (16 - CX) / K) / 256), tx1 = Math.floor((X0 + (106 - CX) / K) / 256);
-    const ty0 = Math.floor((Y0 + (-8 - CY) / K) / 256), ty1 = Math.floor((Y0 + (106 - CY) / K) / 256);
+    // The tiles under the whole fade (a circle of FADE_R around the centre, as wide as Schiphol's bundled
+    // tiles reach), from the tile store: the backdrop then fades out softly instead of stopping at the frame.
+    const tx0 = Math.floor((X0 + (CX - FADE_R - CX) / K) / 256), tx1 = Math.floor((X0 + (CX + FADE_R - CX) / K) / 256);
+    const ty0 = Math.floor((Y0 + (CY - FADE_R - CY) / K) / 256), ty1 = Math.floor((Y0 + (CY + FADE_R - CY) / K) / 256);
     for (let x = tx0; x <= tx1; x += 1) for (let y = ty0; y <= ty1; y += 1) tiles += tile(x, y, `palvtile://osm/${Z}/${x}/${y}`);
   }
   const landIds = new Set(landing.map((r) => r.rwy));
@@ -73,7 +74,7 @@ function runwayMap(landing, departure) {
     .filter((l) => l.active || !labels.some((o) => o.active && Math.hypot(o.x - l.x, o.y - l.y) < 10))
     .map((l) => `<text${l.active ? '' : ' class="idle"'} x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}">${l.id}</text>`)
     .join('');
-  const svg = `<svg class="rwy-map" viewBox="16 -8 90 114" role="img" aria-label="Baangebruik op de kaart van ${B.airport}"><defs><radialGradient id="rwy-fade" gradientUnits="userSpaceOnUse" cx="${CX}" cy="${CY}" r="84"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient><mask id="rwy-mask" maskUnits="userSpaceOnUse" x="-70" y="-40" width="250" height="190"><rect x="-70" y="-40" width="250" height="190" fill="url(#rwy-fade)"/></mask></defs><g class="osm" mask="url(#rwy-mask)">${tiles}</g>${lines}${arrows}${texts}</svg>`;
+  const svg = `<svg class="rwy-map" viewBox="16 -8 90 114" role="img" aria-label="Baangebruik op de kaart van ${B.airport}"><defs><radialGradient id="rwy-fade" gradientUnits="userSpaceOnUse" cx="${CX}" cy="${CY}" r="${FADE_R}"><stop offset="0.55" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient><mask id="rwy-mask" maskUnits="userSpaceOnUse" x="-70" y="-40" width="250" height="190"><rect x="-70" y="-40" width="250" height="190" fill="url(#rwy-fade)"/></mask></defs><g class="osm" mask="url(#rwy-mask)">${tiles}</g>${lines}${arrows}${texts}</svg>`;
   return h('div', { style: 'display:contents', html: svg }).firstChild;
 }
 

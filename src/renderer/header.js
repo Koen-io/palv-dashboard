@@ -15,7 +15,7 @@ function resolveTheme() {
     const from = toMin(s.lightFrom), to = toMin(s.darkFrom);
     return from <= to ? (mins >= from && mins < to ? 'light' : 'dark') : (mins >= to && mins < from ? 'dark' : 'light');
   }
-  const { rise, set } = ASTRO.sunTimes(now, activeBase().field.lat, activeBase().field.lon);
+  const { rise, set } = ASTRO.sunTimes(now, 52.31, 4.76);
   return now >= rise && now < set ? 'light' : 'dark';
 }
 
@@ -524,7 +524,8 @@ async function refreshMetar() {
   const B = activeBase();
   if (eham.icao !== B.icao) { eham.icao = B.icao; eham.metar = null; eham.history.length = 0; }
   const res = await window.palv.data.metar(B.icao).catch(() => ({ ok: false }));
-  if (res.ok && activeBase().icao === B.icao) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; rememberObs(eham.history, res); } else if (!res.ok) eham.metarFail = true;
+  if (activeBase().icao !== B.icao) return; // the base changed meanwhile: the new one fetches itself
+  if (res.ok) { eham.metar = res; eham.metarFail = false; eham.fetchedAt = res.fetchedAt; rememberObs(eham.history, res); } else eham.metarFail = true;
   renderEham();
   const m = eham.metar, obsAge = m && m.obsTime ? Date.now() - m.obsTime : Infinity;
   report('metar', `METAR ${B.station}`, !eham.metarFail && obsAge < 75 * 60000,
@@ -536,7 +537,6 @@ async function refreshMetar() {
 // size for its figures (the clock, the times, the METAR values). Only in edit mode a small panel shows on
 // each part; outside it the header stays as it is. Kept per screen with the other settings.
 const HD_PARTS = { brand: 'Logo en naam', clocks: 'Klokken', sun: 'UDP', moon: 'Maan', metar: 'METAR', sea: 'Noordzee' };
-const HD_TUNE_IN = { brand: ['brand'], clocks: ['clocks'], sun: ['sun'], moon: ['moon'], metar: ['metar', 'sea'] };
 const HD_LIM = { z: [0.6, 1.8], t: [0.6, 1.8] };
 function hdCfg() {
   const s = state.settings;
@@ -561,6 +561,7 @@ function setHeaderVal(kind, k, v) {
 function renderHeaderTune() {
   const bar = $('#hd-tune-bar');
   if (!bar) return;
+  for (const el of document.querySelectorAll('#header .hd-mark')) el.classList.remove('hd-mark');
   bar.hidden = !editing;
   if (!editing) { bar.replaceChildren(); return; }
   const row = (k, kind, label) => {
@@ -607,7 +608,7 @@ function closeWorkplace() {
   document.removeEventListener('keydown', wpKey, true);
 }
 function wpOutside(e) { if (wpOpen && !wpOpen.contains(e.target) && !e.target.closest('#workplace')) closeWorkplace(); }
-function wpKey(e) { if (e.key === 'Escape') closeWorkplace(); }
+function wpKey(e) { if (e.key === 'Escape' && wpOpen) { e.stopPropagation(); e.preventDefault(); closeWorkplace(); } }
 function toggleWorkplace(btn) {
   if (wpOpen) return closeWorkplace();
   const cur = activeBase().id;

@@ -795,7 +795,7 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .hd-eham .sea-kv b { font-size: calc(1.05rem * var(--t-sea, 1)); }
 
 body.editing #header .hd-part { outline: 1px dashed color-mix(in srgb, var(--amber) 70%, transparent); outline-offset: 2px; border-radius: var(--radius); }
-#header .hd-mark { outline: 2px solid var(--amber) !important; outline-offset: 2px; }
+body.editing #header .hd-mark { outline: 2px solid var(--amber) !important; outline-offset: 2px; }
 #hd-tune-bar {
   flex: none; display: flex; align-items: stretch; gap: 0.5rem; padding: 0.4rem 1.2rem;
   background: color-mix(in srgb, var(--amber) 10%, var(--hd-to)); border-top: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);

@@ -1,5 +1,22 @@
 # Wijzigingen
 
+## 1.32.1
+
+### Werkplek
+- Een andere werkplek kiezen verandert de kaarten niet meer: de **Vluchtradar blijft op heel Nederland** staan (ook een zelf verschoven kaartbeeld blijft), en de **METAR-kaartjes op de pagina Weer blijven** hun eigen stations houden. Alleen het weer in de kop, het baangebruik, de afstandsringen en de afstanden volgen de werkplek
+- Het automatische licht/donker-thema schakelt weer op zonsopkomst en -ondergang van Schiphol, net als vroeger, ongeacht de werkplek
+- Een eigen titel van de widget Baangebruik blijft staan; alleen de automatische titel ("Baangebruik Schiphol") wisselt mee
+- Escape sluit alleen het Werkplek-menu, niet ook het volledig scherm of de bewerkmodus
+
+### Baangebruik
+- De kaartjes van **Volkel en Rotterdam** lopen nu net zo zacht uit aan de randen als dat van Schiphol
+
+### Verder netjes gemaakt
+- De blauwe pulserende cirkel kost veel minder rekenkracht (vooral op de Mac Mini) en staat stil op een pagina die niet in beeld is
+- In de bewerkmodus blijft geen oranje markering op de kop achter na Gereed
+- Een laat antwoord voor de vorige werkplek kan de METAR van de nieuwe werkplek niet meer rood maken
+- Zoek & Plan: het weer bij de bases wordt niet meer op de achtergrond opgehaald nadat het tabblad is gesloten
+
 ## 1.32.0
 
 ### Kop

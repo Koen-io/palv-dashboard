@@ -186,7 +186,7 @@ function zpCreate(body, w) {
   };
   ctx.put = (kind, list, id, item) => window.palv.plan.put(kind, list, id, item).then((st) => { if (st && st[list] !== undefined) { ctx.store[kind] = st; ctx.emit('store'); } return st; });
   ctx.bases = () => {
-    const own = Object.entries(ctx.store.shared.bases || {}).map(([id, b]) => ({ id, ...b }));
+    const own = Object.entries(ctx.store.shared.bases || {}).filter(([, b]) => b && !b.deleted).map(([id, b]) => ({ ...b, id }));
     const std = zpStandardBases().map((b) => { const o = own.find((x) => x.id === b.id); return o ? { ...b, ...o, standard: true } : b; });
     return [...std, ...own.filter((o) => !BASES_API.BASES[o.id])];
   };

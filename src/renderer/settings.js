@@ -3,23 +3,22 @@
 /* ============================================================
    Instellingen
    ============================================================ */
-// Another base: the header, the runway use, the radar rings, the METAR widgets of the old base and the
-// Vluchtradar centre follow at once; the choice is saved with the rest of the settings.
+// Another base (Werkplek): the header METAR, the runway use, the distance rings and the distances follow
+// at once. The maps and the METAR widgets stay exactly as they are: the Vluchtradar keeps its own centre
+// (all of the Netherlands) and the Weer page keeps its own stations. Saved with the other settings.
 function applyBase(id) {
   const old = activeBase();
   const next = BASES_API.baseOf(id);
   if (!next || next.id === old.id) return;
   state.settings.base = next.id;
-  for (const p of state.pages) for (const w of p.widgets) {
-    if (w.type === 'metar' && String(w.cfg.icao || '').toUpperCase() === old.icao) { w.cfg.icao = next.icao; if (!w.title || w.title === old.station || w.title === old.airport) w.title = next.station; }
-    if (w.type === 'runway' && (!w.title || /^Baangebruik/.test(w.title))) w.title = `Baangebruik ${next.name === 'Schiphol-Oost' ? 'Schiphol' : next.name}`;
-    if (w.type === 'radar') { w.cfg.lat = next.field.lat; w.cfg.lon = next.field.lon; }
-  }
+  // Only the automatic title of the runway widget follows (it shows this base's runways); an own title stays.
+  const auto = (b) => `Baangebruik ${b.id === 'eham' ? 'Schiphol' : b.name}`;
+  for (const p of state.pages) for (const w of p.widgets) if (w.type === 'runway' && (!w.title || w.title === auto(old))) w.title = auto(next);
   save();
   eham.metar = null; eham.live = null; eham.history.length = 0;
   refreshMetar();
   renderEham();
-  remountType('metar'); remountType('runway'); remountType('radar'); remountType('fleet');
+  remountType('runway'); remountType('fleet'); // the Vluchtradar draws its rings around the base every second; its map stays put
   if (typeof refreshRunways === 'function') refreshRunways();
   // Zoek & Plan puts the new base first; the theme (automatic at sunrise and sunset) follows the field.
   if (typeof ZP_LIVE !== 'undefined') for (const ctx of ZP_LIVE) { try { ctx.emit('store'); ctx.cv.request(); } catch { /* one tab */ } }
@@ -44,7 +43,7 @@ function openSettings(startTab) {
         const paintAuto = () => {
           autoBox.replaceChildren();
           if (s.theme !== 'auto') return;
-          const { rise, set } = ASTRO.sunTimes(new Date(), activeBase().field.lat, activeBase().field.lon);
+          const { rise, set } = ASTRO.sunTimes(new Date(), 52.31, 4.76);
           const hm = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
           const times = h('div', { class: 'row' },
             field('Licht vanaf', h('input', { class: 'input', type: 'time', value: s.lightFrom, onchange: changed((e) => { s.lightFrom = e.target.value; applyTheme(true); }) })),
@@ -53,7 +52,7 @@ function openSettings(startTab) {
           autoBox.append(
             h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Automatisch schakelen op basis van'),
               segmented([{ value: 'sun', label: 'Zonsopkomst en -ondergang' }, { value: 'times', label: 'Vaste tijden' }], s.autoMode, changed((v) => { s.autoMode = v; times.style.display = v === 'times' ? '' : 'none'; applyTheme(true); })),
-              h('div', { class: 'hint' }, `Vandaag: zon op ${hm(rise)}, zon onder ${hm(set)} (${activeBase().name}). De overgang verloopt met een vloeiende fade.`)),
+              h('div', { class: 'hint' }, `Vandaag: zon op ${hm(rise)}, zon onder ${hm(set)} (Schiphol). De overgang verloopt met een vloeiende fade.`)),
             times
           );
         };
@@ -89,7 +88,7 @@ function openSettings(startTab) {
         paintInfo();
         return [
           h('h3', {}, 'Vanaf welke basis draait dit dashboard?'),
-          h('p', {}, 'De basis bepaalt het luchtvaartweer in de kop (METAR en BOM-toets van het veld), het baangebruik, de afstandsringen en de afstanden in meldingen, de eerste basis in Zoek & Plan en het referentiepunt van Offshore. De METAR-widgets van de oude basis op de pagina Weer wisselen mee naar de nieuwe.'),
+          h('p', {}, 'De basis bepaalt het luchtvaartweer in de kop (METAR en BOM-toets van het veld), het baangebruik, de afstandsringen en de afstanden in meldingen, de eerste basis in Zoek & Plan en het referentiepunt van Offshore. Kaarten en de METAR-widgets op de pagina Weer blijven zoals ze staan. Ook te kiezen met Werkplek rechts in de tabbladbalk.'),
           h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Basis'),
             segmented(BASES_API.ORDER.map((id) => ({ value: id, label: BASES_API.BASES[id].long.replace(/^Steunpunt /, ''), icon: 'target' })), cur.id, (v) => { applyBase(v); paintInfo(); })),
           h('hr'),
@@ -407,7 +406,9 @@ function openSettings(startTab) {
             h('button', { class: 'btn danger', disabled: !d, title: 'Dit document verwijderen, ook op de andere schermen', onclick: () => confirmDialog('Document verwijderen', `${m.name} "${d.name}" verwijderen, ook op de andere schermen?`, 'Verwijderen', () => window.palv.docs.remove(slot)) }, icon('trash')));
         }));
         paint();
-        const unsub = OPS.on('private', () => { if (!box.isConnected) return unsub(); paint(); });
+        const unsub = OPS.on('private', () => { if (box.isConnected) paint(); });
+        // The dialog closes without telling its tabs: the listener checks a few times a minute whether it is still needed.
+        const gone = setInterval(() => { if (!box.isConnected) { unsub(); clearInterval(gone); } }, 15000);
         return [
           h('h3', {}, 'Documenten van het tabblad (De)Briefing'),
           h('p', {}, 'Wat onder Briefing en Debriefing staat. Kiezen en verwijderen kan alleen hier, niet op het tabblad zelf. Een document gaat vanzelf naar alle schermen van de eenheid en staat nooit in de openbare code.'),
