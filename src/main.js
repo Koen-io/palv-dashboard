@@ -18,6 +18,9 @@ require('./main/tiles');
 
 const { BROWSER: UA, APP: APP_UA } = require('./ua');
 const WEB_PARTITION = 'persist:palv-web';
+// The Browser widget (MadeSmart and other secure web environments): its own session, apart from the
+// embedded sites, so its sign-in and cookies are never shared with them.
+const BROWSER_PARTITION = 'persist:palv-browser';
 const isMac = process.platform === 'darwin';
 const pkg = require('../package.json');
 // Where the updates come from; also when a build left it out of its package.json.
@@ -264,15 +267,79 @@ app.on('web-contents-created', (_e, contents) => {
     delete webPreferences.preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
-    params.partition = WEB_PARTITION;
+    params.partition = params.partition === BROWSER_PARTITION ? BROWSER_PARTITION : WEB_PARTITION;
   });
   // Dempen: a page embedded later stays silent too.
   if (muted) contents.setAudioMuted(true);
-  if (contents.getType() === 'webview') {
-    contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    watchdog.guardWebview(contents);
+  if (contents.getType() === 'webview' || contents.getType() === 'window') {
+    // The Browser: a site may open its own windows (a document, a report, a sign-in) in the same
+    // session; everything else embedded opens nothing.
+    if (browserSession && contents.session === browserSession) browserContents(contents);
+    else if (contents.getType() === 'webview') contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    if (contents.getType() === 'webview') watchdog.guardWebview(contents);
   }
 });
+
+/* ---------- the Browser widget ---------- */
+let browserSession = null;
+const browserDownloads = new Set();
+function browserContents(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (!/^(https?:|blob:|about:blank)/i.test(url)) return { action: 'deny' };
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: 1200, height: 860, parent: win || undefined, autoHideMenuBar: true, backgroundColor: '#ffffff',
+        icon: path.join(__dirname, '..', 'build', 'icon.png'),
+        webPreferences: { partition: BROWSER_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
+      },
+    };
+  });
+  // Right-click: the usual browser menu (copy, paste, links), in Dutch.
+  contents.on('context-menu', (_e, p) => {
+    const items = [];
+    if (p.linkURL && /^https?:/i.test(p.linkURL)) items.push({ label: 'Link kopiëren', click: () => require('electron').clipboard.writeText(p.linkURL) }, { type: 'separator' });
+    if (p.isEditable) items.push({ label: 'Knippen', role: 'cut', enabled: p.editFlags.canCut }, { label: 'Kopiëren', role: 'copy', enabled: p.editFlags.canCopy }, { label: 'Plakken', role: 'paste', enabled: p.editFlags.canPaste }, { type: 'separator' }, { label: 'Alles selecteren', role: 'selectAll' });
+    else if (p.selectionText) items.push({ label: 'Kopiëren', role: 'copy' });
+    if (!p.isEditable) {
+      if (items.length) items.push({ type: 'separator' });
+      const nav = contents.navigationHistory;
+      items.push(
+        { label: 'Terug', enabled: nav ? nav.canGoBack() : contents.canGoBack(), click: () => (nav ? nav.goBack() : contents.goBack()) },
+        { label: 'Vooruit', enabled: nav ? nav.canGoForward() : contents.canGoForward(), click: () => (nav ? nav.goForward() : contents.goForward()) },
+        { label: 'Vernieuwen', click: () => contents.reload() },
+      );
+      if (p.mediaType === 'image' && p.srcURL) items.push({ type: 'separator' }, { label: 'Afbeelding kopiëren', click: () => contents.copyImageAt(p.x, p.y) });
+    }
+    Menu.buildFromTemplate(items).popup();
+  });
+}
+function setupBrowserSession() {
+  browserSession = session.fromPartition(BROWSER_PARTITION);
+  browserSession.setUserAgent(UA);
+  browserSession.setSpellCheckerEnabled(false);
+  // Copying from the site and full screen (a map, a video); no camera, microphone, location or notifications.
+  const allowed = new Set(['fullscreen', 'clipboard-sanitized-write', 'clipboard-read']);
+  browserSession.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)));
+  browserSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  // Downloads go straight to the Downloads folder (never a dialog behind a full-screen dashboard).
+  browserSession.on('will-download', (_e, item) => {
+    const dir = app.getPath('downloads');
+    const base = [...(item.getFilename() || 'download')].map((c) => (c.charCodeAt(0) < 32 || '<>:"/\\|?*'.includes(c) ? '_' : c)).join('');
+    const ext = path.extname(base), stem = path.basename(base, ext);
+    let file = path.join(dir, base);
+    for (let n = 1; fs.existsSync(file); n += 1) file = path.join(dir, `${stem} (${n})${ext}`);
+    item.setSavePath(file);
+    send('browser:download', { name: path.basename(file), state: 'started' });
+    item.once('done', (_ev, state) => {
+      if (state === 'completed') browserDownloads.add(file);
+      log[state === 'completed' ? 'info' : 'warn']('browser', `download ${state === 'completed' ? 'opgeslagen' : state}: ${path.basename(file)}`);
+      send('browser:download', { name: path.basename(file), path: state === 'completed' ? file : null, state });
+    });
+  });
+}
+// Only files this browser downloaded itself are shown.
+ipcMain.handle('browser:showDownload', (_e, file) => { if (browserDownloads.has(file)) shell.showItemInFolder(file); });
 
 app.on('second-instance', () => {
   if (!win) return;
@@ -284,6 +351,7 @@ app.whenReady().then(() => {
   const webSession = session.fromPartition(WEB_PARTITION);
   webSession.setUserAgent(UA);
   webSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'fullscreen'));
+  setupBrowserSession();
 
   // OpenStreetMap asks programs that use its tiles to say they are one (not a browser): the neutral name
   // of ua.js, which does not tell who is asking.
@@ -411,6 +479,27 @@ ipcMain.handle('app:setAutoStart', (_e, on) => {
   return app.getLoginItemSettings().openAtLogin;
 });
 ipcMain.handle('app:version', () => app.getVersion());
+
+// The lock in the title bar: Windows locks the workstation (as Windows+L), after which the sign-in
+// screen asks for the password or PIN. Confirmed by Windows itself (the lock-screen event); without
+// it the answer is false and the dashboard says so. Not on the Mac, where the button is not shown.
+ipcMain.handle('app:lockScreen', () => new Promise((resolve) => {
+  if (process.platform !== 'win32') return resolve({ ok: false, reason: 'unsupported' });
+  let done = false;
+  const finish = (ok, reason) => {
+    if (done) return;
+    done = true;
+    powerMonitor.removeListener('lock-screen', onLock);
+    clearTimeout(timer);
+    log[ok ? 'info' : 'warn']('app', ok ? 'pc vergrendeld vanaf het dashboard' : `vergrendelen mislukt: ${reason}`);
+    resolve({ ok, reason });
+  };
+  const onLock = () => finish(true);
+  powerMonitor.on('lock-screen', onLock);
+  const timer = setTimeout(() => finish(false, 'Windows meldde geen vergrendeling'), 5000);
+  const rundll = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'rundll32.exe');
+  require('child_process').execFile(rundll, ['user32.dll,LockWorkStation'], { windowsHide: true, timeout: 5000 }, (err) => { if (err) finish(false, err.message); });
+}));
 ipcMain.handle('app:keepAwake', (_e, on) => watchdog.keepAwake(!!on && !shotPath));
 ipcMain.handle('app:health', () => ({ ...watchdog.stats, awake: watchdog.awake() }));
 ipcMain.handle('app:openLogs', () => shell.openPath(log.dir()));

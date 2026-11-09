@@ -70,6 +70,7 @@ async function boot() {
 
   renderTitlebar();
   window.palv.app.version().then((v) => { $('#tb-version').textContent = 'v' + v; });
+  renderLockButton();
   renderClocks();
   renderUdp();
   renderMoon();

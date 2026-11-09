@@ -62,11 +62,23 @@ test('merge: per item wint de nieuwste, ook voor de nieuwe soorten', () => {
 test('migratie 9: de vijf nieuwe tabbladen achter de bestaande, elk één keer', () => {
   const model = require('../src/renderer/model.js');
   const st = model.normalize({ version: 8, pages: [{ id: 'a', name: 'Operationeel', widgets: [] }, { id: 'b', name: 'Mijn timers', widgets: [{ id: 'w', type: 'timings', x: 0, y: 0, w: 48, h: 54, z: 1, cfg: {} }] }] });
-  assert.deepStrictEqual(st.pages.map((p) => p.name), ['Operationeel', 'Mijn timers', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing']);
-  assert.strictEqual(st.version, 9);
+  assert.deepStrictEqual(st.pages.map((p) => p.name), ['Operationeel', 'Mijn timers', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing', 'MadeSmart']);
+  assert.strictEqual(st.version, model.VERSION);
   assert.strictEqual(st.settings.timings.warnMin, 5);
   const again = model.normalize(JSON.parse(JSON.stringify(st)));
-  assert.strictEqual(again.pages.length, 6, 'een tweede keer verandert niets');
+  assert.strictEqual(again.pages.length, 7, 'een tweede keer verandert niets');
   const def = model.defaultState();
-  assert.deepStrictEqual(def.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing']);
+  assert.deepStrictEqual(def.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing', 'MadeSmart']);
+});
+
+test('migratie 10: het tabblad MadeSmart komt er één keer bij, achteraan, en blijft weg als het is weggehaald', () => {
+  const model = require('../src/renderer/model.js');
+  const st = model.normalize({ version: 9, pages: [{ id: 'a', name: 'Weer', widgets: [] }, { id: 'b', name: 'Operationeel', widgets: [] }] });
+  assert.deepStrictEqual(st.pages.map((p) => p.name), ['Weer', 'Operationeel', 'MadeSmart'], 'eigen volgorde blijft, MadeSmart achteraan');
+  const w = st.pages[2].widgets[0];
+  assert.deepStrictEqual([w.type, w.title, w.cfg.home, w.x, w.y, w.w, w.h], ['browser', 'MadeSmart', 'https://tracker.madesmart.nl/', 0, 0, model.COLS, model.ROWS]);
+  st.pages.pop();
+  assert.strictEqual(model.normalize(JSON.parse(JSON.stringify(st))).pages.length, 2, 'weggehaald blijft weg');
+  const has = model.normalize({ version: 9, pages: [{ id: 'a', name: 'Eigen', widgets: [{ id: 'w', type: 'browser', x: 0, y: 0, w: 96, h: 54, z: 1, cfg: {} }] }] });
+  assert.strictEqual(has.pages.length, 1, 'al een browser: geen tweede');
 });

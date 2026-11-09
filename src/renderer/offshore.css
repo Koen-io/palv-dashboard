@@ -84,3 +84,38 @@ body.touch .db-seg button { height: 2.7rem; }
 .db-set-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
 .db-set-txt b { font-size: 0.92rem; }
 .db-set-txt small { font-size: 0.74rem; color: var(--muted); }
+
+/* ---------- Browser (MadeSmart): the controls of an ordinary browser above the site ---------- */
+.br { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.br-bar { position: relative; flex: none; display: flex; align-items: center; gap: 0.55rem; height: 2.9rem; padding: 0 0.6rem; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.br-title { display: inline-flex; align-items: center; gap: 0.45rem; font: 700 0.86rem var(--font-display); letter-spacing: 0.14em; color: var(--accent); white-space: nowrap; margin-right: 0.2rem; }
+.br-title svg { width: 1.05rem; height: 1.05rem; }
+.br-nav, .br-zoom { display: flex; align-items: center; gap: 0.15rem; flex: none; }
+.br-btn { display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border: 0; border-radius: 0.5rem; background: transparent; color: var(--text); cursor: pointer; transition: background 0.12s, color 0.12s; }
+.br-btn svg { width: 1.1rem; height: 1.1rem; }
+.br-btn:hover:not(:disabled) { background: var(--surface-3); }
+.br-btn:disabled { opacity: 0.32; cursor: default; }
+.br-addrbox { flex: 1; min-width: 8rem; display: flex; align-items: center; gap: 0.45rem; height: 2.15rem; padding: 0 0.8rem 0 0.7rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); cursor: text; transition: border-color 0.15s, box-shadow 0.15s; }
+.br-addrbox:focus-within { border-color: var(--owl-300, #6fa0dc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--owl-300, #6fa0dc) 25%, transparent); }
+.br-pad { display: grid; place-items: center; flex: none; }
+.br-pad svg { width: 0.95rem; height: 0.95rem; }
+.br-pad.ok { color: #3ecf6e; }
+.br-pad.warn { color: var(--amber); }
+.br-addr { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: 0.86rem var(--font-ui); }
+.br-zoomtxt { min-width: 3.1rem; height: 1.8rem; border: 0; border-radius: 0.4rem; background: transparent; color: var(--muted); font: 600 0.78rem var(--font-ui); font-variant-numeric: tabular-nums; cursor: pointer; }
+.br-zoomtxt.off { color: var(--accent); }
+.br-zoomtxt:hover { background: var(--surface-3); }
+.br-dl { display: flex; align-items: center; gap: 0.4rem; max-width: 15rem; height: 2rem; padding: 0 0.75rem 0 0.6rem; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--text); font: 600 0.76rem var(--font-ui); cursor: pointer; }
+.br-dl[hidden] { display: none; }
+.br-dl span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-dl svg { width: 0.95rem; height: 0.95rem; flex: none; }
+.br-dl.completed svg { color: #3ecf6e; }
+.br-dl.started svg { color: var(--accent); animation: br-pulse 1.2s ease-in-out infinite; }
+@keyframes br-pulse { 50% { opacity: 0.35; } }
+.br-dl.cancelled svg, .br-dl.interrupted svg { color: #ff6b62; }
+.br-dl:hover { border-color: var(--accent); }
+.br-progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--accent); opacity: 0; }
+.br.loading .br-progress { opacity: 1; animation: br-load 1.6s ease-out infinite; }
+@keyframes br-load { 0% { width: 0; left: 0; } 60% { width: 70%; left: 10%; } 100% { width: 0; left: 100%; } }
+.br-stage { position: relative; flex: 1; min-height: 0; background: #fff; }
+.br-stage webview { position: absolute; inset: 0; width: 100%; height: 100%; }

@@ -210,6 +210,19 @@ body.editing .tab.active .tab-tool { display: block; }
 .tab-add { width: 2.05rem; padding: 0; justify-content: center; color: #5f7391; }
 .tab-add svg { width: 1rem; height: 1rem; }
 body.editing .tab-add { color: var(--amber); }
+/* Dragging the tabs into another order (edit mode): a grip, the others glide aside, the tab follows. */
+.tab .tab-grip { display: none; margin: 0 -0.15rem 0 -0.45rem; color: #5f7391; }
+.tab .tab-grip svg { width: 0.85rem; height: 0.85rem; fill: currentColor; stroke: none; }
+body.editing .tab:not(.tab-add) { cursor: grab; touch-action: none; user-select: none; }
+body.editing .tab:not(.tab-add):not(.active) { border-color: color-mix(in srgb, var(--amber) 28%, transparent); border-style: dashed; }
+body.editing .tab .tab-grip { display: flex; }
+body.editing .tab:hover .tab-grip { color: var(--amber); }
+#page-tabs.tab-sorting .tab:not(.tab-dragging) { transition: transform 0.18s cubic-bezier(.2, .8, .2, 1), background-color 0.15s, color 0.15s; }
+#page-tabs.tab-sorting, #page-tabs.tab-sorting .tab { cursor: grabbing; }
+.tab.tab-dragging { z-index: 5; cursor: grabbing; background: #16233a; color: #fff; border: 1px solid var(--amber) !important; border-radius: var(--radius-sm); box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.45), 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); transition: box-shadow 0.15s; }
+.tab.tab-dragging .tab-grip { color: var(--amber); }
+.tab.tab-dropped { animation: tab-drop 0.45s ease; }
+@keyframes tab-drop { 0% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 45%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* Warning at the right of the tab bar: sources that have stopped delivering */
 #health {
@@ -238,6 +251,17 @@ body.editing .tab-add { color: var(--amber); }
 .hd-title { display: flex; flex-direction: column; gap: 0.12rem; padding-left: 0.6rem; border-left: 1px solid #2e4466; }
 .hd-sub { font-size: 0.6rem; font-weight: 600; letter-spacing: 0.22em; color: var(--silver); white-space: nowrap; }
 .hd-motto { font-size: 0.54rem; letter-spacing: 0.3em; color: var(--amber); white-space: nowrap; }
+.hd-lock {
+  display: grid; place-items: center; width: 2.1rem; height: 2.1rem; margin-left: 0.35rem; padding: 0; flex: none;
+  border: 1px solid #2e4466; border-radius: 50%; background: rgba(255, 255, 255, 0.04); color: var(--silver); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.hd-lock[hidden] { display: none; }
+.hd-lock svg { width: 1.05rem; height: 1.05rem; }
+.hd-lock:hover, .hd-lock:focus-visible { background: color-mix(in srgb, var(--amber) 14%, transparent); border-color: color-mix(in srgb, var(--amber) 65%, transparent); color: var(--amber-soft); }
+.hd-lock.locking { background: var(--amber); border-color: var(--amber); color: #1a1200; box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 25%, transparent); }
+.hd-lock.locking svg { animation: hd-lock-shut 0.28s ease; }
+@keyframes hd-lock-shut { 0% { transform: translateY(-2px); } 60% { transform: translateY(1px); } 100% { transform: none; } }
 
 /* Middle column: the UDP and moon strips, filling the space between the clocks and the METAR. */
 .hd-time { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }

@@ -14,7 +14,7 @@
   // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
   // same area stays in view on any screen resolution and in any window size.
   const REF_W = 939, REF_H = 1041;
-  const VERSION = 9;
+  const VERSION = 10;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -33,6 +33,8 @@
     adsb: { name: 'ADS-B Exchange (website)', defaults: { mode: 'all', lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, sidebar: false, trails: true, labels: false } },
     windy: { name: 'Windy weerradar', defaults: { overlay: 'radar', lat: 52.1487, lon: 5.3025, zoom: 8.353, refH: REF_H, autoplay: true } },
     web: { name: 'Website', defaults: { url: 'https://www.knmi.nl/nederland-nu/luchtvaart', refreshMin: 0 } },
+    // 1.34: a browser with its own sign-in session, for MadeSmart.
+    browser: { name: 'Browser', defaults: { home: 'https://tracker.madesmart.nl/', zoom: 1 } },
     tile: { name: 'App-tegel', defaults: { kind: 'app', target: '', args: '', icon: null } },
     metar: { name: 'METAR / TAF', defaults: { icao: 'EHAM' } },
     runway: { name: 'Baangebruik', defaults: {} },
@@ -135,6 +137,7 @@
         { id: uid(), name: 'Whiteboard', widgets: [widget('whiteboard', 0, 0, 96, 54, 1)] },
         { id: uid(), name: 'Offshore', widgets: [widget('offshore', 0, 0, 96, 54, 1)] },
         { id: uid(), name: '(De)Briefing', widgets: [widget('debrief', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'MadeSmart', widgets: [widget('browser', 0, 0, 96, 54, 1, { title: 'MadeSmart' })] },
       ],
     };
   }
@@ -186,6 +189,7 @@
     if (from < 6) migrateV6(loaded);
     if (from < 8) migrateV8(loaded);
     if (from < 9) migrateV9(loaded);
+    if (from < 10) migrateV10(loaded);
     loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
     return loaded;
   }
@@ -283,6 +287,12 @@
       if (st.pages.some((p) => p.widgets.some((w) => w.type === type))) continue;
       st.pages.push({ id: uid(), name, widgets: [{ id: uid(), type, x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META[type].name, cfg: JSON.parse(JSON.stringify(WIDGET_META[type].defaults)) }] });
     }
+  }
+
+  // 1.34: the MadeSmart tab, last in the row; a screen that removes it afterwards keeps it removed.
+  function migrateV10(st) {
+    if (st.pages.some((p) => p.widgets.some((w) => w.type === 'browser'))) return;
+    st.pages.push({ id: uid(), name: 'MadeSmart', widgets: [{ id: uid(), type: 'browser', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: 'MadeSmart', cfg: JSON.parse(JSON.stringify(WIDGET_META.browser.defaults)) }] });
   }
 
   return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_BRIEFINGS, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };

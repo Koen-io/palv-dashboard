@@ -6,6 +6,7 @@
    ============================================================ */
 
 const WEB_PARTITION = 'persist:palv-web';
+const BROWSER_PARTITION = 'persist:palv-browser';
 // The same dashboard runs on Windows and macOS; only the wording of keys and paths differs.
 const IS_MAC = window.palv.platform === 'darwin';
 const MOD = IS_MAC ? '⌘' : 'Ctrl+';
@@ -81,6 +82,9 @@ const ICONS = {
   history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7.5V12l3 2"/>',
   volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11"/>',
   volumeOff: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+  home: '<path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h4.5v-5.5h3V20H18V9.5"/>',
+  grip: '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
+  eyeOff:'<path d="M10.6 5.6A9.7 9.7 0 0 1 12 5.5c5.5 0 9 6.5 9 6.5a16 16 0 0 1-2.4 3.2M6.6 7.1C4.1 8.7 3 12 3 12s3.5 6.5 9 6.5a9 9 0 0 0 4.6-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/>',
   keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M7.5 14h9"/>',
   keyboardDown: '<rect x="3" y="3" width="18" height="11" rx="2"/><path d="M7 7h.01M10.5 7h.01M14 7h.01M17 7h.01M8 10.5h8M9 18l3 3 3-3"/>',
   touch: '<path d="M9 11.5V5a1.6 1.6 0 0 1 3.2 0v6"/><path d="M12.2 10.5V9a1.6 1.6 0 0 1 3.2 0v2"/><path d="M15.4 10.5a1.6 1.6 0 0 1 3.2 0v4.2A6.3 6.3 0 0 1 12.3 21h-.8a6.3 6.3 0 0 1-4.9-2.4L3.9 15a1.6 1.6 0 0 1 2.4-2.1L9 15.5"/>',
@@ -199,6 +203,31 @@ function confirmDialog(title, text, yesLabel, onYes) {
     body: h('p', { style: 'margin:0;line-height:1.5' }, text),
     actions: [{ label: 'Annuleren' }, { label: yesLabel, danger: true, onClick: onYes }],
   });
+}
+
+// The quiet options of an alert, inside the alert itself: the sound off (the alert stays) and hiding it
+// for good, with the question in the same place. `bar` gives the small form for the alert bar.
+// Returns the element; `el.paint(muted)` follows a change made elsewhere (another screen).
+function alertQuiet({ muted, onMute, onHide, bar = false }) {
+  const el = h('div', { class: 'al-quiet' + (bar ? ' bar' : '') });
+  const B = (cls, onclick, ic, label, title) => h('button', { class: bar ? 'em-btn ghost' + (cls ? ' ' + cls : '') : 'al-btn' + (cls ? ' ' + cls : ''), title: title || null, onclick: (e) => { e.stopPropagation(); onclick(); } }, ic ? icon(ic) : null, label);
+  const normal = () => {
+    el.classList.remove('asking');
+    el.replaceChildren(
+      onMute ? B(muted ? 'on' : '', () => { muted = !muted; onMute(muted); normal(); }, muted ? 'volumeOff' : 'volume', muted ? 'Geluid aan' : 'Geluid uit', muted ? 'Het geluid van deze melding weer aanzetten' : 'Alleen het geluid van deze melding uitzetten; de melding blijft staan') : null,
+      B('', ask, 'eyeOff', 'Verbergen', 'Deze melding definitief verbergen, zonder geluid'));
+  };
+  const ask = () => {
+    el.classList.add('asking');
+    const no = B('', normal, null, 'Annuleren');
+    el.replaceChildren(
+      h('span', { class: 'al-ask' }, icon('eyeOff'), 'Weet je zeker dat je deze melding definitief wilt verbergen?'),
+      h('span', { class: 'al-ask-btns' }, no, B('yes', () => onHide(), 'check', 'Ja')));
+    no.focus();
+  };
+  el.paint = (m) => { if (m === muted || el.classList.contains('asking')) return; muted = m; normal(); };
+  normal();
+  return el;
 }
 
 const field = (label, input, hint) => h('div', { class: 'field' }, h('label', {}, label), input, hint ? h('div', { class: 'hint' }, hint) : null);

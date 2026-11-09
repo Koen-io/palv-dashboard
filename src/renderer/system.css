@@ -328,3 +328,32 @@ body.oled.oled-night #oled-veil { opacity: 0.04; }
   body.bf-warn #bf-glow, body.bf-alert #bf-glow, .bf-card { animation: none !important; }
   .up-orbit, .up-logo img, .fresh.ok .fr-dot::after, .sc-card.ok .sc-pulse::after { animation: none !important; }
 }
+
+/* ---------- the quiet options inside an alert: sound off, hide for good ---------- */
+/* Under the main button of a pop-up, set apart by a hairline; the question takes their place. */
+.al-quiet { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.45rem; margin-top: 1.1rem; padding-top: 0.95rem; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.al-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; height: 2rem; padding: 0 0.9rem; border-radius: 99px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit;
+  font: 600 0.8rem var(--font-ui); opacity: 0.78; transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+}
+.al-btn svg { width: 1rem; height: 1rem; }
+.al-btn:hover, .al-btn:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 9%, transparent); }
+.al-btn.on { opacity: 1; color: var(--amber); border-color: color-mix(in srgb, var(--amber) 55%, transparent); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.al-btn.yes { opacity: 1; background: #d93a33; border-color: #d93a33; color: #fff; }
+.al-btn.yes:hover { background: #ec4a42; }
+.al-quiet.asking { flex-direction: column; align-items: center; gap: 0.7rem; padding: 0.9rem 1rem; border: 1px solid rgba(255, 75, 64, 0.45); border-radius: 0.75rem; background: rgba(255, 64, 52, 0.09); animation: fade 0.15s ease; }
+.al-ask { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; font-weight: 600; line-height: 1.35; }
+.al-ask { text-align: center; text-wrap: balance; }
+.al-quiet:not(.bar) .al-ask svg { display: none; }
+.al-quiet.bar .al-ask svg { width: 1rem; height: 1rem; flex: none; }
+.al-ask-btns { display: flex; gap: 0.5rem; }
+.al-ask-btns .al-btn { height: 2.3rem; padding: 0 1.2rem; font-size: 0.86rem; }
+/* In the alert bar: small, in line with the other buttons. */
+.al-quiet.bar { flex: none; flex-wrap: nowrap; margin: 0; padding: 0; border: 0; gap: 0.4rem; }
+.al-quiet.bar.asking { flex-direction: row; gap: 0.6rem; padding: 0.2rem 0.25rem 0.2rem 0.8rem; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 99px; background: rgba(0, 0, 0, 0.2); }
+.al-quiet.bar .al-ask { font-size: 0.78rem; }
+.al-quiet.bar .al-ask svg { color: #fff; }
+.al-quiet.bar .al-ask-btns { gap: 0.35rem; }
+.em-btn.on { background: rgba(255, 255, 255, 0.2); }
+.em-btn.yes { background: #fff; color: #9c1c16; }

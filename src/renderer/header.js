@@ -61,6 +61,34 @@ function renderTitlebar() {
   );
 }
 
+/* ---------- de pc vergrendelen ---------- */
+// The lock beside the name in the header (always in sight, also full screen): one click when you walk away, and Windows asks for the
+// password or PIN again (as Windows+L). Only on Windows; on the Mac it is not shown.
+function renderLockButton() {
+  const btn = $('#hd-lock');
+  if (!btn || window.palv.platform !== 'win32') return;
+  const idle = () => {
+    btn.classList.remove('locking');
+    btn.disabled = false;
+    btn.replaceChildren(icon('unlock'));
+  };
+  btn.title = 'Pc vergrendelen (Windows+L): daarna is het wachtwoord of de pincode nodig. Het dashboard blijft gewoon doorlopen.';
+  btn.setAttribute('aria-label', 'Pc vergrendelen');
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add('locking');
+    btn.replaceChildren(icon('lock'));
+    // A beat for the shackle to close, then Windows locks.
+    await new Promise((r) => setTimeout(r, 280));
+    const res = await window.palv.app.lockScreen().catch((e) => ({ ok: false, reason: String(e && e.message) }));
+    if (!res || !res.ok) toast('Vergrendelen lukte niet. Gebruik Windows+L.', true);
+    setTimeout(idle, res && res.ok ? 1500 : 0);
+  };
+  idle();
+  btn.hidden = false;
+}
+
 /* ---------- dempen ---------- */
 // One switch for every sound of this screen: the emergency chime, the briefing sound and the embedded pages.
 // The pop-ups, the glow and the red alert bar stay; only the sound goes. Kept with the other settings.
@@ -111,7 +139,13 @@ function renderTabs() {
     nav.append(
       h(
         'button',
-        { class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), title: i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name, onclick: () => setPage(i), ondblclick: () => renamePage(i) },
+        {
+          class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), 'data-i': i,
+          title: editing ? `${p.name}: slepen om te verplaatsen` : i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name,
+          onclick: () => { if (tabDrag.justDropped) return; setPage(i); }, ondblclick: () => renamePage(i),
+          onpointerdown: (e) => tabDragStart(e, i),
+        },
+        h('span', { class: 'tab-grip', 'aria-hidden': 'true' }, icon('grip')),
         p.name,
         // A page with the Timings tab shows the nearest running timer in its tab; nothing when none runs.
         typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,
@@ -121,6 +155,71 @@ function renderTabs() {
     );
   });
   nav.append(h('button', { class: 'tab tab-add', title: 'Pagina toevoegen', 'aria-label': 'Pagina toevoegen', onclick: addPage }, icon('plus')));
+}
+
+// In the edit mode the tabs can be dragged into another order, with the mouse or a finger. The others
+// make room as the tab passes them; on release the order is saved in this screen's own layout.
+const tabDrag = { justDropped: false };
+function tabDragStart(e, from) {
+  if (!editing || e.button !== 0 || e.target.closest('.tab-tool')) return;
+  const tab = e.currentTarget;
+  const nav = $('#page-tabs');
+  const tabs = [...nav.querySelectorAll('.tab:not(.tab-add)')];
+  const x0 = e.clientX;
+  let started = false, to = from, rects = null, width = 0;
+  const move = (ev) => {
+    const dx = ev.clientX - x0;
+    if (!started) {
+      if (Math.abs(dx) < 6) return;
+      started = true;
+      rects = tabs.map((t) => t.getBoundingClientRect());
+      const gap = tabs.length > 1 ? Math.max(0, rects[Math.min(1, tabs.length - 1)].left - rects[0].right) : 0;
+      width = rects[from].width + gap;
+      nav.classList.add('tab-sorting');
+      tab.classList.add('tab-dragging');
+      try { tab.setPointerCapture(ev.pointerId); } catch { /* already gone */ }
+    }
+    // Kept within the row of tabs.
+    const lo = rects[0].left - rects[from].left, hi = rects[rects.length - 1].right - rects[from].right;
+    const d = clamp(dx, lo, hi);
+    tab.style.transform = `translateX(${d}px)`;
+    const mid = rects[from].left + rects[from].width / 2 + d;
+    to = from;
+    rects.forEach((r, j) => {
+      const c = r.left + r.width / 2;
+      if (j < from && mid < c) to = Math.min(to, j);
+      if (j > from && mid > c) to = Math.max(to, j);
+    });
+    tabs.forEach((t, j) => {
+      if (j === from) return;
+      const shift = from < to && j > from && j <= to ? -width : from > to && j < from && j >= to ? width : 0;
+      t.style.transform = shift ? `translateX(${shift}px)` : '';
+    });
+  };
+  const end = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    if (!started) return;
+    // The click that follows the release is not a page change.
+    tabDrag.justDropped = true;
+    setTimeout(() => { tabDrag.justDropped = false; }, 0);
+    nav.classList.remove('tab-sorting');
+    if (to !== from) {
+      const activeId = state.pages[state.activePage].id;
+      const [p] = state.pages.splice(from, 1);
+      state.pages.splice(to, 0, p);
+      state.activePage = state.pages.findIndex((x) => x.id === activeId);
+      plog('info', `tabblad "${p.name}" verplaatst naar plek ${to + 1}`);
+      save();
+    }
+    renderTabs();
+    const moved = $('#page-tabs').querySelector(`.tab[data-i="${to}"]`);
+    if (moved) { moved.classList.add('tab-dropped'); setTimeout(() => moved.classList.remove('tab-dropped'), 450); }
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }
 
 function pageNameDialog(title, value, onOk) {

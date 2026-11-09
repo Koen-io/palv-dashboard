@@ -167,12 +167,13 @@ function setPage(i) {
 function setEditing(on) {
   editing = on;
   document.body.classList.toggle('editing', on);
+  renderTabs();
   const bar = $('#edit-bar');
   bar.hidden = !on;
   if (on) {
     bar.replaceChildren(
       h('b', {}, 'BEWERKMODUS'),
-      h('span', {}, TOUCH.on() ? 'Sleep widgets met je vinger om ze te verplaatsen, trek aan de bolletjes om de grootte te wijzigen.' : 'Sleep widgets om ze te verplaatsen, trek aan de punten om de grootte te wijzigen.'),
+      h('span', {}, TOUCH.on() ? 'Sleep widgets met je vinger om ze te verplaatsen, trek aan de bolletjes om de grootte te wijzigen. Tabbladen sleep je naar een andere plek.' : 'Sleep widgets om ze te verplaatsen, trek aan de punten om de grootte te wijzigen. Tabbladen sleep je naar een andere plek.'),
       h('button', { class: 'btn pill', onclick: openAddWidget }, icon('plus'), 'Toevoegen'),
       h('button', { class: 'btn pill primary', onclick: () => setEditing(false) }, 'Gereed')
     );

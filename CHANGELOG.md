@@ -1,5 +1,26 @@
 # Wijzigingen
 
+## 1.34.0
+
+### Nieuw tabblad MadeSmart
+- **MadeSmart Tracker in een eigen tabblad**, met de knoppen van een gewone browser: terug, vooruit, vernieuwen (of stoppen), startpagina, het adres met slotje voor een beveiligde verbinding, zoom (50 tot 200%, onthouden) en een eigen adresbalk
+- **Eigen, afgeschermde inlogsessie**: wat je bij MadeSmart inlogt staat los van alle andere ingesloten websites en blijft op dit scherm
+- Rechtsklikken geeft het gewone menu (kopiëren, plakken, link kopiëren, terug, vernieuwen); vensters die MadeSmart zelf opent (een rapport of document) openen in dezelfde sessie
+- **Downloads** gaan direct naar de map Downloads; de laatste staat rechts in de balk, een klik opent de map
+- Op bestaande schermen komt het tabblad er vanzelf bij, achteraan. Haal je het weg, dan blijft het weg; de startpagina is aan te passen via Bewerken › tandwiel
+
+### Tabbladen slepen
+- In **Bewerken** sleep je tabbladen naar een andere plek, met de muis of je vinger. De andere tabbladen schuiven opzij en de volgorde wordt bewaard. Elk scherm houdt zijn eigen volgorde
+
+### Pc vergrendelen
+- **Slotje in de kop**, rechts van P-ALV DASHBOARD: één klik als je wegloopt en Windows vergrendelt, net als Windows+L. Daarna is je wachtwoord of pincode nodig. Altijd te zien, ook in volledig scherm. Alleen op Windows, niet op de Mac
+
+### Meldingen stil of weg
+- **Elke briefing- en timingmelding** heeft onderin twee knoppen: **Geluid uit** (de melding blijft, zonder geluid) en **Verbergen**. Verbergen vraagt in de melding zelf "Weet je zeker dat je deze melding definitief wilt verbergen?" met Ja of Annuleren
+- Briefings (OPCO en Flight Ops): het geldt voor die briefing op die dag, op dit scherm. Na verbergen geen pop-up, rand of geluid meer; morgen komt hij gewoon weer
+- Timings: het geldt op alle schermen. Een verborgen timer loopt door zonder melding of geluid. Terugzetten kan in de timer zelf, bij Meldingen (Normaal, Geluid uit of Verborgen)
+- Ook in de rode en oranje timingbalk bovenaan
+
 ## 1.33.0
 
 ### Privacy: wat het dashboard naar buiten stuurt
