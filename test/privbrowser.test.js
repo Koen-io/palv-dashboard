@@ -2,7 +2,7 @@
 // never opened, https only, Tor's settings and log, and the tab in the layout (Windows yes, Mac no).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const core = require('../src/browser-core');
+const core = require('../src/privbrowser-core');
 const model = require('../src/renderer/model');
 
 test('adresbalk: adressen worden geopend, de rest wordt gezocht', () => {
@@ -71,23 +71,25 @@ test('Tor: voortgang, poort en waarschuwingen uit het logboek', () => {
   assert.equal(core.torLine('Nov 09 15:07:44.682 [notice] Tor 0.4.9 opening log file.'), null);
 });
 
-test('tabblad Browser: op Windows erbij, op de Mac niet', () => {
-  const win = model.defaultState({ browser: true });
+test('tabblad Browser: op Windows erbij naast MadeSmart, op de Mac niet', () => {
+  const win = model.defaultState({ privbrowser: true });
   assert.equal(win.pages.at(-1).name, 'Browser');
-  assert.equal(win.pages.at(-1).widgets[0].type, 'browser');
-  assert.ok(!model.defaultState({ browser: false }).pages.some((p) => p.name === 'Browser'));
+  assert.equal(win.pages.at(-1).widgets[0].type, 'privbrowser');
+  assert.ok(!model.defaultState({ privbrowser: false }).pages.some((p) => p.name === 'Browser'));
 
-  // An older layout (version 9) gets the tab on Windows, once.
-  const old = () => ({ version: 9, settings: {}, pages: [{ id: 'a', name: 'Operationeel', widgets: [] }] });
-  const up = model.normalize(old(), { browser: true });
-  assert.equal(up.pages.filter((p) => p.widgets.some((w) => w.type === 'browser')).length, 1);
-  assert.equal(up.settings.browser.mode, 'tor');
-  assert.ok(Array.isArray(up.settings.browser.favorites));
+  // An older layout (version 10, with MadeSmart) gets the tab on Windows, once; MadeSmart stays.
+  const old = () => ({ version: 10, settings: {}, pages: [{ id: 'a', name: 'Operationeel', widgets: [] }, { id: 'm', name: 'MadeSmart', widgets: [{ id: 'b', type: 'browser', x: 0, y: 0, w: 96, h: 54, z: 1, cfg: {} }] }] });
+  const up = model.normalize(old(), { privbrowser: true });
+  assert.equal(up.pages.filter((p) => p.widgets.some((w) => w.type === 'privbrowser')).length, 1);
+  assert.deepEqual(up.pages.map((p) => p.name), ['Operationeel', 'MadeSmart', 'Browser']);
+  assert.equal(up.settings.privbrowser.mode, 'tor');
+  assert.ok(Array.isArray(up.settings.privbrowser.favorites));
   // Removed by hand afterwards: it stays away.
   const removed = { ...up, pages: up.pages.filter((p) => p.name !== 'Browser') };
-  assert.ok(!model.normalize(JSON.parse(JSON.stringify(removed)), { browser: true }).pages.some((p) => p.name === 'Browser'));
+  assert.ok(!model.normalize(JSON.parse(JSON.stringify(removed)), { privbrowser: true }).pages.some((p) => p.name === 'Browser'));
   // The Mac never has it, also not from an imported Windows layout.
-  const mac = model.normalize(JSON.parse(JSON.stringify(up)), { browser: false });
-  assert.ok(!mac.pages.some((p) => p.widgets.some((w) => w.type === 'browser')));
+  const mac = model.normalize(JSON.parse(JSON.stringify(up)), { privbrowser: false });
+  assert.ok(!mac.pages.some((p) => p.widgets.some((w) => w.type === 'privbrowser')));
+  assert.ok(mac.pages.some((p) => p.name === 'MadeSmart'), 'MadeSmart blijft op de Mac');
   assert.ok(!mac.pages.some((p) => p.name === 'Browser'));
 });

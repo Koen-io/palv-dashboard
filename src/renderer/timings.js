@@ -11,6 +11,7 @@
 //     at                                         (alarm: a moment)
 //     geo: { hex, name, lat, lon, label, radiusNm, mode: 'enter' | 'leave' }   (position: an own aircraft reaching a point)
 //     warnMin, sound, warnSound, popup, repeat   (how it tells: a warning this many minutes ahead, the sounds, a pop-up)
+//     muted, hidden                              (from the alert itself: no sound, or no alert at all any more)
 //     firedAt, ackedAt, chain, order, by, createdAt }
 // Every screen judges every timer by the clock (and the live traffic for a position timer); whoever
 // confirms a finished timer writes ackedAt, and that silences every screen.
@@ -161,16 +162,18 @@ function timingsTick() {
       // Leaving: only after the aircraft was seen inside first.
       if (t.geo.mode === 'leave' && g.inside && !t.geoArmed) { t.geoArmed = true; tmSave(t); }
       if (g.fired && !t.firedAt) { t.firedAt = now; tmSave(t); plog('info', `positietimer "${t.label}" afgegaan: ${t.geo.name || t.geo.hex} ${t.geo.mode === 'leave' ? 'verlaat' : 'bereikt'} ${t.geo.label || 'punt'}`); }
-      else if (!t.firedAt && g.etaMs != null && t.warnMin > 0 && g.etaMs <= t.warnMin * 60000 && !h.warned) { h.warned = true; tmWarn(t, g.etaMs); }
+      else if (!t.firedAt && g.etaMs != null && t.warnMin > 0 && g.etaMs <= t.warnMin * 60000 && !h.warned) { h.warned = true; if (!t.hidden) tmWarn(t, g.etaMs); }
     } else {
       const left = tmRemaining(t, now);
       if (left == null) continue;
       if (left <= 0 && !t.firedAt && tmRunning(t)) { t.firedAt = now; tmSave(t); plog('info', `${TM_KINDS[t.kind].name.toLowerCase()} "${t.label}" afgegaan`); }
-      else if (left > 0 && t.warnMin > 0 && left <= t.warnMin * 60000 && !h.warned && tmRunning(t)) { h.warned = true; tmWarn(t, left); }
+      else if (left > 0 && t.warnMin > 0 && left <= t.warnMin * 60000 && !h.warned && tmRunning(t)) { h.warned = true; if (!t.hidden) tmWarn(t, left); }
     }
+    // A hidden timer goes off quietly and is confirmed at once: no pop-up, no bar, no sound.
+    if (t.firedAt && t.hidden) { t.ackedAt = t.firedAt; tmSave(t); continue; }
     if (t.firedAt && !t.ackedAt) {
-      if (!h.fired) { h.fired = true; h.lastSound = now; tmPlay(t.sound || s.sound); }
-      else if (now - h.lastSound >= (s.repeatS || 20) * 1000 && now - t.firedAt < 15 * 60000 && (t.sound || s.sound) !== 'none') { h.lastSound = now; tmPlay(t.sound || s.sound); }
+      if (!h.fired) { h.fired = true; h.lastSound = now; if (!t.muted) tmPlay(t.sound || s.sound); }
+      else if (!t.muted && now - h.lastSound >= (s.repeatS || 20) * 1000 && now - t.firedAt < 15 * 60000 && (t.sound || s.sound) !== 'none') { h.lastSound = now; tmPlay(t.sound || s.sound); }
     }
   }
   // Handled entries of timers that are gone.
@@ -184,7 +187,7 @@ const tmWatch = (fn) => { tm.watchers.add(fn); return () => tm.watchers.delete(f
 
 function tmWarn(t, leftMs) {
   const s = tmSettings();
-  tmPlay(t.warnSound || s.warnSound);
+  if (!t.muted) tmPlay(t.warnSound || s.warnSound);
   toast(`${t.label}: nog ${tmClock(leftMs, { seconds: false })} min`);
   tm.alerts.set(`warn:${t.id}`, { t, kind: 'warn', until: tmNow() + 60000 });
 }
@@ -200,7 +203,7 @@ function tmPaintAlerts(list, now) {
   const fired = list.filter((t) => t.firedAt && !t.ackedAt && now - t.firedAt < 6 * 3600e3).sort((a, b) => b.firedAt - a.firedAt);
   const warns = [...tm.alerts.values()].filter((w) => w.until > now && !fired.some((t) => t.id === w.t.id));
   for (const [k, w] of tm.alerts) if (w.until <= now) tm.alerts.delete(k);
-  const sig = fired.map((t) => t.id + t.firedAt).join('|') + '#' + warns.map((w) => w.t.id).join('|');
+  const sig = fired.map((t) => t.id + t.firedAt + !!t.muted).join('|') + '#' + warns.map((w) => w.t.id + !!w.t.muted).join('|');
   document.body.classList.toggle('tm-fired', fired.length > 0);
   document.body.classList.toggle('tm-warn', !fired.length && warns.length > 0);
   if (bar.dataset.sig === sig) { tmPaintPopup(fired, now); return; }
@@ -213,11 +216,13 @@ function tmPaintAlerts(list, now) {
       h('div', { class: 'tm-row-main' },
         h('b', {}, t.label),
         h('span', {}, [t.message, `afgegaan ${ltFmt.format(t.firedAt)} LT`, t.kind === 'geo' && t.geo ? `${t.geo.name || t.geo.hex} ${t.geo.mode === 'leave' ? 'verliet' : 'bereikte'} ${t.geo.label || 'het punt'}` : null].filter(Boolean).join(' · '))),
+      alertQuiet({ bar: true, muted: !!t.muted, onMute: (m) => tmMute(t, m), onHide: () => tmHide(t) }),
       t.kind === 'alarm' ? h('button', { class: 'em-btn ghost', title: 'Vijf minuten later opnieuw', onclick: () => tmSnooze(t, 5) }, icon('clock'), '+5 min') : null,
       h('button', { class: 'em-btn', title: 'Bevestigen: de melding en het geluid stoppen op alle schermen', onclick: () => tmAck(t) }, icon('check'), 'Bevestigen'))),
     ...warns.map((w) => h('div', { class: 'tm-row' },
       h('span', { class: 'tm-row-ic' }, icon('clock')),
       h('div', { class: 'tm-row-main' }, h('b', {}, w.t.label), h('span', {}, `nog ${tmClock(tmRemaining(w.t, now), { seconds: false })} · ${tmTimeText(tmDue(w.t, now))}`)),
+      alertQuiet({ bar: true, muted: !!w.t.muted, onMute: (m) => tmMute(w.t, m), onHide: () => { tm.alerts.delete(`warn:${w.t.id}`); tmHide(w.t); } }),
       h('button', { class: 'em-btn ghost', onclick: () => { tm.alerts.delete(`warn:${w.t.id}`); tmPaintAlerts(tmTimers(), tmNow()); } }, icon('check'), 'OK'))));
   tmPaintPopup(fired, now);
 }
@@ -227,9 +232,10 @@ function tmPaintPopup(fired, now) {
   const want = fired.filter((t) => t.popup != null ? t.popup : s.popup);
   const t = want[0];
   if (!t) { if (tm.popup) { tm.popup.remove(); tm.popup = null; } return; }
-  if (tm.popup && tm.popup.dataset.id === t.id) { const el = tm.popup.querySelector('.tm-pop-since'); if (el) el.textContent = `${tmClock(now - t.firedAt)} geleden`; return; }
+  if (tm.popup && tm.popup.dataset.id === t.id) { const el = tm.popup.querySelector('.tm-pop-since'); if (el) el.textContent = `${tmClock(now - t.firedAt)} geleden`; tm.popup.quiet.paint(!!t.muted); return; }
   if (tm.popup) tm.popup.remove();
   const cat = TM_CATS[t.cat] || TM_CATS.other;
+  const quiet = alertQuiet({ muted: !!t.muted, onMute: (m) => tmMute(t, m), onHide: () => tmHide(t) });
   tm.popup = h('div', { class: 'tm-pop-back', 'data-id': t.id },
     h('div', { class: 'tm-pop', style: `--tm-c:${cat.color}` },
       h('div', { class: 'tm-pop-eyebrow' }, icon(TM_KINDS[t.kind].icon), `${TM_KINDS[t.kind].name.toUpperCase()} · ${cat.name.toUpperCase()}`),
@@ -239,10 +245,28 @@ function tmPaintPopup(fired, now) {
       t.note ? h('p', { class: 'tm-pop-note' }, t.note) : null,
       h('div', { class: 'tm-pop-actions' },
         t.kind === 'alarm' ? h('button', { class: 'btn', onclick: () => tmSnooze(t, 5) }, icon('clock'), 'Over 5 minuten opnieuw') : null,
-        h('button', { class: 'btn primary', onclick: () => tmAck(t) }, icon('check'), 'Bevestigen'))));
+        h('button', { class: 'btn primary', onclick: () => tmAck(t) }, icon('check'), 'Bevestigen')),
+      quiet));
+  tm.popup.quiet = quiet;
   document.body.append(tm.popup);
 }
 function tmAck(t) { t.ackedAt = tmNow(); tmSave(t); plog('info', `timer "${t.label}" bevestigd`); }
+// From the alert: only the sound off (the alert stays), or the timer never alerts again. Both on all
+// screens, and back to normal in the timer's own dialog (Meldingen).
+function tmMute(t, muted) {
+  t.muted = muted;
+  tmSave(t);
+  plog('info', `timer "${t.label}" geluid ${muted ? 'uit' : 'aan'}`);
+  tmPaintAlerts(tmTimers(), tmNow());
+}
+function tmHide(t) {
+  t.hidden = true;
+  if (t.firedAt && !t.ackedAt) t.ackedAt = tmNow();
+  tmSave(t);
+  plog('info', `timer "${t.label}" meldingen verborgen`);
+  tmPaintAlerts(tmTimers(), tmNow());
+  toast(`${t.label}: melding verborgen`);
+}
 function tmSnooze(t, min) { t.at = tmNow() + min * 60000; t.firedAt = null; t.ackedAt = null; tmSave(t); toast(`${t.label}: over ${min} minuten opnieuw`); }
 
 /* ---------- the tab badge ---------- */
@@ -307,6 +331,8 @@ function tmEditDialog(t0, onDone) {
   const warn = h('input', { class: 'input', type: 'number', min: 0, max: 180, step: 1, value: t.warnMin ?? s.warnMin });
   const soundSel = (cur, def) => h('select', { class: 'input' }, [h('option', { value: '', selected: cur == null || null }, `Standaard (${TM_SOUNDS[def] || def})`), ...Object.entries(TM_SOUNDS).map(([k, n]) => h('option', { value: k, selected: cur === k || null }, n))]);
   const sound = soundSel(t.sound, s.sound), warnSound = soundSel(t.warnSound, s.warnSound);
+  let quietMode = t.hidden ? 'hidden' : t.muted ? 'muted' : 'normal';
+  const quietSeg = segmented([{ value: 'normal', label: 'Normaal', icon: 'volume' }, { value: 'muted', label: 'Geluid uit', icon: 'volumeOff' }, { value: 'hidden', label: 'Verborgen', icon: 'eyeOff' }], quietMode, (v) => { quietMode = v; });
   const popupSel = h('select', { class: 'input' }, [['', `Standaard (${s.popup ? 'pop-up' : 'alleen balk'})`], ['yes', 'Pop-up over het hele scherm'], ['no', 'Alleen de balk bovenaan']].map(([v, n]) => h('option', { value: v, selected: (t.popup == null ? '' : t.popup ? 'yes' : 'no') === v || null }, n)));
   // Duration (timer), moment (alarm) or aircraft and point (position).
   const hh = h('input', { class: 'input', type: 'number', min: 0, max: 99, value: Math.floor(t.durationMs / 3600e3) }), mm = h('input', { class: 'input', type: 'number', min: 0, max: 59, value: Math.floor((t.durationMs % 3600e3) / 60000) }), ss = h('input', { class: 'input', type: 'number', min: 0, max: 59, value: Math.floor((t.durationMs % 60000) / 1000) });
@@ -369,6 +395,7 @@ function tmEditDialog(t0, onDone) {
     h('div', { class: 'row' }, field('Waarschuwing vooraf (minuten)', warn, '0 = geen waarschuwing vooraf'), field('Geluid vooraf', warnSound)),
     h('div', { class: 'row' }, field('Geluid als hij afgaat', sound), field('Melding', popupSel)),
     field('Tekst van de melding', message), field('Toelichting', note),
+    field('Meldingen', quietSeg, 'Geluid uit: de melding komt wel, zonder geluid. Verborgen: de timer loopt door, maar geeft geen melding en geen geluid meer.'),
     h('div', { class: 'hint' }, 'De timer staat op alle schermen van de eenheid en gaat overal tegelijk af; Bevestigen op één scherm stopt hem overal.'),
   ];
   openModal({
@@ -381,6 +408,7 @@ function tmEditDialog(t0, onDone) {
         t.cat = catSel.value; t.note = note.value.trim(); t.message = message.value.trim();
         t.warnMin = clamp(parseInt(warn.value, 10) || 0, 0, 180);
         t.sound = sound.value || null; t.warnSound = warnSound.value || null; t.popup = popupSel.value === '' ? null : popupSel.value === 'yes';
+        t.muted = quietMode === 'muted'; t.hidden = quietMode === 'hidden';
         if (t.kind === 'timer') {
           const d = ((+hh.value || 0) * 3600 + (+mm.value || 0) * 60 + (+ss.value || 0)) * 1000;
           if (d < 1000) { toast('Vul een duur in', true); return false; }

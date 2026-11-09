@@ -24,9 +24,14 @@ contextBridge.exposeInMainWorld('palv', {
     loadBackup: (name) => ipcRenderer.invoke('config:loadBackup', name),
     openBackups: () => ipcRenderer.invoke('config:openBackups'),
   },
+  browser: {
+    onDownload: (cb) => on('browser:download', cb),
+    showDownload: (file) => ipcRenderer.invoke('browser:showDownload', file),
+  },
   app: {
     setAutoStart: (on) => ipcRenderer.invoke('app:setAutoStart', on),
     version: () => ipcRenderer.invoke('app:version'),
+    lockScreen: () => ipcRenderer.invoke('app:lockScreen'),
     keepAwake: (on) => ipcRenderer.invoke('app:keepAwake', on),
     health: () => ipcRenderer.invoke('app:health'),
     openLogs: () => ipcRenderer.invoke('app:openLogs'),

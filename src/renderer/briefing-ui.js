@@ -7,6 +7,25 @@
    ============================================================ */
 const brief = { popup: null, popupKey: null, shown: new Set(), sound: undefined, audio: null, test: null };
 
+// Briefings silenced or hidden on this screen, per briefing on its day ('opco-am@2026-11-9'):
+// 'muted' (the pop-ups come, the sound not) or 'hidden' (nothing more: no pop-up, no glow, no sound).
+// Kept on this screen so a restart does not bring them back; the last 60 are enough.
+const BRIEF_QUIET_KEY = 'palv-briefing-quiet';
+function briefQuiet(key) {
+  try { return (JSON.parse(localStorage.getItem(BRIEF_QUIET_KEY) || '{}') || {})[key] || null; } catch { return null; }
+}
+function setBriefQuiet(key, how) {
+  try {
+    const all = JSON.parse(localStorage.getItem(BRIEF_QUIET_KEY) || '{}') || {};
+    delete all[key];
+    if (how) all[key] = how;
+    const keys = Object.keys(all);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 60))) delete all[k];
+    localStorage.setItem(BRIEF_QUIET_KEY, JSON.stringify(all));
+  } catch { /* storage not available: it holds until the next start */ }
+}
+function stopBriefingSound() { try { if (brief.audio) brief.audio.pause(); } catch { /* nothing playing */ } }
+
 // The sound of this screen (briefing-geluid.* in the user data), or the built-in gong without one.
 async function loadBriefingSound() {
   brief.sound = await window.palv.briefing.sound().catch(() => null);
@@ -64,7 +83,19 @@ function showBriefingPopup(cur) {
     h('h2', { class: 'bf-title' }, `Briefing ${b.where}`),
     h('div', { class: 'bf-sub' }, h('b', {}, b.name), h('span', {}, `aanvang ${b.time} LT`)),
     h('p', { class: 'bf-note' }, 'Kan je geen briefing bijwonen? Meld je af bij Flight Ops.'),
-    h('div', { class: 'bf-actions' }, h('button', { class: 'btn primary', onclick: () => closeBriefingPopup() }, icon('check'), 'Gezien')));
+    h('div', { class: 'bf-actions' }, h('button', { class: 'btn primary', onclick: () => closeBriefingPopup() }, icon('check'), 'Gezien')),
+    alertQuiet({
+      muted: briefQuiet(cur.key) === 'muted',
+      onMute: (m) => { setBriefQuiet(cur.key, m ? 'muted' : null); if (m) stopBriefingSound(); plog('info', `briefingmelding geluid ${m ? 'uit' : 'aan'}: ${b.where} ${b.name} ${b.time}`); },
+      onHide: () => {
+        setBriefQuiet(cur.key, 'hidden');
+        stopBriefingSound();
+        plog('info', `briefingmelding verborgen: ${b.where} ${b.name} ${b.time}`);
+        closeBriefingPopup();
+        briefingTick();
+        toast(`Briefing ${b.where} ${b.time} verborgen`);
+      },
+    }));
   const el = h('div', { class: 'bf-backdrop', onclick: (e) => { if (e.target === el) closeBriefingPopup(); } }, card);
   document.body.append(el);
   requestAnimationFrame(() => el.classList.add('in'));
@@ -86,7 +117,8 @@ function paintBriefingPopup(cur) {
 // Every second: the glow, the pop-ups at 5:00 and 1:30, and the sound at 1:30.
 function briefingTick() {
   const s = state.settings;
-  const cur = brief.test ? testBriefing() : s.briefingAlert ? BRIEFING.current(s.briefings) : null;
+  let cur = brief.test ? testBriefing() : s.briefingAlert ? BRIEFING.current(s.briefings) : null;
+  if (cur && briefQuiet(cur.key) === 'hidden') cur = null;
   if (!$('#bf-glow')) document.body.append(h('div', { id: 'bf-glow' }));
   document.body.classList.toggle('bf-warn', !!cur && cur.phase === 'warn');
   document.body.classList.toggle('bf-alert', !!cur && cur.phase !== 'warn');
@@ -101,7 +133,7 @@ function briefingTick() {
       showBriefingPopup(cur);
       plog('info', `briefingmelding: ${cur.b.where} ${cur.b.name} ${cur.b.time} over ${BRIEFING.clock(cur.left)}`);
       // A screen that starts up later than 1:30 before the briefing stays quiet: the moment has passed.
-      if (stage === 'alert' && cur.left > BRIEFING.ALERT_S - 15 && (s.briefingSound || brief.test)) briefingSound();
+      if (stage === 'alert' && cur.left > BRIEFING.ALERT_S - 15 && (s.briefingSound || brief.test) && briefQuiet(cur.key) !== 'muted') briefingSound();
     }
   }
   if (brief.popup && brief.popupKey === cur.key) paintBriefingPopup(cur);

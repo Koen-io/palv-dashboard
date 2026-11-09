@@ -191,3 +191,6 @@ body.osk-open.osk-top .modal-backdrop { padding-top: var(--osk-h); }
 .osk-key.enter.down { background: #ffb941; color: #1a1200; }
 .osk-row.indent { padding: 0 0.4rem 0 2rem; }
 #osk.num .osk-key { height: 3.9rem; font-size: 1.55rem; }
+body.touch .al-btn { height: 2.6rem; padding: 0 1.1rem; }
+body.touch .al-quiet.bar .em-btn { height: 2.3rem; }
+body.touch .hd-lock { width: 2.5rem; height: 2.5rem; }

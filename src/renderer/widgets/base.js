@@ -13,9 +13,9 @@ const defineWidget = (type, def) => { WIDGETS[type] = { ...WIDGET_META[type], ..
 // Whether a widget can be seen right now: on the active page, in a window that is not minimised.
 const onScreen = (el) => el.isConnected && !!el.closest('.page.active') && document.visibilityState === 'visible';
 
-function makeWebview(body, getUrl) {
+function makeWebview(body, getUrl, { partition = WEB_PARTITION } = {}) {
   const wv = document.createElement('webview');
-  wv.setAttribute('partition', WEB_PARTITION);
+  wv.setAttribute('partition', partition);
   oskWatchWebview(wv);
   wv.setAttribute('src', getUrl());
   const stateEl = h('div', { class: 'w-state' }, h('div', {}, h('strong', {}, 'Laden…')));

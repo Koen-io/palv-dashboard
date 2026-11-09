@@ -14,7 +14,7 @@
   // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
   // same area stays in view on any screen resolution and in any window size.
   const REF_W = 939, REF_H = 1041;
-  const VERSION = 9;
+  const VERSION = 11;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -33,6 +33,11 @@
     adsb: { name: 'ADS-B Exchange (website)', defaults: { mode: 'all', lat: 52.077, lon: 5.1848, zoom: 8.16, refH: REF_H, sidebar: false, trails: true, labels: false } },
     windy: { name: 'Windy weerradar', defaults: { overlay: 'radar', lat: 52.1487, lon: 5.3025, zoom: 8.353, refH: REF_H, autoplay: true } },
     web: { name: 'Website', defaults: { url: 'https://www.knmi.nl/nederland-nu/luchtvaart', refreshMin: 0 } },
+    // 1.34: a browser with its own sign-in session, for MadeSmart.
+    browser: { name: 'Browser', defaults: { home: 'https://tracker.madesmart.nl/', zoom: 1 } },
+    // 1.35: the private browser (Windows only), as a tab of its own: Tor, nothing kept, blocking, fingerprint
+    // protection (widgets/privbrowser.js, src/main/privbrowser.js). Apart from the MadeSmart browser above.
+    privbrowser: { name: 'Browser', defaults: {} },
     tile: { name: 'App-tegel', defaults: { kind: 'app', target: '', args: '', icon: null } },
     metar: { name: 'METAR / TAF', defaults: { icao: 'EHAM' } },
     runway: { name: 'Baangebruik', defaults: {} },
@@ -98,11 +103,26 @@
     base: 'eham',
     // 1.32: the header, adjustable in edit mode: per part the size (z) and the size of its figures (t).
     header: { z: {}, t: {} },
+    // 1.35: the private Browser tab: connection (tor or direct), bridges when the network blocks Tor, search
+    // engine, letterboxing and the favourites on the start page. Nothing of what is visited is ever kept.
+    privbrowser: {
+      mode: 'tor',
+      bridges: 'off',
+      engine: 'ddg',
+      letterbox: true,
+      favorites: [
+        { name: 'DuckDuckGo', url: 'https://duckduckgo.com/' },
+        { name: 'Wikipedia', url: 'https://nl.wikipedia.org/' },
+        { name: 'KNMI', url: 'https://www.knmi.nl/' },
+        { name: 'NOS', url: 'https://nos.nl/' },
+      ],
+    },
   };
 
-  function defaultState() {
+  // opts.privbrowser: whether this screen has the private Browser tab (Windows; the Mac Mini has no browser).
+  function defaultState(opts = {}) {
     const widget = (type, x, y, w, h, z, extra = {}) => ({ id: uid(), type, x, y, w, h, z, title: WIDGET_META[type].name, ...extra, cfg: { ...WIDGET_META[type].defaults, ...(extra.cfg || {}) } });
-    return {
+    const st = {
       version: VERSION,
       settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
       activePage: 0,
@@ -135,8 +155,11 @@
         { id: uid(), name: 'Whiteboard', widgets: [widget('whiteboard', 0, 0, 96, 54, 1)] },
         { id: uid(), name: 'Offshore', widgets: [widget('offshore', 0, 0, 96, 54, 1)] },
         { id: uid(), name: '(De)Briefing', widgets: [widget('debrief', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'MadeSmart', widgets: [widget('browser', 0, 0, 96, 54, 1, { title: 'MadeSmart' })] },
       ],
     };
+    if (opts.privbrowser) st.pages.push({ id: uid(), name: 'Browser', widgets: [widget('privbrowser', 0, 0, 96, 54, 1)] });
+    return st;
   }
 
   function findFreeSpot(page, w, hgt) {
@@ -149,8 +172,8 @@
 
   // A loaded configuration made whole: missing settings filled in, unknown widgets dropped, and older
   // versions brought up to date step by step. Returns the standard layout for anything unusable.
-  function normalize(loaded) {
-    const def = defaultState();
+  function normalize(loaded, opts = {}) {
+    const def = defaultState(opts);
     if (!loaded || typeof loaded !== 'object' || !Array.isArray(loaded.pages) || !loaded.pages.length) return def;
     const from = loaded.version || 1;
     const fromV1 = from < 2;
@@ -159,6 +182,8 @@
     if (fromV1) loaded.settings.startFullscreen = true;
     loaded.version = VERSION;
     loaded.settings.hex = { ...def.settings.hex, ...(loaded.settings.hex || {}) };
+    loaded.settings.privbrowser = { ...def.settings.privbrowser, ...(loaded.settings.privbrowser && typeof loaded.settings.privbrowser === 'object' ? loaded.settings.privbrowser : {}) };
+    if (!Array.isArray(loaded.settings.privbrowser.favorites)) loaded.settings.privbrowser.favorites = def.settings.privbrowser.favorites;
     if (!loaded.settings.unitInfo || typeof loaded.settings.unitInfo !== 'object') loaded.settings.unitInfo = {};
     if (!Array.isArray(loaded.settings.briefings)) loaded.settings.briefings = def.settings.briefings;
     loaded.settings.briefings = loaded.settings.briefings.filter((b) => b && typeof b === 'object' && b.id);
@@ -186,6 +211,15 @@
     if (from < 6) migrateV6(loaded);
     if (from < 8) migrateV8(loaded);
     if (from < 9) migrateV9(loaded);
+    if (from < 10) migrateV10(loaded);
+    if (from < 11 && opts.privbrowser) migrateV11(loaded);
+    // A screen without the private Browser (the Mac) drops it, also from an imported Windows layout.
+    if (!opts.privbrowser) {
+      const had = (p) => p.widgets.some((w) => w.type === 'privbrowser');
+      loaded.pages = loaded.pages.filter((p) => !(had(p) && p.widgets.every((w) => w.type === 'privbrowser')));
+      for (const p of loaded.pages) p.widgets = p.widgets.filter((w) => w.type !== 'privbrowser');
+      if (!loaded.pages.length) return def;
+    }
     loaded.activePage = clamp(loaded.activePage | 0, 0, loaded.pages.length - 1);
     return loaded;
   }
@@ -283,6 +317,18 @@
       if (st.pages.some((p) => p.widgets.some((w) => w.type === type))) continue;
       st.pages.push({ id: uid(), name, widgets: [{ id: uid(), type, x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META[type].name, cfg: JSON.parse(JSON.stringify(WIDGET_META[type].defaults)) }] });
     }
+  }
+
+  // 1.34: the MadeSmart tab, last in the row; a screen that removes it afterwards keeps it removed.
+  function migrateV10(st) {
+    if (st.pages.some((p) => p.widgets.some((w) => w.type === 'browser'))) return;
+    st.pages.push({ id: uid(), name: 'MadeSmart', widgets: [{ id: uid(), type: 'browser', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: 'MadeSmart', cfg: JSON.parse(JSON.stringify(WIDGET_META.browser.defaults)) }] });
+  }
+
+  // 1.35: the private Browser tab, last in the row (Windows only, see normalize); removed by hand, it stays away.
+  function migrateV11(st) {
+    if (st.pages.some((p) => p.widgets.some((w) => w.type === 'privbrowser'))) return;
+    st.pages.push({ id: uid(), name: 'Browser', widgets: [{ id: uid(), type: 'privbrowser', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.privbrowser.name, cfg: {} }] });
   }
 
   return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_BRIEFINGS, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };
