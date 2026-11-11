@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 1.40.0
+
+### Schermslot: Lock PC-knop, klok bovenaan en spatie toont het wachtwoord
+- **Het bureaublad-icoon "Lock PC" zet nu het Schermslot van het dashboard aan** in plaats van de Windows-vergrendeling. De app start daarvoor met `--lock-screen` en de al draaiende app vergrendelt meteen; het vertrouwde hangslot-icoon blijft op het bureaublad staan
+- **De klok en datum staan nu dikker gedrukt en bovenaan het scherm gecentreerd**, zodat het vergrendelscherm exact overeenkomt met dat van Windows
+- **Een druk op de spatiebalk (of Enter) toont nu het wachtwoordveld** zonder een teken in te voeren, net als bij Windows
+
 ## 1.39.0
 
 ### Schermslot: echte achtergrond, uil als profielfoto en standaard 5 minuten

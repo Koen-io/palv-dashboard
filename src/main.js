@@ -357,7 +357,10 @@ function setupBrowserSession() {
 // Only files this browser downloaded itself are shown.
 ipcMain.handle('browser:showDownload', (_e, file) => { if (browserDownloads.has(file)) shell.showItemInFolder(file); });
 
-app.on('second-instance', () => {
+app.on('second-instance', (_e, argv) => {
+  // De snelkoppeling "Lock PC" op het bureaublad start de app met --lock-screen; de draaiende app vangt dat
+  // hier op en zet het Schermslot aan (in plaats van het dashboard naar voren te halen).
+  if (Array.isArray(argv) && argv.includes('--lock-screen')) { screenlock.lock(); return; }
   if (!win) return;
   if (win.isMinimized()) win.restore();
   win.focus();

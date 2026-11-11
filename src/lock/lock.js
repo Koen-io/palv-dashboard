@@ -56,7 +56,9 @@
     }
     if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
     e.preventDefault();
-    toSignin(e.key.length === 1 ? e.key : '');
+    // Spatie en Enter tonen alleen het aanmeldvenster (zoals Windows), zonder een teken in te voeren; een
+    // gewoon teken komt meteen in het wachtwoordveld.
+    toSignin(e.key.length === 1 && e.key !== ' ' ? e.key : '');
   }, true);
   for (const ev of ['mousedown', 'wheel', 'touchstart']) {
     window.addEventListener(ev, () => { if (!body.classList.contains('is-signin')) toSignin(''); }, { passive: true });

@@ -42,19 +42,19 @@ html, body {
   transition: opacity .45s ease, transform .5s cubic-bezier(.2,.7,.2,1);
 }
 
-/* klok */
-#clockface { transform: translateY(-6vh); }
+/* klok: dikker gedrukt en bovenaan het scherm gecentreerd, zoals het Windows-vergrendelscherm */
+#clockface { justify-content: flex-start; padding-top: 7vh; }
 #time {
-  font-size: clamp(72px, 12vw, 154px);
-  font-weight: 300; line-height: .98; letter-spacing: -.02em;
-  text-shadow: 0 2px 26px rgba(0,0,0,.4);
+  font-size: clamp(72px, 12vw, 158px);
+  font-weight: 600; line-height: .98; letter-spacing: -.02em;
+  text-shadow: 0 2px 26px rgba(0,0,0,.45);
 }
 #date {
-  margin-top: .1em;
-  font-size: clamp(20px, 2.4vw, 34px); font-weight: 400;
-  text-shadow: 0 2px 20px rgba(0,0,0,.45);
+  margin-top: .15em;
+  font-size: clamp(20px, 2.4vw, 34px); font-weight: 600;
+  text-shadow: 0 2px 20px rgba(0,0,0,.5);
 }
-.is-signin #clockface { opacity: 0; transform: translateY(-13vh); pointer-events: none; }
+.is-signin #clockface { opacity: 0; transform: translateY(-5vh); pointer-events: none; }
 
 /* aanmelden */
 #signin { opacity: 0; transform: translateY(10px); pointer-events: none; }
