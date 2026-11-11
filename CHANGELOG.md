@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 1.39.0
+
+### Schermslot: echte achtergrond, uil als profielfoto en standaard 5 minuten
+- **De achtergrond is nu de échte achtergrond van deze pc** (de uil), schermvullend weergegeven net als het Windows-vergrendelscherm. Eerder pakte het soms per ongeluk een Windows Spotlight-foto; dat is eruit. De aangeleverde afbeelding zit ook als terugval ingebouwd, zodat er altijd de juiste achtergrond staat
+- **De profielfoto op het aanmeldscherm is dezelfde afbeelding** (de uil), rond en dekkend
+- **Vanzelf vergrendelen staat nu standaard op 5 minuten** zonder toetsenbord of muis zodra er een wachtwoord is ingesteld. Aan te passen (of uit te zetten) onder Instellingen › Scherm › Schermslot
+
 ## 1.38.0
 
 ### Schermslot: het wachtwoord mag nu tekst zijn

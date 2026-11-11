@@ -21,6 +21,7 @@ const SCRYPT = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 const CHECK_TEXT = 'palv-screenlock-v1';
 const AAD = 'screenlock';
 const MAXLEN = 64; // het wachtwoord mag tekst zijn (letters, cijfers, tekens), 1 tot 64 tekens
+const DEFAULT_IDLE_MIN = 5; // een nieuw wachtwoord vergrendelt standaard na 5 minuten inactiviteit
 const FAILS_BEFORE_WAIT = 5, WAIT_MS = 30000;
 // De toetsen die een onbeheerde pc anders langs het slot zouden laten: wisselen van venster, de Windows-toets
 // en het afsluiten van het venster. Ctrl+Alt+Del is bewust afwezig: dat kan niet en pretenderen we niet.
@@ -86,41 +87,19 @@ const regQuery = (key, value) => {
   } catch { return null; }
 };
 
-// De afmetingen van een JPEG uit de kop lezen (om liggende van staande Spotlight-beelden te onderscheiden).
-function jpegSize(buf) {
-  if (buf[0] !== 0xff || buf[1] !== 0xd8) return null;
-  let i = 2;
-  while (i < buf.length) {
-    if (buf[i] !== 0xff) { i += 1; continue; }
-    const marker = buf[i + 1];
-    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
-      return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
-    }
-    i += 2 + buf.readUInt16BE(i + 2);
-  }
-  return null;
-}
-
-// Het beeld dat Windows achter het vergrendelscherm toont, in deze volgorde: een door beleid ingesteld
-// vergrendelbeeld, het nieuwste liggende Windows Spotlight-beeld, anders de bureaubladachtergrond.
+// Het beeld dat deze pc als achtergrond/vergrendelscherm gebruikt. De echte achtergrond van Windows, in deze
+// volgorde: een door beleid ingesteld vergrendelbeeld, dan de lokale kant-en-klare kopie die Windows van de
+// bureaubladachtergrond bewaart (TranscodedWallpaper — ook betrouwbaar als de echte achtergrond van een
+// netwerklocatie komt), dan het pad uit het register. Geen Windows Spotlight: dat gaf een vreemde foto in
+// plaats van de ingestelde achtergrond. Het vergrendelscherm toont dit beeld schermvullend, zoals Windows.
 function backgroundPath() {
   const csp = regQuery('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\PersonalizationCSP', 'LockScreenImagePath');
   if (csp && fs.existsSync(csp)) return csp;
-  try {
-    const spot = path.join(process.env.LOCALAPPDATA || '', 'Packages', 'Microsoft.Windows.ContentDeliveryManager_cw5n1h2txyewy', 'LocalState', 'Assets');
-    if (fs.existsSync(spot)) {
-      const cands = fs.readdirSync(spot).map((f) => path.join(spot, f))
-        .map((p) => { try { const st = fs.statSync(p); return st.isFile() && st.size > 100 * 1024 ? { p, t: st.mtimeMs } : null; } catch { return null; } })
-        .filter(Boolean).sort((a, b) => b.t - a.t).slice(0, 12);
-      for (const c of cands) {
-        try { const d = jpegSize(fs.readFileSync(c.p)); if (d && d.w > d.h && d.w >= 1280) return c.p; } catch { /* volgende */ }
-      }
-    }
-  } catch { /* geen Spotlight: dan de bureaubladachtergrond */ }
+  const t = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
+  if (fs.existsSync(t)) return t;
   const wp = regQuery('HKCU\\Control Panel\\Desktop', 'WallPaper');
   if (wp && fs.existsSync(wp)) return wp;
-  const t = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
-  return fs.existsSync(t) ? t : null;
+  return null;
 }
 
 function imageDataUrl(p) {
@@ -143,20 +122,14 @@ function accentColor() {
   return '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 }
 
-// De echte accountfoto van de gebruiker, als die er is; anders tekent het vergrendelscherm de standaardtegel.
-function avatarDataUrl() {
-  try {
-    const d = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'AccountPictures');
-    if (!fs.existsSync(d)) return '';
-    const imgs = fs.readdirSync(d).filter((f) => /\.(png|jpe?g)$/i.test(f)).map((f) => path.join(d, f))
-      .map((p) => { try { return { p, s: fs.statSync(p).size }; } catch { return null; } }).filter(Boolean).sort((a, b) => b.s - a.s);
-    return imgs.length ? imageDataUrl(imgs[0].p) : '';
-  } catch { return ''; }
-}
-
+// De meegeleverde achtergrond (de aangeleverde afbeelding), als terugval wanneer de echte niet te lezen is.
+const BUNDLED_BG = path.join(__dirname, '..', '..', 'assets', 'schermslot-bg.png');
 function readAssets() {
   if (assets) return assets;
-  assets = { wallpaper: imageDataUrl(backgroundPath()), accent: accentColor() || '#4cc2ff', avatar: avatarDataUrl() };
+  // Achtergrond én profielfoto zijn hetzelfde beeld (de uil): schermvullend als achtergrond, rond en
+  // dekkend (cover) als avatar. Zo sluit alles op elkaar aan.
+  const bg = imageDataUrl(backgroundPath()) || imageDataUrl(BUNDLED_BG);
+  assets = { wallpaper: bg, accent: accentColor() || '#4cc2ff', avatar: bg };
   return assets;
 }
 
@@ -187,11 +160,14 @@ function setPin(oldPin, newPin) {
   if (!validPin(newPin)) return { error: 'Geef een wachtwoord op (1 tot 64 tekens).' };
   if (state) {
     const key = derive(oldPin, Buffer.from(state.salt, 'base64'));
-    if (openWith(key, state.check) !== CHECK_TEXT) return { error: 'De huidige toegangscode klopt niet.' };
+    if (openWith(key, state.check) !== CHECK_TEXT) return { error: 'Het huidige wachtwoord klopt niet.' };
   }
   const salt = crypto.randomBytes(16);
   const key = derive(newPin, salt);
-  writeState({ salt: salt.toString('base64'), check: sealWith(key, CHECK_TEXT), name: (state && state.name) || '', idleMin: (state && state.idleMin) || 0, lockSingle: !!(state && state.lockSingle) });
+  // Een nieuw wachtwoord vergrendelt standaard na 5 minuten zonder toetsenbord of muis; bij wijzigen blijft
+  // de eerder gekozen tijd staan (ook 0 = uit). Aan te passen onder Instellingen › Scherm › Schermslot.
+  const idleMin = state && state.idleMin != null ? state.idleMin : DEFAULT_IDLE_MIN;
+  writeState({ salt: salt.toString('base64'), check: sealWith(key, CHECK_TEXT), name: (state && state.name) || '', idleMin, lockSingle: !!(state && state.lockSingle) });
   fails = { n: 0, until: 0 };
   log.info('schermslot', state ? 'toegangscode gewijzigd' : 'toegangscode ingesteld');
   startIdle();
