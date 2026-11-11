@@ -134,7 +134,7 @@ function zpBaseLayers(ctx) {
   let baseKey = null, settle = null;
   const tile = (def, pane, extra = {}) => (def.keyWhite ? vrKeyedTiles : L.tileLayer)(zpTile(def.src), {
     maxNativeZoom: def.max, minZoom: def.minZoom || 0, maxZoom: 19, bounds: def.bounds, pane, attribution: def.attr,
-    updateWhenIdle: false, keepBuffer: 3, crossOrigin: def.keyWhite ? 'anonymous' : undefined, ...extra,
+    updateWhenIdle: false, keepBuffer: 3, crossOrigin: def.keyWhite ? 'anonymous' : undefined, ...vrSharp(def.max), ...extra,
   });
   const drop = (k) => { if (layers[k]) { layers[k].remove(); layers[k] = null; } };
   const isDark = () => document.documentElement.dataset.theme === 'dark';

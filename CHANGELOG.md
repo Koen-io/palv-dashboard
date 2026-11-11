@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.44.0
+
+### Scherpe kaarten op een scherm met hoge schaal
+- **De kaarten op Operationeel en Zoek & Plan zijn weer scherp op een scherm dat in Windows op 300% staat** (zoals het touchscreen van PC QRA). Daar werd elke kaarttegel drie keer uitvergroot en zag de kaart er korrelig uit; nu worden de tegels één zoomniveau dieper opgehaald en op halve grootte getoond, met twee keer zoveel detail. Plaatsnamen op de kaart worden daardoor wat kleiner, zoals op een telefoon. Schermen op 100–200% blijven zoals ze waren
+
 ## 1.43.0
 
 ### Schermslot: overal hetzelfde logo

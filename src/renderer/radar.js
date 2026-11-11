@@ -253,6 +253,13 @@ async function vrRainUrl() {
   return vrRain.url;
 }
 
+/* ---------- sharp tiles on a high-scale screen ---------- */
+// On a screen at 300% (the touchscreen of PC QRA) a 256-pixel tile is blown up three times and turns grainy.
+// There the tiles are fetched one zoom level deeper and shown at half size: twice the detail, same map.
+function vrSharp(maxNative) {
+  return window.devicePixelRatio >= 2.5 ? { tileSize: 128, zoomOffset: 1, maxNativeZoom: maxNative - 1 } : {};
+}
+
 /* ---------- tiles with their white made see-through ---------- */
 // Each tile is drawn into a canvas and its (near) white pixels are cleared; the layer underneath shows there.
 let VrKeyed = null;
@@ -343,7 +350,7 @@ function vrCreate(body, w) {
   let baseKey = null, settle = null;
   const tile = (def, pane, extra = {}) => (def.keyWhite ? vrKeyedTiles : L.tileLayer)(def.url, {
     subdomains: def.sub || 'abc', maxNativeZoom: def.max, minZoom: def.minZoom || 0, maxZoom: 17, bounds: def.bounds, pane,
-    attribution: def.attr, updateWhenIdle: false, keepBuffer: 3, ...extra,
+    attribution: def.attr, updateWhenIdle: false, keepBuffer: 3, ...vrSharp(def.max), ...extra,
   });
   const drop = (k) => { if (layers[k]) { layers[k].remove(); layers[k] = null; } };
   const isDark = () => document.documentElement.dataset.theme === 'dark';
