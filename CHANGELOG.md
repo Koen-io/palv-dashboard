@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.41.0
+
+### Het dashboard onthoudt op welk scherm het staat
+- **Na een herstart, update of herinstallatie komt het dashboard vanzelf terug op het scherm waar het stond.** Sleep (of verplaats met Windows+Shift+pijl) het dashboard één keer naar het juiste scherm; vanaf dan wordt die plek onthouden en teruggezet. De keuze staat in `window-display.json` in de userData en blijft dus ook bij een herinstallatie bewaard. Zo hoeft het dashboard nooit meer met de hand naar het juiste scherm na een update
+
 ## 1.40.0
 
 ### Schermslot: Lock PC-knop, klok bovenaan en spatie toont het wachtwoord

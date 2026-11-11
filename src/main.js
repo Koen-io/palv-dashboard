@@ -150,14 +150,46 @@ function buildMenu() {
   ]));
 }
 
+// Het dashboard onthoudt op welk scherm het staat en komt daar na een herstart, update of herinstallatie
+// vanzelf weer terug. De schermen worden van links naar rechts genummerd; het nummer staat in
+// window-display.json in de userData (los van de dashboard-indeling, blijft dus bij een herinstallatie staan)
+// en wordt bijgewerkt zodra het venster naar een ander scherm wordt verplaatst. Alleen bij meer dan één scherm.
+const winPosFile = () => path.join(app.getPath('userData'), 'window-display.json');
+const displaysLR = () => screen.getAllDisplays().slice().sort((a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y);
+function savedDisplay() {
+  if (shotPath) return null;
+  try {
+    const d = JSON.parse(fs.readFileSync(winPosFile(), 'utf8'));
+    const list = displaysLR();
+    if (Number.isInteger(d.index) && list.length > 1 && d.index >= 0 && d.index < list.length) return list[d.index];
+  } catch { /* nog niet bewaard */ }
+  return null;
+}
+let saveIdxTimer = null;
+function saveDisplayIndex() {
+  clearTimeout(saveIdxTimer);
+  saveIdxTimer = setTimeout(() => {
+    if (!win || win.isDestroyed() || screen.getAllDisplays().length < 2) return;
+    try {
+      const d = screen.getDisplayMatching(win.getBounds());
+      const i = displaysLR().findIndex((x) => x.id === d.id);
+      if (i >= 0) fs.writeFileSync(winPosFile(), JSON.stringify({ index: i }));
+    } catch { /* schrijven mislukte: de volgende verplaatsing probeert het opnieuw */ }
+  }, 600);
+}
+
 function createWindow() {
   const cfg = config.read();
   // Fullscreen is the standard; configs from the first release are migrated to it by the renderer.
   const startFullscreen = !cfg || (cfg.version || 1) < 2 || !!(cfg.settings && cfg.settings.startFullscreen);
+  // Het onthouden scherm: als het er is, wordt het venster daar neergezet (en daarna pas volledig scherm).
+  const target = savedDisplay();
 
   win = new BrowserWindow({
-    width: 1600,
-    height: 900,
+    x: target ? target.bounds.x : undefined,
+    y: target ? target.bounds.y : undefined,
+    width: target ? Math.min(1600, target.bounds.width) : 1600,
+    height: target ? Math.min(900, target.bounds.height) : 900,
     minWidth: 1024,
     minHeight: 576,
     frame: false,
@@ -165,7 +197,9 @@ function createWindow() {
     backgroundColor: '#0b1320',
     title: 'P-ALV Dashboard',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    fullscreen: startFullscreen && !shotPath && !isMac,
+    // Bij een onthouden scherm eerst daar neerzetten en pas na het tonen volledig scherm maken, zodat het
+    // op dat scherm blijft; anders meteen volledig scherm (de bestaande werkwijze).
+    fullscreen: !target && startFullscreen && !shotPath && !isMac,
     // macOS: the window may cover the menu bar in fullscreen (setFull).
     enableLargerThanScreen: isMac,
     webPreferences: {
@@ -186,6 +220,12 @@ function createWindow() {
     if (shotPath) {
       win.setContentSize(...shotSize('shot-size', [1920, 1080]));
       win.show();
+    } else if (target) {
+      // Op het onthouden scherm neerzetten en daar pas volledig scherm maken, zodat het op dat scherm blijft.
+      win.setBounds(target.bounds);
+      if (!startFullscreen) win.maximize();
+      win.show();
+      if (startFullscreen) { if (isMac) setFull(true); else win.setFullScreen(true); }
     } else {
       if (!startFullscreen) win.maximize();
       win.show();
@@ -193,6 +233,9 @@ function createWindow() {
     }
     sendWinState();
   });
+  // Onthouden op welk scherm het dashboard staat zodra het wordt verplaatst (ook tussen schermen bij volledig scherm).
+  win.on('move', saveDisplayIndex);
+  win.on('enter-full-screen', saveDisplayIndex);
 
   for (const ev of ['maximize', 'unmaximize']) win.on(ev, () => sendWinState());
   if (isMac) {
