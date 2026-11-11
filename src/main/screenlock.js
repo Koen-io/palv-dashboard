@@ -122,13 +122,15 @@ function accentColor() {
   return '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
 }
 
-// De meegeleverde achtergrond (de aangeleverde afbeelding), als terugval wanneer de echte niet te lezen is.
+// De meegeleverde achtergrond (het vaste P-ALV-logo, de uil): zo is het vergrendelscherm op elke pc identiek.
 const BUNDLED_BG = path.join(__dirname, '..', '..', 'assets', 'schermslot-bg.png');
 function readAssets() {
   if (assets) return assets;
-  // Achtergrond én profielfoto zijn hetzelfde beeld (de uil): schermvullend als achtergrond, rond en
-  // dekkend (cover) als avatar. Zo sluit alles op elkaar aan.
-  const bg = imageDataUrl(backgroundPath()) || imageDataUrl(BUNDLED_BG);
+  // Achtergrond én profielfoto zijn hetzelfde vaste beeld (de uil) op elk scherm — schermvullend als
+  // achtergrond, rond en dekkend (cover) als avatar — los van de bureaubladachtergrond van de pc, zodat
+  // overal exact hetzelfde vergrendelscherm verschijnt. Alleen als het meegeleverde beeld ontbreekt valt
+  // het terug op de eigen achtergrond van de pc.
+  const bg = imageDataUrl(BUNDLED_BG) || imageDataUrl(backgroundPath());
   assets = { wallpaper: bg, accent: accentColor() || '#4cc2ff', avatar: bg };
   return assets;
 }

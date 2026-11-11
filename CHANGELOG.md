@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.43.0
+
+### Schermslot: overal hetzelfde logo
+- **Het vergrendelscherm gebruikt nu op elke pc dezelfde vaste achtergrond en profielfoto** (het P-ALV-logo, de uil) in plaats van de eigen bureaubladachtergrond van die pc. Zo is het vergrendelscherm overal exact hetzelfde, ongeacht welke wallpaper er op de pc staat
+
 ## 1.42.0
 
 ### Schermslot op meerdere schermen
