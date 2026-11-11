@@ -3,14 +3,26 @@
    ============================================================ */
 
 /* ---------- moon strip under the UDP: phase, position and light in one line ---------- */
-/* When space is short the phase name, the wind name of the azimuth and the lux meter go (all of it is in
-   the tooltip), and the strip clips at its edge rather than pushing into the METAR block. */
-.hd-moon { gap: 0.65rem; min-width: 0; overflow: hidden; container-type: inline-size; }
+/* When space is short, parts go one at a time, least important first, until the strip fits: measured
+   (fitStrip in header.js), so it holds at every text size of the header. All of it stays in the tooltip.
+   Moon: phase name, wind name of the azimuth, lux meter and elevation sketch, the badge to one word, the
+   compass rose, the AZ/ELEV captions, the badge, the separator. UDP: the calculation note, the Zulu
+   times, the sun and moon icons. */
+.hd-moon { gap: 0.65rem; min-width: 0; overflow: hidden; }
 .mo-gap { flex: 1; min-width: 0; }
-@container (max-width: 40rem) { .hd-moon .mo-pct em { display: none; } }
-@container (max-width: 34rem) { .hd-moon .mp-val em { display: none; } }
-@container (max-width: 30rem) { .hd-moon .lux-meter { display: none; } .hd-moon .mp-arr { display: none; } }
-@container (max-width: 26rem) { .hd-moon .udp-badge { display: none; } }
+.hd-moon .b-short { display: none; }
+.hd-moon.fit-1 .mo-pct em,
+.hd-moon.fit-2 .mp-val em,
+.hd-moon.fit-3 .lux-meter, .hd-moon.fit-3 .mp-arr,
+.hd-moon.fit-4 .b-long,
+.hd-moon.fit-5 .mp-rose,
+.hd-moon.fit-6 .mp-val small,
+.hd-moon.fit-7 .udp-badge,
+.hd-moon.fit-8 .mp-sep { display: none; }
+.hd-moon.fit-4 .b-short { display: inline; }
+.hd-udp.fit-1 .udp-calc,
+.hd-udp.fit-2 .udp-t > span,
+.hd-udp.fit-3 .udp-t > svg { display: none; }
 .mo-phase { display: flex; align-items: center; gap: 0.55rem; flex: none; }
 .mo-disc { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; flex: none; }
 .mo-disc svg { width: 100%; height: 100%; overflow: visible; }
@@ -318,8 +330,11 @@ body.bf-alert #bf-glow { --bf: 255, 64, 52; animation-duration: 1.1s; }
 .bf-set-row .input { height: 2rem; }
 
 /* ---------- OLED care ---------- */
-/* The whole dashboard drifts a pixel at a time; each step glides over 20 seconds, invisibly. */
-#app { transition: transform 20s linear; }
+/* The whole dashboard drifts a pixel at a time. It lives on one GPU layer of its own for good, so each step
+   is only a shift of that layer: nothing is drawn again. (Until 1.35 each step glided over 20 seconds; the
+   layer was then made at the start and dropped at the end of every step, and the whole dashboard was drawn
+   anew each time, which made the heaviest content, the Vluchtradar's map, blink once a minute.) */
+body.oled #app { will-change: transform; }
 body.cursor-hidden, body.cursor-hidden * { cursor: none !important; }
 #oled-veil { position: fixed; inset: 0; z-index: 400; pointer-events: none; background: #000; opacity: 0; transition: opacity 90s linear; }
 body.oled.oled-night #oled-veil { opacity: 0.04; }

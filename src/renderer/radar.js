@@ -357,9 +357,13 @@ function vrCreate(body, w) {
     el.classList.toggle('base-dark', !!b.dark || night);
     // Once the night face covers the map, the day face underneath rests: no light tiles flashing up while
     // the dark ones load during a pan.
+    // Likewise by day: the faded-out night face is taken off the screen, so it costs the GPU nothing.
     clearTimeout(settle);
-    if (!night || !b.night) el.classList.remove('settled');
-    else settle = setTimeout(() => el.classList.add('settled'), el.classList.contains('no-fade') ? 0 : 4200);
+    el.classList.remove(night ? 'day-settled' : 'settled');
+    const wait = el.classList.contains('no-fade') ? 0 : 4200;
+    if (night && b.night) settle = setTimeout(() => el.classList.add('settled'), wait);
+    else if (!night && b.night) settle = setTimeout(() => el.classList.add('day-settled'), wait);
+    else el.classList.remove('settled', 'day-settled');
   }
   function applyLayers() {
     const key = VR_BASE_ALIAS[w.cfg.base] || w.cfg.base || 'osm';

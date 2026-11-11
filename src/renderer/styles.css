@@ -150,8 +150,8 @@ body.mac.fullscreen #titlebar { top: 24px; }
 body.mac.fullscreen:not(.tb-reveal) #titlebar { transform: translateY(calc(-100% - 24px)); }
 
 /* ---------- header ---------- */
-/* A grid: the brand on top at the left, under it the clocks with the UDP and moon strips beside them
-   (exactly as high as the clocks, top and bottom in line), the METAR block over the full height. */
+/* A grid: the brand on top at the left, under it the clocks; beside them the UDP, moon and North Sea strips
+   over the full height (top and bottom in line with brand and clocks), then the METAR block. */
 #header {
   flex: none;
   display: grid;
@@ -264,7 +264,7 @@ body.editing .tab:hover .tab-grip { color: var(--amber); }
 @keyframes hd-lock-shut { 0% { transform: translateY(-2px); } 60% { transform: translateY(1px); } 100% { transform: none; } }
 
 /* Middle column: the UDP and moon strips, filling the space between the clocks and the METAR. */
-.hd-time { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+.hd-time { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
 .hd-time > .hd-part { flex: 1 1 0; min-height: 0; display: flex; }
 .hd-time > .hd-part > .hd-udp { flex: 1; height: auto; min-height: 2rem; }
 .hd-clocks { display: flex; align-items: stretch; gap: 0.6rem; }
@@ -353,10 +353,11 @@ body.editing .tab:hover .tab-grip { color: var(--amber); }
 .eham-raw { font-family: var(--font-mono); font-size: 0.8rem; color: #a9bad3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42rem; user-select: text; }
 .rwy-none { font-size: 0.95rem; color: #a9bad3; max-width: 18rem; line-height: 1.3; }
 /* North Sea: sea state and water temperature under the METAR */
-.eham-sea { display: flex; align-items: center; gap: 0.7rem; padding-top: 0.3rem; border-top: 1px solid #22334e; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; }
-.sea-label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.2em; color: var(--amber); }
-.sea-none { font-size: 0.82rem; color: #8ea2bf; white-space: normal; line-height: 1.2; }
-.sea-state { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0.55rem 0.1rem 0.35rem; border-radius: 0.4rem; background: rgba(61, 155, 255, 0.14); border: 1px solid rgba(125, 180, 255, 0.35); color: #9cc9ff; }
+/* North Sea strip: the third under UDP and Maan, built like them. */
+.hd-sea { gap: 0.65rem; min-width: 0; overflow: hidden; }
+.sea-none { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 0.82rem; color: #8ea2bf; }
+.hd-sea.fit-1 .sea-sector, .hd-sea.fit-2 .sea-kv i, .hd-sea.fit-3 .sea-words em, .hd-sea.fit-4 .sea-src, .hd-sea.fit-5 .sea-wave { display: none; }
+.sea-state { flex: none; align-self: center; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0.55rem 0.1rem 0.35rem; border-radius: 0.4rem; background: rgba(61, 155, 255, 0.14); border: 1px solid rgba(125, 180, 255, 0.35); color: #9cc9ff; }
 .sea-state.s4 { background: rgba(255, 184, 32, 0.14); border-color: rgba(255, 184, 32, 0.45); color: #ffc85c; }
 .sea-state.s5, .sea-state.s6 { background: rgba(255, 81, 72, 0.16); border-color: rgba(255, 81, 72, 0.5); color: #ff8a82; }
 .sea-wave { width: 1.9rem; height: 1.25rem; flex: none; }
@@ -369,8 +370,8 @@ body.editing .tab:hover .tab-grip { color: var(--amber); }
 .sea-kv small { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; color: #8ea2bf; }
 .sea-kv b { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; color: #fff; }
 .sea-kv i { font-style: normal; font-size: 0.74rem; color: #a9bad3; }
-.sea-src { margin-left: auto; font-size: 0.72rem; color: #8ea2bf; }
-.eham-sea.stale .sea-src { color: var(--amber); font-weight: 700; }
+.sea-src { flex: none; font-size: 0.72rem; color: #8ea2bf; }
+.hd-sea.stale .sea-src { color: var(--amber); font-weight: 700; }
 /* ---------- locks on a whiteboard or mission ---------- */
 .lock-btn.locked { border-color: color-mix(in srgb, var(--amber) 60%, var(--border)); color: var(--amber); }
 .lock-btn.closed { background: var(--amber); border-color: var(--amber); color: #1a1200; }
@@ -724,6 +725,7 @@ html[data-theme="light"] .vr-map { background: #dfe6ee; }
 .vr-map.night-dim .leaflet-vrBase-pane, .vr-map.night-dim .leaflet-vrUnder-pane { transition: filter 4s ease-in-out; }
 .vr-map.night.night-dim .leaflet-vrBase-pane, .vr-map.night.night-dim .leaflet-vrUnder-pane { filter: brightness(0.62) saturate(0.85); }
 .vr-map.night.settled .leaflet-vrBase-pane { visibility: hidden; }
+.vr-map.day-settled:not(.night) .leaflet-vrNight-pane { visibility: hidden; }
 .vr-map.no-fade .leaflet-pane { transition: none !important; }
 html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .vr-follow { margin-top: 0.6rem; width: 100%; justify-content: center; height: 1.9rem; font-size: 0.78rem; background: rgba(255, 255, 255, 0.06); color: #e9eff8; border-color: #2b3d5c; }
@@ -776,8 +778,9 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .vr-card-country b { font-size: 1rem; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vr-card-country i { font-style: normal; text-transform: uppercase; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; padding: 0.08rem 0.38rem; border-radius: 3px; color: #c9d6ea; background: rgba(143, 183, 230, 0.12); border: 1px solid rgba(143, 183, 230, 0.22); }
 
-.vr-pop { position: absolute; right: 0.5rem; top: 0.5rem; z-index: 1100; width: 16rem; padding: 0.4rem 0.9rem 0.7rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); color: var(--text); display: flex; flex-direction: column; gap: 0.45rem; }
+.vr-pop { position: absolute; right: 0.5rem; top: 0.5rem; z-index: 1100; width: 16rem; max-width: calc(100% - 1rem); max-height: calc(100% - 1rem); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 0.4rem 0.9rem 0.7rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow); color: var(--text); display: flex; flex-direction: column; gap: 0.45rem; }
 .vr-pop[hidden] { display: none; }
+.vr-pop > * { flex: none; }
 .vr-pop h4 { margin: 0.5rem 0 0.1rem; font-size: 0.68rem; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
 .vr-pop p { margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--muted); }
 .vr-pop .check { font-size: 0.84rem; }
@@ -788,8 +791,14 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .vr-top > * { pointer-events: auto; }
 #tb-version { margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 0.25rem; background: rgba(255, 255, 255, 0.08); color: #8ea2bf; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 .vr-dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-left: auto; }
-.vr-pop .seg { width: 100%; }
-.vr-pop .seg button { flex: 1; justify-content: center; height: 1.7rem; font-size: 0.74rem; }
+/* Segmented choices in a pop-up share its width evenly and never run past its edge. */
+.vr-pop .seg { width: 100%; box-sizing: border-box; }
+.vr-pop .seg button, body.touch .vr-pop .seg button { flex: 1 1 0; min-width: 0; justify-content: center; height: 1.7rem; padding: 0 0.25rem; font-size: 0.74rem; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; }
+body.touch .vr-pop .seg button { height: 2.2rem; }
+.wxm-pop { width: 18.5rem; }
+.wxm-opt { display: flex; flex-direction: column; gap: 0.25rem; }
+.wxm-opt > span { font-size: 0.74rem; font-weight: 600; color: var(--text-2, var(--muted)); }
+.wxm-a { font-weight: 700; line-height: 1; letter-spacing: 0; }
 
 /* While the wheel glides the zoom (wheelzoom.js) the tile levels and canvas layers are only scaled, as
    bitmaps on the GPU, instead of drawn anew at every frame; at rest they are drawn sharp again. */
@@ -803,9 +812,9 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .hd-part[data-part="clocks"] > .hd-clocks { zoom: var(--z-clocks, 1); }
 .hd-part[data-part="sun"] > .hd-udp { zoom: var(--z-sun, 1); }
 .hd-part[data-part="moon"] > .hd-udp { zoom: var(--z-moon, 1); }
+.hd-part[data-part="sea"] > .hd-udp { zoom: var(--z-sea, 1); }
 .hd-part-eham { grid-column: 3; grid-row: 1 / 3; display: flex; min-width: 0; }
-.hd-eham .eham-wx > :not(.eham-sea) { zoom: var(--z-metar, 1); }
-.hd-eham .eham-sea { zoom: var(--z-sea, 1); }
+.hd-eham .eham-wx { zoom: var(--z-metar, 1); }
 .hd-brand .hd-name { font-size: calc(1.3rem * var(--t-brand, 1)); }
 .hd-clocks .clock-time { font-size: calc(3.5rem * var(--t-clocks, 1)); }
 .hd-part[data-part="sun"] .udp-t b { font-size: calc(1.3rem * var(--t-sun, 1)); }
@@ -815,8 +824,8 @@ html[data-theme="dark"] .vr-map, .vr-map.night { background: #0d1522; }
 .hd-eham .metric-value { font-size: calc(1.4rem * var(--t-metar, 1)); }
 .hd-eham .eham-id { font-size: calc(1.3rem * var(--t-metar, 1)); }
 .hd-eham .eham-raw { font-size: calc(0.8rem * var(--t-metar, 1)); }
-.hd-eham .sea-state b { font-size: calc(1.3rem * var(--t-sea, 1)); }
-.hd-eham .sea-kv b { font-size: calc(1.05rem * var(--t-sea, 1)); }
+.hd-sea .sea-state b { font-size: calc(1.3rem * var(--t-sea, 1)); }
+.hd-sea .sea-kv b { font-size: calc(1.05rem * var(--t-sea, 1)); }
 
 body.editing #header .hd-part { outline: 1px dashed color-mix(in srgb, var(--amber) 70%, transparent); outline-offset: 2px; border-radius: var(--radius); }
 body.editing #header .hd-mark { outline: 2px solid var(--amber) !important; outline-offset: 2px; }
@@ -878,5 +887,5 @@ body.touch .wp-btn { height: 2.25rem; }
 .wp-opt-icao { font-family: var(--font-mono); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
 .wp-menu-foot { margin-top: 0.3rem; padding: 0.45rem 0.55rem 0.2rem; border-top: 1px solid var(--border); font-size: 0.68rem; line-height: 1.4; color: var(--muted); max-width: 19rem; }
 body.touch .wp-opt { padding: 0.75rem 0.7rem; }
-/* UDP and MAAN: labels of one width, so what follows starts in one line under each other. */
-.hd-time .udp-label { min-width: 3.9rem; flex: none; }
+/* UDP, MAAN and NOORDZEE: labels of one width, so what follows starts in one line under each other. */
+.hd-time .udp-label { min-width: 6.3rem; flex: none; }

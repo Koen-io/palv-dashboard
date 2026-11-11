@@ -6,8 +6,8 @@
 
 /* ---------- OLED care: no pixel lights the same way for hours ---------- */
 // The whole dashboard drifts very slowly along a small orbit (at most 3 px from its place, one step a
-// minute, each step taking 20 seconds), so the fixed lines and letters of the header never burn in.
-// Too slow and too small to notice. The mouse pointer hides after a few seconds without movement, and at
+// minute, a whole pixel at a time so text stays sharp), so the fixed lines and letters of the header never
+// burn in. Too small to notice. The mouse pointer hides after a few seconds without movement, and at
 // night a barely visible veil takes 4 % off the brightness of everything.
 const ORBIT = (() => {
   // A spiral through the 7 x 7 grid around the origin, so neighbouring steps are always 1 px apart.
@@ -34,7 +34,7 @@ function oledTick() {
     oled.last = now;
     oled.step = (oled.step + 1) % ORBIT.length;
     const [dx, dy] = ORBIT[oled.step];
-    app.style.transform = dx || dy ? `translate(${dx}px, ${dy}px)` : '';
+    app.style.transform = `translate(${dx}px, ${dy}px)`; // also at 0,0: the layer stays (system.css)
   }
   document.body.classList.toggle('oled-night', !udpToday(now).day && document.documentElement.dataset.theme === 'dark');
 }

@@ -322,6 +322,7 @@ function renderUdp() {
     stripTime(icon('moon'), u.end),
     h('span', { class: 'udp-badge ' + (u.day ? 'day' : 'night') }, u.day ? 'DAG' : 'NACHT')
   );
+  fitStrip(root, 3);
   notePeriod(now);
 }
 
@@ -389,8 +390,21 @@ function renderMoon() {
     h('span', { class: 'lux ' + band, title: `Licht op de grond: ${LUX_WORD[band].toLowerCase()}` },
       h('span', { class: 'lux-meter' }, h('i', { style: `width:${(luxLevel(L.lux) * 100).toFixed(1)}%` })),
       h('b', {}, lux.value), h('small', {}, lux.unit)),
-    h('span', { class: 'udp-badge ' + (up ? 'day' : 'night'), title: up ? 'De maan staat boven de horizon' : 'De maan staat onder de horizon' }, up ? 'BOVEN HORIZON' : 'ONDER HORIZON')
+    h('span', { class: 'udp-badge ' + (up ? 'day' : 'night'), title: up ? 'De maan staat boven de horizon' : 'De maan staat onder de horizon' },
+      h('span', { class: 'b-long' }, up ? 'BOVEN HORIZON' : 'ONDER HORIZON'), h('span', { class: 'b-short' }, up ? 'BOVEN' : 'ONDER'))
   );
+  fitStrip(root, 8);
+}
+
+// Takes parts out of a header strip, least important first (the .fit-N classes in system.css), until
+// its content fits its width. Again after every redraw and whenever the strip changes size.
+const fitWatch = new ResizeObserver((entries) => { for (const e of entries) fitStrip(e.target, +e.target.dataset.fitMax); });
+function fitStrip(el, max) {
+  if (el.dataset.fitMax !== String(max)) { el.dataset.fitMax = max; fitWatch.observe(el); }
+  let n = 0;
+  const set = () => { for (let i = 1; i <= max; i += 1) el.classList.toggle('fit-' + i, i <= n); };
+  set();
+  while (n < max && el.scrollWidth > el.clientWidth + 1) { n += 1; set(); }
 }
 
 /* ---------- moon position: azimuth and elevation, for 52°N 005°E ---------- */
@@ -547,13 +561,19 @@ function waveSvg(state) {
   const d = `M2 ${16 + a / 2}c4 0 4-${a} 8-${a}s4 ${a} 8 ${a} 4-${a} 8-${a} 4 ${a} 8 ${a}`;
   return h('span', { class: 'sea-wave', html: `<svg viewBox="0 0 36 24" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" transform="translate(0 5)" fill="none" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/></svg>` });
 }
-function seaRow() {
-  const row = h('div', { class: 'eham-sea' });
+// The North Sea strip, the third under UDP and Maan and built the same way: label, sea state, wave height
+// and period, water temperature, and at the right the station and time of the observation.
+function renderSea() {
+  const row = $('#sea');
+  if (!row) return;
+  row.replaceChildren();
+  row.classList.remove('stale');
   const d = sea.data;
   const ref = d && d.ref;
   if (!ref) {
-    row.append(h('span', { class: 'sea-label' }, 'NOORDZEE'), h('span', { class: 'sea-none' }, sea.fail ? 'Sea state en zeewatertemperatuur zijn tijdelijk niet beschikbaar (Rijkswaterstaat).' : 'Sea state en zeewatertemperatuur worden opgehaald…'));
-    return row;
+    row.title = '';
+    row.append(h('span', { class: 'udp-label' }, 'NOORDZEE'), h('span', { class: 'sea-none' }, sea.fail ? 'Sea state en zeewatertemperatuur tijdelijk niet beschikbaar (Rijkswaterstaat)' : 'Sea state en zeewatertemperatuur worden opgehaald…'));
+    return;
   }
   const st = ref.state, now = Date.now();
   const age = ref.hsAt ? Math.round((now - ref.hsAt) / 60000) : null;
@@ -565,21 +585,25 @@ function seaRow() {
     + (d.range ? `Alle Noordzeestations nu: sea state ${d.range[0]}${d.range[1] !== d.range[0] ? '–' + d.range[1] : ''}.\n` : '')
     + 'Referentiestation te kiezen onder Instellingen › Weerradar.\n\n' + lines.join('\n');
   row.append(
-    h('span', { class: 'sea-label' }, 'NOORDZEE'),
+    h('span', { class: 'udp-label' }, 'NOORDZEE'),
     h('span', { class: 'sea-state s' + (st == null ? 'x' : Math.min(st, 6)) }, waveSvg(st), h('b', {}, st == null ? '—' : String(st)), h('span', { class: 'sea-words' }, h('em', {}, 'SEA STATE'), h('u', {}, st == null ? 'onbekend' : SEA_NAMES[st]))),
+    h('span', { class: 'mp-sep' }),
     h('span', { class: 'sea-kv', title: `Significante golfhoogte Hs (Hm0) en gemiddelde golfperiode Tm02${ref.tmax != null ? `; maximale periode ${nlNum(ref.tmax)} s` : ''}` }, h('small', {}, 'Hs'), h('b', {}, nlNum(ref.hs, ref.hs != null && ref.hs < 1 ? 2 : 1)), h('small', {}, 'm'), ref.tm02 != null ? h('i', {}, `${nlNum(ref.tm02)} s`) : null),
     h('span', { class: 'mp-sep' }),
     h('span', { class: 'sea-kv', title: 'Zeewatertemperatuur aan het oppervlak' }, h('small', {}, 'ZEEWATER'), h('b', {}, nlNum(ref.tw)), h('small', {}, '°C')),
-    h('span', { class: 'sea-src' }, `${ref.name} ${ref.hsAt ? zulu(ref.hsAt) : ref.at ? zulu(ref.at) : ''}${stale ? ' · VEROUDERD' : ''}${d.range && d.range[1] !== d.range[0] ? ` · sector ${d.range[0]}–${d.range[1]}` : ''}`)
+    h('span', { class: 'mo-gap' }),
+    h('span', { class: 'sea-src' },
+      h('span', {}, `${ref.name} ${ref.hsAt ? zulu(ref.hsAt) : ref.at ? zulu(ref.at) : ''}${stale ? ' · VEROUDERD' : ''}`),
+      d.range && d.range[1] !== d.range[0] ? h('span', { class: 'sea-sector' }, ` · sector ${d.range[0]}–${d.range[1]}`) : null)
   );
-  return row;
+  fitStrip(row, 5);
 }
 async function refreshSea() {
   const res = await window.palv.data.seaOverview(state.settings.seaStation || 'europlatform').catch(() => ({ ok: false }));
   if (res && res.ok) { sea.data = res; sea.fail = false; sea.at = Date.now(); } else sea.fail = true;
   const ok = !!(sea.data && sea.data.ref && sea.data.ref.hsAt && Date.now() - sea.data.ref.hsAt < 3 * 3600e3);
   report('sea', 'Sea state Noordzee', ok || !sea.fail, sea.fail ? 'Rijkswaterstaat geeft geen antwoord' : sea.data && sea.data.ref ? `waarneming ${zulu(sea.data.ref.hsAt || sea.data.ref.at)}` : '', 20 * 60000);
-  renderEham();
+  renderSea();
 }
 
 let ehamBadge = null;
@@ -608,7 +632,6 @@ function renderEham() {
     head.append(ehamBadge);
     wx.append(head, h('div', { class: 'rwy-none' }, eham.metarFail ? 'Luchtvaartweer is tijdelijk niet beschikbaar.' : 'Luchtvaartweer wordt opgehaald…'), h('div', {}));
   }
-  wx.append(seaRow());
   root.replaceChildren(wx);
 }
 
@@ -681,7 +704,7 @@ function renderHeaderTune() {
 }
 // Hovering a group in the bar lights up its part in the header.
 function hdMark(k, on) {
-  const el = k === 'sea' ? $('#eham .eham-sea') : document.querySelector(`#header .hd-part[data-part="${k}"]`);
+  const el = document.querySelector(`#header .hd-part[data-part="${k}"]`);
   if (el) el.classList.toggle('hd-mark', on);
 }
 

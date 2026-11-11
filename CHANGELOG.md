@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 1.36.0
+
+### Weerradar: nieuwe labels bij de meetstations
+- **Onder elkaar in plaats van naast elkaar.** Onder de stationscode staat elke waarde op een eigen regel (wind, wolkenbasis, zicht, …), elk met een eigen klein icoontje, zodat de waarden netjes onder elkaar uitlijnen en de labels niet meer ver naar rechts lopen. De windpijl wijst mee met de wind. De kleur van het oordeel (groen, oranje, rood) loopt langs de rand van het label, zodat duidelijk blijft bij welk bolletje het hoort
+- **Labels zoeken zelf een vrije plek.** Elk label kiest uit acht plekken rond zijn bolletje (rechts, links, boven, onder en schuin) de plek waar het geen ander label en geen ander bolletje bedekt, en ook niet de statusbalk, de knoppen of de tijdbalk van Windy. De grote velden gaan voor, slecht weer gaat voor goed weer, en een label blijft staan waar het stond zolang die plek vrij is (geen verspringende labels). Past het nergens, dan blijft alleen de stationscode staan; past zelfs dat niet, dan verschijnt het label pas als je met de muis op het bolletje staat
+- **Nieuw in het tandwiel:** Indeling (Onder elkaar / Naast elkaar), Plek (Auto, Rechts, Links, Boven, Onder: de voorkeursplek; labels wijken altijd uit voor elkaar) en Tekstgrootte als een rij steeds grotere letters
+- **Het menu van de weerradar** valt niet meer van het scherm: alle knoppen passen in de breedte, en is het menu hoger dan de kaart, dan scrollt het
+
+### Kop
+- **Noordzee als eigen strook onder de Maan.** Sea state, golfhoogte, zeewatertemperatuur en het meetstation staan nu in een derde strook, gebouwd zoals UDP en Maan, met de labels netjes in één lijn. Onder de METAR staat alleen nog het weer van de basis. De drie stroken lopen over de hele hoogte van de kop, waardoor de kop lager is en de widgets meer ruimte krijgen
+- **Maan, UDP en Noordzee lopen niet meer uit hun vakje.** Is de ruimte te krap (ook bij een grotere tekstgrootte van de kop), dan vallen eerst de minst belangrijke onderdelen weg, zoals de windrichting in woorden of de lichtmeter, en wordt ONDER HORIZON kort ONDER. Alles staat nog in de tooltip
+
+### Vluchtradar knippert niet meer
+- De kaart van de Vluchtradar knipperde soms even weg. Oorzaak: de OLED-bescherming verschuift het hele dashboard elke minuut een pixel en liet dat 20 seconden glijden. Daarvoor zette Chromium het hele dashboard steeds tijdelijk op een eigen laag op de videokaart en haalde die er daarna weer af; bij elke wissel werd alles opnieuw getekend, en de kaart met zijn honderden kaarttegels was daarbij soms even leeg. Nu blijft het dashboard altijd op één eigen laag en is elke stap van een pixel alleen nog een verschuiving van die laag: er wordt niets opnieuw getekend. De tekst blijft daardoor ook altijd scherp
+- Overdag wordt de vervaagde nachtkaart van de Vluchtradar helemaal van het scherm gehaald (zoals de dagkaart 's nachts al), zodat die de videokaart niets meer kost
+
 ## 1.35.0
 
 ### Nieuw tabblad Browser (Windows)
