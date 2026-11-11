@@ -9,7 +9,7 @@
 // from another screen comes in through `plan:store` and is passed to whoever listens for that kind.
 // Items are { id, ...fields, updatedAt }; a removed item is simply gone from the lists.
 const OPS = {
-  data: { private: { profiles: {}, decks: {}, keys: {}, docs: {} }, shared: { routes: {}, favorites: {}, bases: {} }, ops: { timers: {}, presets: {} }, boards: { boards: {}, elements: {} }, missions: { missions: {}, fields: {} } },
+  data: { private: { profiles: {}, decks: {}, keys: {}, docs: {} }, shared: { routes: {}, favorites: {}, bases: {} }, ops: { timers: {}, presets: {} }, boards: { boards: {}, elements: {} }, missions: { missions: {}, fields: {} }, coa: { plans: {}, marks: {} } },
   loaded: false,
   subs: new Map(),
   liveSubs: new Set(),

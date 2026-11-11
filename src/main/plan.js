@@ -75,7 +75,7 @@ function leaderPeer() {
 // Only the unit's own screens (peers this screen has found or was given) get the files.
 const isPeer = (caller) => !!caller && caller.secure === true && screens.peers().some((p) => p.id === caller.id);
 
-const KIND_WORDS = { private: 'eigen profielen en dekken', shared: 'routes en favorieten', ops: 'timers', boards: 'whiteboards', missions: 'missieplanning' };
+const KIND_WORDS = { private: 'eigen profielen en dekken', shared: 'routes en favorieten', ops: 'timers', boards: 'whiteboards', missions: 'missieplanning', coa: 'COA-plannen' };
 // What was fetched from each screen so far, per kind: the next fetch asks only for what changed after it.
 const synced = new Map();
 let syncBusy = false, syncAgain = false;
@@ -314,7 +314,12 @@ async function prefetch({ src, bbox, zMin, zMax }) {
 }
 
 /* ---------- exports ---------- */
+// Screenshot mode only (`--shot` with PALV_SHOT_SAVE set): written straight to that path, no dialog, so an
+// export can be checked by a test run.
+let testMode = false;
 async function saveFile(title, name, filters, content) {
+  const auto = testMode && process.env.PALV_SHOT_SAVE;
+  if (auto) { fs.writeFileSync(auto, content); return auto; }
   const res = await dialog.showSaveDialog(getWin(), { title, defaultPath: name, filters });
   if (res.canceled || !res.filePath) return false;
   fs.writeFileSync(res.filePath, content);
@@ -330,6 +335,17 @@ async function printPdf(html, name, pageSize = 'A5') {
   } finally { w.destroy(); }
 }
 
+// Straight to the printer, A5 portrait (the kneeboard card of the COA Planner): the system print dialog.
+async function printA5(html) {
+  const w = new BrowserWindow({ show: false, webPreferences: { javascript: false } });
+  try {
+    await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    return await new Promise((resolve) => {
+      w.webContents.print({ silent: false, printBackground: true, pageSize: 'A5', landscape: false, margins: { marginType: 'none' } }, (ok, reason) => resolve({ ok, error: ok || reason === 'cancelled' ? null : reason }));
+    });
+  } finally { setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, 1000); }
+}
+
 /* ---------- start ---------- */
 function registerScheme() {
   protocol.registerSchemesAsPrivileged([{ scheme: 'palvtile', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -338,6 +354,7 @@ function registerScheme() {
 function start(opts) {
   ({ screens, share } = opts);
   getWin = opts.getWin;
+  testMode = !!opts.test;
   const dir = app.getPath('userData');
   tileDir = path.join(dir, 'plan-tiles');
   store.start({ dir, log: lg });
@@ -495,6 +512,7 @@ ipcMain.handle('plan:saveBinary', safe(async (_e, { title, name, ext, dataUrl })
   return { ok: !!(await saveFile(String(title || 'Opslaan'), String(name || 'bestand'), [{ name: String(ext || 'png').toUpperCase(), extensions: [String(ext || 'png')] }], Buffer.from(m[2], 'base64'))) };
 }));
 ipcMain.handle('plan:saveText', safe(async (_e, { title, name, ext, content }) => ({ ok: !!(await saveFile(title, name, [{ name: ext.toUpperCase(), extensions: [ext] }], String(content))) })));
+ipcMain.handle('plan:printA5', safe(async (_e, { html }) => printA5(String(html))));
 ipcMain.handle('plan:printPdf', safe(async (_e, { html, name, pageSize }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'), pageSize)) })));
 
 const status = () => ({ ...store.digests(), wind: wind.own() });

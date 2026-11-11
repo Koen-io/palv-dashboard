@@ -81,7 +81,7 @@ test('tabblad Browser: op Windows erbij naast MadeSmart, op de Mac niet', () => 
   const old = () => ({ version: 10, settings: {}, pages: [{ id: 'a', name: 'Operationeel', widgets: [] }, { id: 'm', name: 'MadeSmart', widgets: [{ id: 'b', type: 'browser', x: 0, y: 0, w: 96, h: 54, z: 1, cfg: {} }] }] });
   const up = model.normalize(old(), { privbrowser: true });
   assert.equal(up.pages.filter((p) => p.widgets.some((w) => w.type === 'privbrowser')).length, 1);
-  assert.deepEqual(up.pages.map((p) => p.name), ['Operationeel', 'MadeSmart', 'Browser']);
+  assert.deepEqual(up.pages.map((p) => p.name), ['Operationeel', 'MadeSmart', 'Browser', 'COA Planner']);
   assert.equal(up.settings.privbrowser.mode, 'tor');
   assert.ok(Array.isArray(up.settings.privbrowser.favorites));
   // Removed by hand afterwards: it stays away.

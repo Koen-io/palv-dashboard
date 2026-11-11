@@ -13,6 +13,7 @@ Operationeel dashboard voor de Police Air Support Unit: een desktop-app (Windows
 - **Mission Planning:** de Scheme Of Maneuver Planning (SOMP) van de TACSOP AW139 digitaal, alle fases en planborden invulbaar, met een overzicht dat laat zien of de SOMP compleet is.
 - **Whiteboard:** tekenen, tekst en ruim tweehonderd operationele iconen (eenvoudig en gedetailleerd, schepen ook in bovenaanzicht), een stuk kaart als ondergrond (satelliet, kaart, topografisch, luchtfoto, VFR), op het touchscreen, live samen op alle schermen.
 - **Offshore:** alle platforms, windparken, grenzen, kabels, kustpunten, de eigen vloot en live AIS met scheepsdata, past tracks en foto's.
+- **COA Planner:** de relatieve wind boven een schip voor de vier Courses of Approach rond de Assault Track, in ware of magnetische graden en rood/groen vanaf de boeg, met zee en weer op de positie, zon en maan, hoogte-deconflictie, tekenen en een A5-kniebordkaart.
 - Versheidsbolletje op elke widget: groen, oranje of rood, met tijd en leeftijd van de gegevens.
 
 ## Beheer

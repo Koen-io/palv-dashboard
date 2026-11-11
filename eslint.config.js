@@ -9,7 +9,7 @@ const globals = require('globals');
 const rendererDir = path.join(__dirname, 'src', 'renderer');
 const rendererFiles = [
   ...fs.readdirSync(rendererDir).filter((f) => f.endsWith('.js')).map((f) => path.join(rendererDir, f)),
-  ...['widgets', 'plan', 'whiteboard', 'offshore'].flatMap((d) => fs.readdirSync(path.join(rendererDir, d)).filter((f) => f.endsWith('.js')).map((f) => path.join(rendererDir, d, f))),
+  ...['widgets', 'plan', 'whiteboard', 'offshore', 'coa'].flatMap((d) => fs.readdirSync(path.join(rendererDir, d)).filter((f) => f.endsWith('.js')).map((f) => path.join(rendererDir, d, f))),
 ];
 const shared = {};
 for (const file of rendererFiles) {
@@ -20,7 +20,7 @@ for (const file of rendererFiles) {
 for (const name of Object.keys(require('./src/renderer/model.js'))) shared[name] = 'readonly';
 Object.assign(shared, { PRIV_CORE: 'readonly', BASES_API: 'readonly', ASTRO: 'readonly', WX: 'readonly', SQUAWK: 'readonly', SUN_TABLE: 'readonly', PLACES: 'readonly', BRIEFING: 'readonly', L: 'readonly', ICAO_LANDEN: 'readonly', MID_LANDEN: 'readonly' });
 // Zoek & Plan: the pure modules in plan/ hang one namespace each on window (and are required by the tests).
-Object.assign(shared, { PlanGeo: 'readonly', PlanCoords: 'readonly', PlanWmm: 'readonly', PlanPerf: 'readonly', PlanUnits: 'readonly', PlanProfiles: 'readonly' });
+Object.assign(shared, { PlanGeo: 'readonly', PlanCoords: 'readonly', PlanWmm: 'readonly', PlanPerf: 'readonly', PlanUnits: 'readonly', PlanProfiles: 'readonly', COA_CALC: 'readonly' });
 
 module.exports = [
   { ignores: ['src/renderer/vendor/**', 'dist/**', 'node_modules/**'] },

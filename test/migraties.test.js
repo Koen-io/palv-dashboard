@@ -10,7 +10,7 @@ test('standaardindeling blijft zichzelf na normaliseren', () => {
   const def = M.defaultState();
   const out = M.normalize(clone(def));
   assert.strictEqual(out.version, M.VERSION);
-  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing', 'MadeSmart']);
+  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Operationeel', 'Weer', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', 'COA Planner', '(De)Briefing', 'MadeSmart']);
   assert.deepStrictEqual(types(out.pages[2]), ['plan']);
   assert.deepStrictEqual(types(out.pages[0]), ['fleet', 'radar', 'runway', 'windy']);
   assert.strictEqual(out.settings.keepAwake, true);
@@ -21,7 +21,7 @@ test('standaardindeling blijft zichzelf na normaliseren', () => {
 test('onbruikbare invoer geeft de standaardindeling', () => {
   for (const bad of [null, undefined, 42, 'x', {}, { pages: [] }, { pages: 'nee' }, { pages: [null, 7] }]) {
     const out = M.normalize(clone(bad === undefined ? null : bad));
-    assert.strictEqual(out.pages.length, 9, JSON.stringify(bad));
+    assert.strictEqual(out.pages.length, 10, JSON.stringify(bad));
   }
 });
 
@@ -76,12 +76,12 @@ test('1.0 → nu: oude standaardkaart naar de nieuwe, volledig scherm aan, baang
 test('1.16 → nu: het tabblad Zoek & Plan komt er één keer bij, achteraan', () => {
   const v7 = () => ({ version: 7, settings: {}, pages: [{ name: 'Eigen', widgets: [{ type: 'radar', x: 0, y: 0, w: 96, h: 54, cfg: {} }] }] });
   const out = M.normalize(v7());
-  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Eigen', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', '(De)Briefing', 'MadeSmart']);
+  assert.deepStrictEqual(out.pages.map((p) => p.name), ['Eigen', 'Zoek & Plan', 'Timings', 'Mission Planning', 'Whiteboard', 'Offshore', 'COA Planner', '(De)Briefing', 'MadeSmart']);
   const w = out.pages[1].widgets[0];
   assert.deepStrictEqual([w.type, w.x, w.y, w.w, w.h], ['plan', 0, 0, M.COLS, M.ROWS]);
   // Removed by hand afterwards: it does not come back.
   out.pages.splice(1, 1);
-  assert.strictEqual(M.normalize(clone(out)).pages.length, 7);
+  assert.strictEqual(M.normalize(clone(out)).pages.length, 8);
   // Moved to another page: it is not added a second time.
   const moved = M.normalize(v7());
   assert.strictEqual(M.normalize(clone(moved)).pages.filter((p) => p.widgets.some((x) => x.type === 'plan')).length, 1);

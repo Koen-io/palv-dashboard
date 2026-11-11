@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 1.45.0
+
+### Nieuw tabblad: COA Planner
+- **De relatieve wind boven een schip voor de vier Courses of Approach rond de Assault Track**, nagebouwd naar de COA Planner van PC QRA en de iOS-app, met precies dezelfde berekening (getoetst op de voorbeelden van beide). Het schip draait mee met de **exacte** Boat Reference Course zodra die binnen het COA-venster van ±45° valt; die COA is oranje omrand
+- **Twee weergaven tegelijk**: de schijnbare wind over het dek in graden en knopen, en de tactische weergave vanaf de boeg in rood (bakboord) en groen (stuurboord), met BOW, MID en STERN en de lijnen op 45°, 90° en 139° (voor de AW139). Per COA ook de kop- en zijwind die de heli op de AT voelt, waar de heli vandaan komt gezien vanaf het schip, en de zee ten opzichte van het schip
+- **Generieke, gedetailleerde schepen** in bovenaanzicht met rechte spiegel: brug met vleugels en navigatielichten, mast en radar, schoorsteen, sloepen, ankerlier, kraan en werkdek; met de **schaduw** van zon of maan ernaast
+- **Ware of magnetische graden** met één schakelaar (variatie op de positie, WMM2025) en **AT boven of Noord boven**
+- **Kies positie schip**: een kaart met de AIS-schepen; tik een schip aan en positie, koers en snelheid staan erin, of tik een punt op het water. Er gaat niets over de keuze naar buiten; wind- en zee-data gebruiken een afgeronde positie
+- **Zee en weer op de positie**: sea state (Douglas), golfhoogte, periode en richting, deining, zeewatertemperatuur en de verwachte wind met windstoten op het H-uur, met één knop over te nemen (of de METAR van de basis)
+- **H-uur in UTC** met een tijdschuif voor zon en maan, **gegist bestek** van de positie naar het H-uur, en waarschuwingen voor **nadering tegen de zon in** en **tegen de maan in (NVG)**, met het licht in lux
+- **Hoogte-deconflictie**: callsign, type, hoogte en taak, met een waarschuwing als toestellen te dicht op elkaar zitten (instelbaar 200–1000 ft)
+- **Tekenen**: met de schuif Tekenen verschijnen links de gereedschappen van het Whiteboard (pen, markeerstift, lijn, pijl, vormen, tekst, iconen, gum); de tekening hoort bij het plan
+- **Afdrukken en PDF altijd op A5 staand**, voor het kniebord: bord, tekening, COA-tabel, zon en maan, zee en hoogtes op één blad
+- **Plannen staan op alle schermen**, met een knop **Naar missie** die W/V, zon en maan en de ingress invult in Mission Planning, en een **nachtstand** (rood en gedimd) voor in de cockpit
+- In te stellen op het touchscreen: grote plus/min-knoppen (vasthouden herhaalt), en de windrichting is met de vinger in het kompas te zetten
+
 ## 1.44.0
 
 ### Scherpe kaarten op een scherm met hoge schaal

@@ -139,6 +139,7 @@ contextBridge.exposeInMainWorld('palv', {
     saveText: (q) => ipcRenderer.invoke('plan:saveText', q),
     saveBinary: (q) => ipcRenderer.invoke('plan:saveBinary', q),
     printPdf: (q) => ipcRenderer.invoke('plan:printPdf', q),
+    printA5: (q) => ipcRenderer.invoke('plan:printA5', q),
   },
   ais: {
     snap: (since) => ipcRenderer.invoke('ais:snap', since),

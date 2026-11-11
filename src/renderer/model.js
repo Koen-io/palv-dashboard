@@ -14,7 +14,7 @@
   // Map views are stored for a widget body of this pixel size and scaled to the actual size, so the
   // same area stays in view on any screen resolution and in any window size.
   const REF_W = 939, REF_H = 1041;
-  const VERSION = 11;
+  const VERSION = 12;
 
   const uid = () => Math.random().toString(36).slice(2, 10);
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -50,6 +50,8 @@
     mission: { name: 'Mission Planning', defaults: { missionId: null, phase: 'overview' } },
     whiteboard: { name: 'Whiteboard', defaults: { boardId: null, side: true, sideTab: 'draw', tool: 'pen', color: '#0a0f18', width: 4, bg: 'white' } },
     debrief: { name: '(De)Briefing', defaults: { slot: 'debriefing' } },
+    // 1.45: the COA Planner, the wind over a ship for the four courses of approach (coa/coa.js).
+    coa: { name: 'COA Planner', defaults: { planId: null, draw: false, night: false } },
     offshore: { name: 'Offshore', defaults: { lat: 53.35, lon: 4.1, zoom: 7.2, base: 'osm', raster: ['seamark'], side: true, sideTab: 'ships', layers: { platforms: true, farms: true, turbines: false, helidecks: true, wx: true, fleet: true, ships: true, tracks: true, labels: true, places: true, eez: true, pipelines: false, cables: false, density: false, natura: false }, shipTypes: ['all'], minSog: 0 } },
   };
 
@@ -154,6 +156,7 @@
         { id: uid(), name: 'Mission Planning', widgets: [widget('mission', 0, 0, 96, 54, 1)] },
         { id: uid(), name: 'Whiteboard', widgets: [widget('whiteboard', 0, 0, 96, 54, 1)] },
         { id: uid(), name: 'Offshore', widgets: [widget('offshore', 0, 0, 96, 54, 1)] },
+        { id: uid(), name: 'COA Planner', widgets: [widget('coa', 0, 0, 96, 54, 1)] },
         { id: uid(), name: '(De)Briefing', widgets: [widget('debrief', 0, 0, 96, 54, 1)] },
         { id: uid(), name: 'MadeSmart', widgets: [widget('browser', 0, 0, 96, 54, 1, { title: 'MadeSmart' })] },
       ],
@@ -213,6 +216,7 @@
     if (from < 9) migrateV9(loaded);
     if (from < 10) migrateV10(loaded);
     if (from < 11 && opts.privbrowser) migrateV11(loaded);
+    if (from < 12) migrateV12(loaded);
     // A screen without the private Browser (the Mac) drops it, also from an imported Windows layout.
     if (!opts.privbrowser) {
       const had = (p) => p.widgets.some((w) => w.type === 'privbrowser');
@@ -329,6 +333,18 @@
   function migrateV11(st) {
     if (st.pages.some((p) => p.widgets.some((w) => w.type === 'privbrowser'))) return;
     st.pages.push({ id: uid(), name: 'Browser', widgets: [{ id: uid(), type: 'privbrowser', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.privbrowser.name, cfg: {} }] });
+  }
+
+  // 1.45: the COA Planner tab, right after Offshore (or at the end when that page is gone); a screen that
+  // removes it afterwards keeps it removed.
+  function migrateV12(st) {
+    if (st.pages.some((p) => p.widgets.some((w) => w.type === 'coa'))) return;
+    const page = { id: uid(), name: 'COA Planner', widgets: [{ id: uid(), type: 'coa', x: 0, y: 0, w: COLS, h: ROWS, z: 1, title: WIDGET_META.coa.name, cfg: JSON.parse(JSON.stringify(WIDGET_META.coa.defaults)) }] };
+    const at = st.pages.findIndex((p) => p.widgets.some((w) => w.type === 'offshore'));
+    if (at >= 0) {
+      st.pages.splice(at + 1, 0, page);
+      if (st.activePage > at) st.activePage += 1;
+    } else st.pages.push(page);
   }
 
   return { COLS, ROWS, REF_W, REF_H, VERSION, DEFAULT_HEX, DEFAULT_BRIEFINGS, DEFAULT_SETTINGS, WIDGET_META, uid, clamp, defaultState, normalize, findFreeSpot, topZ };

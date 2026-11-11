@@ -1,0 +1,163 @@
+/* ============================================================
+   COA Planner
+   ============================================================ */
+.coa { position: absolute; inset: 0; display: flex; flex-direction: column; font-family: var(--font-ui); background: var(--bg); }
+.coa-title { margin-right: 0.2rem; }
+.coa-sel { min-width: 10rem; max-width: 18rem; }
+.coa-barsep { width: 1px; align-self: stretch; background: var(--border); margin: 0.1rem 0.15rem; }
+.coa-bar .switch { height: 1.9rem; }
+.coa-body { flex: 1; min-height: 0; display: flex; }
+
+/* ---------- left: inputs ---------- */
+.coa-in { flex: none; width: 15.6rem; overflow-y: auto; overflow-x: hidden; background: var(--surface); border-right: 1px solid var(--border); padding: 0.35rem 0.55rem 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; scrollbar-width: thin; }
+.coa.drawing .coa-in { display: none; }
+.coa-sec { display: flex; flex-direction: column; gap: 0.28rem; padding: 0.35rem 0 0.45rem; border-bottom: 1px solid var(--border); }
+.coa-sec:last-child { border-bottom: 0; }
+.coa-sec h3 { margin: 0 0 0.05rem; font: 800 0.62rem var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.coa-step { display: grid; grid-template-columns: 2.7rem 1fr 2.7rem; grid-template-rows: auto auto; align-items: center; gap: 0.12rem 0.3rem; }
+.coa-step.optional { grid-template-columns: 2.7rem 1fr 2.7rem 1.4rem; }
+.coa-step > label { grid-column: 1 / -1; font-size: 0.66rem; font-weight: 700; color: var(--muted); line-height: 1.1; }
+.coa-stepbtn { height: 2.3rem; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font: 700 1.25rem var(--font-ui); line-height: 1; touch-action: manipulation; user-select: none; }
+.coa-stepbtn:active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.coa-numbox { position: relative; display: block; }
+.coa-num { width: 100%; height: 2.3rem; text-align: center; font: 750 1.08rem var(--font-mono); padding: 0 1.4rem 0 0.3rem; font-variant-numeric: tabular-nums; }
+.coa-numbox small { position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); font-size: 0.62rem; font-weight: 700; color: var(--muted); pointer-events: none; }
+.coa-clear { width: 1.3rem; height: 1.3rem; padding: 0; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; }
+.coa-clear svg { width: 0.9rem; height: 0.9rem; }
+.coa-srcrow { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.coa-src { flex: 1 1 100%; font-size: 0.66rem; color: var(--muted); padding-left: 0.5rem; border-left: 3px solid var(--border-strong); }
+.coa-src.model { border-color: var(--owl-500); color: var(--text); }
+.coa-src.metar { border-color: var(--amber); color: var(--text); }
+.coa-srcrow .btn { height: 1.9rem; flex: 1; justify-content: center; }
+.coa-hrow { display: grid; grid-template-columns: 1fr 2.6rem; gap: 0.25rem; }
+.coa-hrow .coa-date { grid-column: 1 / -1; }
+.coa-hrow .input { height: 2.2rem; font: 700 0.8rem var(--font-mono); padding: 0 0.2rem; min-width: 0; }
+.coa-hrow .input::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0; width: 0.8rem; }
+.coa-hrow .btn { height: 2.2rem; justify-content: center; }
+.coa-srow { display: flex; align-items: center; gap: 0.35rem; color: var(--sun, var(--amber-soft)); }
+.coa-srow > svg { width: 1rem; height: 1rem; flex: none; color: var(--amber-soft); }
+.coa-slider { flex: 1; min-width: 0; width: 100%; accent-color: var(--accent); height: 1.6rem; }
+.coa-sliderlbl { font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.coa-posbtn { height: 2.4rem; justify-content: center; font-size: 0.82rem; }
+.coa-pos { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.15rem 0.1rem; }
+.coa-pos b { font: 750 0.86rem var(--font-mono); }
+.coa-pos b.muted { font-family: var(--font-ui); color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+.coa-pos small { font-size: 0.66rem; color: var(--muted); }
+.coa-drinfo { color: var(--text) !important; }
+.coa-dr { font-size: 0.74rem; }
+
+/* ---------- middle: the board and the drawing on it ---------- */
+.coa-stage { flex: 1; min-width: 0; position: relative; padding: 0.45rem; }
+.coa-board, .coa-draw { position: absolute; inset: 0.45rem; }
+.coa-board svg, .coa-draw svg { width: 100%; height: 100%; display: block; }
+.coa-board { touch-action: none; user-select: none; }
+.coa-draw { pointer-events: none; }
+.coa.drawing .coa-draw { pointer-events: auto; touch-action: none; cursor: crosshair; }
+.coa.drawing .coa-stage { box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--radius); }
+
+/* ---------- left while drawing: the tools ---------- */
+.coa-tools { display: none; flex: none; width: 15.6rem; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); scrollbar-width: thin; }
+.coa.drawing .coa-tools { display: block; }
+.coa-toolhead { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.5rem 0.6rem 0.3rem; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.coa-toolhead b { font: 800 0.66rem var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.coa-toolhead .seg button { height: 1.8rem; font-size: 0.72rem; padding: 0 0.6rem; }
+.coa-toolgrid { grid-template-columns: repeat(2, 1fr) !important; }
+.coa-icons { grid-template-columns: repeat(3, 1fr) !important; }
+
+/* ---------- right: data ---------- */
+.coa-info { flex: none; width: 21rem; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--border); padding: 0.45rem; display: flex; flex-direction: column; gap: 0.45rem; scrollbar-width: thin; }
+.coa-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 0.5rem 0.6rem 0.55rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.coa-card > header { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.coa-card h3 { margin: 0; font: 800 0.64rem var(--font-display); letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+.coa-badge { font-size: 0.64rem; font-weight: 750; padding: 0.12rem 0.45rem; border-radius: 1rem; background: var(--surface-3); color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.coa-badge.muted { color: var(--muted); }
+.coa-badge.night { background: #1b2350; color: #c9d4ff; }
+.coa-hint { margin: 0; font-size: 0.68rem; line-height: 1.4; color: var(--muted); }
+.coa-brc { border-color: var(--accent); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 13%, var(--surface-2)), var(--surface-2)); }
+.coa-brc.muted { border-color: var(--border); background: var(--surface-2); }
+.coa-brc h3 { color: var(--accent); }
+.coa-big { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.coa-wind { font: 800 1.18rem var(--font-mono); color: #4fb3ff; }
+html[data-theme="light"] .coa-wind { color: #1767c2; }
+.coa-rel { font: 800 1.05rem var(--font-mono); }
+.coa-rel.g { color: #2fb455; } .coa-rel.r { color: #e0383e; }
+.coa-line { font-size: 0.72rem; color: var(--text); }
+.coa-searow { display: grid; grid-template-columns: 4.6rem 1fr; gap: 0.5rem; align-items: start; }
+.coa-ss { border-radius: var(--radius-sm); padding: 0.35rem 0.2rem 0.4rem; text-align: center; background: var(--surface-3); display: flex; flex-direction: column; gap: 0.05rem; }
+.coa-ss small { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); }
+.coa-ss b { font: 800 1.9rem/1 var(--font-display); }
+.coa-ss span { font-size: 0.62rem; font-weight: 700; }
+.coa-ss.ss0, .coa-ss.ss1, .coa-ss.ss2 { background: color-mix(in srgb, #2fb455 26%, var(--surface-3)); }
+.coa-ss.ss3 { background: color-mix(in srgb, #8fcf3c 26%, var(--surface-3)); }
+.coa-ss.ss4 { background: color-mix(in srgb, #ffb020 30%, var(--surface-3)); }
+.coa-ss.ss5, .coa-ss.ss6 { background: color-mix(in srgb, #ff7a1a 36%, var(--surface-3)); }
+.coa-ss.ss7, .coa-ss.ss8, .coa-ss.ss9 { background: color-mix(in srgb, #ff4d42 42%, var(--surface-3)); }
+.coa-kvs { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
+.coa-kv { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.7rem; }
+.coa-kv span { color: var(--muted); white-space: nowrap; }
+.coa-kv b { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.coa-kv.em b { color: var(--accent); }
+.coa-wx { display: grid; grid-template-columns: 1.1rem 1fr auto; align-items: center; gap: 0.45rem; padding-top: 0.35rem; border-top: 1px solid var(--border); }
+.coa-wx > svg { width: 1.1rem; height: 1.1rem; color: var(--owl-300); }
+.coa-wx b { display: block; font: 800 0.88rem var(--font-mono); }
+.coa-wx small { display: block; font-size: 0.6rem; color: var(--muted); }
+.coa-wx .btn { height: 1.8rem; font-size: 0.7rem; }
+.coa-bodies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+.coa-body2 { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; padding: 0.35rem 0.4rem; border-radius: var(--radius-sm); background: var(--surface-3); min-width: 0; }
+.coa-body2 > i { width: 1.05rem; height: 1.05rem; border-radius: 50%; flex: none; }
+.coa-body2.coa-b-sun > i { background: radial-gradient(circle at 40% 40%, #fff4b3, #ffd23f 55%, #e0a800); box-shadow: 0 0 0.5rem rgba(255, 210, 63, 0.55); }
+.coa-body2.coa-b-moon > i { background: linear-gradient(90deg, #d7dde7 calc(var(--f, 1) * 100%), #3a4556 0); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
+.coa-body2.coa-b-lux > i { background: radial-gradient(circle, #9fd0ff, #2a5f9c); }
+.coa-body2.coa-down { opacity: 0.6; }
+.coa-body2 small { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); }
+.coa-body2 b { display: block; font: 800 0.84rem var(--font-mono); }
+.coa-body2 span { display: block; font-size: 0.6rem; color: var(--muted); line-height: 1.2; }
+.coa-warn { display: flex; gap: 0.4rem; align-items: flex-start; background: color-mix(in srgb, #ff4d42 18%, var(--surface-2)); border: 1px solid color-mix(in srgb, #ff4d42 60%, transparent); color: var(--text); border-radius: var(--radius-sm); padding: 0.32rem 0.45rem; font-size: 0.68rem; line-height: 1.35; }
+.coa-warn svg { width: 0.95rem; height: 0.95rem; flex: none; color: #ff5a52; margin-top: 0.05rem; }
+.coa-warn b { color: #ff7d77; }
+html[data-theme="light"] .coa-warn b { color: #c8161c; }
+.coa-seps { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.64rem; color: var(--muted); }
+.coa-seps select { height: 1.6rem; font-size: 0.68rem; padding: 0 0.3rem; width: auto; }
+.coa-htwrap { display: grid; grid-template-columns: 1fr 3.2rem; gap: 0.35rem; align-items: start; }
+.coa-ht { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.coa-ht th { font-size: 0.54rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; text-align: left; padding: 0 0.15rem 0.15rem; }
+.coa-ht th:last-child { width: 1.4rem; }
+.coa-ht td { padding: 0.08rem; }
+.coa-ht .input { height: 1.95rem; padding: 0 0.3rem; font-size: 0.72rem; width: 100%; }
+.coa-ht td:nth-child(3) .input { font-family: var(--font-mono); font-weight: 700; }
+.coa-ht tr.bad .input { border-color: #ff5a52; background: color-mix(in srgb, #ff4d42 14%, var(--surface)); }
+.coa-ht .w-tool { width: 1.3rem; height: 1.3rem; }
+.coa-stack { color: var(--muted); }
+.coa-stack svg { width: 100%; height: auto; display: block; }
+.coa-btnrow { display: flex; gap: 0.3rem; }
+.coa-btnrow .btn { height: 1.8rem; font-size: 0.7rem; }
+.coa-conf { display: flex; flex-direction: column; gap: 0.25rem; }
+
+/* ---------- night (NVG): dim and red ---------- */
+.coa.night { filter: brightness(0.62) sepia(1) hue-rotate(-38deg) saturate(3.2) contrast(1.05); }
+
+/* ---------- the map to choose the ship's position ---------- */
+.modal.coa-mapmodal { width: min(84rem, 96vw); max-height: 96vh; }
+.coa-mapmodal .modal-body { display: flex; flex-direction: column; gap: 0.45rem; }
+.coa-pickbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.coa-picksearch { flex: 1; min-width: 16rem; position: relative; }
+.coa-picksearch .zp-results { position: absolute; left: 0; right: 0; top: 100%; z-index: 2000; }
+.coa-aislbl { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.coa-pickstage { display: grid; grid-template-columns: 1fr 17rem; gap: 0.5rem; height: min(60vh, 40rem); }
+.coa-pickmap { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); min-height: 16rem; }
+.coa-pickcard { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 0.6rem; display: flex; flex-direction: column; gap: 0.45rem; overflow: auto; }
+.coa-pickhead b { display: block; font-size: 0.95rem; }
+.coa-pickhead small { display: block; font-size: 0.68rem; color: var(--muted); }
+.coa-privacy { display: flex; gap: 0.4rem; align-items: flex-start; }
+.coa-privacy svg { width: 0.95rem; height: 0.95rem; flex: none; color: var(--owl-300); margin-top: 0.05rem; }
+
+/* ---------- smaller screens (the touchscreen of PC QRA: 1281 × 721) ---------- */
+@media (max-width: 1500px) {
+  .coa-in, .coa-tools { width: 13.6rem; }
+  .coa-info { width: 18.4rem; }
+  .coa-stepbtn, .coa-num { height: 2.2rem; }
+  .coa-htwrap { grid-template-columns: 1fr; }
+  .coa-stack { display: none; }
+  .coa-ht th:nth-child(1) { width: 27%; } .coa-ht th:nth-child(2) { width: 23%; } .coa-ht th:nth-child(3) { width: 21%; }
+  .coa-pickstage { grid-template-columns: 1fr 14rem; }
+}
