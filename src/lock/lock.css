@@ -138,3 +138,13 @@ html, body {
   75% { transform: translateX(-3px); }
 }
 .shake { animation: shake .5s ease; }
+
+/* ---------- op zwart na een minuut zonder aanraking ---------- */
+#dark {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.is-dark #dark { opacity: 1; pointer-events: auto; transition: opacity 1.2s ease; }
+.is-dark, .is-dark * { cursor: none !important; }

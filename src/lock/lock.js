@@ -13,6 +13,34 @@
   // alleen het vergrendelbeeld met de klok (role=secondary) en reageren niet op toetsen of klikken.
   const secondary = new URLSearchParams(location.search).get('role') === 'secondary';
 
+  /* ---------- op zwart na een minuut zonder aanraking ---------- */
+  // Het hoofdproces houdt bij wanneer een vergrendelscherm voor het laatst is aangeraakt en zet na een
+  // minuut alle vergrendelde schermen tegelijk op zwart. Elke aanraking hier (muis bewegen, klikken, een
+  // toets) wordt gemeld en brengt ze terug; de aanraking die een zwart scherm wekt doet verder niets.
+  let dark = false, lastSent = 0;
+  const report = () => {
+    const now = Date.now();
+    if (dark || now - lastSent > 1000) { lastSent = now; try { window.lock.touch(); } catch { /* geen hoofdproces */ } }
+  };
+  window.lock.onDim((on) => {
+    dark = on;
+    body.classList.toggle('is-dark', on);
+    // Zoals Windows: wie terugkomt ziet eerst weer het klokbeeld, met een leeg wachtwoordveld.
+    if (on && !secondary && body.classList.contains('is-signin') && !waiting) { pin.blur(); toClock(); }
+  });
+  const wake = (e) => {
+    const wasDark = dark;
+    report();
+    if (wasDark) {
+      dark = false; body.classList.remove('is-dark');
+      if (e.type !== 'mousemove') { e.preventDefault(); e.stopImmediatePropagation(); }
+    }
+  };
+  window.addEventListener('mousemove', (e) => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 1) wake(e); }, true);
+  for (const ev of ['keydown', 'mousedown', 'wheel', 'touchstart', 'pointerdown']) {
+    window.addEventListener(ev, wake, { capture: true, passive: false });
+  }
+
   /* ---------- klok en datum ---------- */
   const timeFmt = new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   const dateFmt = new Intl.DateTimeFormat('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });

@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 1.47.0
+
+### Schermslot gaat op zwart
+- **Na 1 minuut op slot gaan de vergrendelde schermen op zwart**, zodat het vergrendelscherm niet de hele tijd te zien is. Het vergrendelen zelf blijft na 5 minuten zonder toetsenbord of muis
+- **Muis bewegen, klikken of een toets** op een vergrendeld scherm brengt het vergrendelscherm meteen terug op alle vergrendelde schermen; die eerste aanraking typt nog niets in het wachtwoordveld. Wie terugkomt ziet eerst weer de klok, met een leeg wachtwoordveld
+- Aanraken van het dashboard op het andere scherm laat de vergrendelde schermen zwart
+
 ## 1.46.0
 
 ### Tabbladen in één keuzelijst

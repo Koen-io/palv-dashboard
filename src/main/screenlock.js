@@ -23,6 +23,9 @@ const AAD = 'screenlock';
 const MAXLEN = 64; // het wachtwoord mag tekst zijn (letters, cijfers, tekens), 1 tot 64 tekens
 const DEFAULT_IDLE_MIN = 5; // een nieuw wachtwoord vergrendelt standaard na 5 minuten inactiviteit
 const FAILS_BEFORE_WAIT = 5, WAIT_MS = 30000;
+// Na 1 minuut zonder aanraking van het vergrendelscherm gaan de vergrendelde schermen op zwart, zodat het
+// vergrendelbeeld niet de hele tijd te zien is. Muis bewegen, klikken of een toets brengt het terug.
+const DIM_AFTER_MS = 60 * 1000;
 // De toetsen die een onbeheerde pc anders langs het slot zouden laten: wisselen van venster, de Windows-toets
 // en het afsluiten van het venster. Ctrl+Alt+Del is bewust afwezig: dat kan niet en pretenderen we niet.
 const BLOCK_KEYS = [
@@ -37,6 +40,7 @@ let winsLocked = [];         // de vergrendelvensters die nu open staan
 let fails = { n: 0, until: 0 };
 let assets = null;           // { wallpaper, accent, avatar }, één keer opgehaald
 let idleTimer = null, topTimer = null;
+let lastTouch = 0, dimmed = false; // laatste aanraking van een vergrendelvenster; staan de schermen op zwart
 
 const file = () => path.join(dir, 'palv-screenlock.json');
 const derive = (pin, salt) => crypto.scryptSync(String(pin), salt, 32, SCRYPT);
@@ -290,14 +294,30 @@ function lock() {
         w.moveTop();
       } catch { /* venster is weg */ }
     }
-  }, 1500);
+    // Op zwart na een minuut zonder aanraking van het vergrendelscherm.
+    const dim = Date.now() - lastTouch >= DIM_AFTER_MS;
+    if (dim !== dimmed) setDim(dim);
+  }, 1000);
+  lastTouch = Date.now(); dimmed = false;
   log.info('schermslot', `vergrendeld (${winsLocked.length} scherm${winsLocked.length === 1 ? '' : 'en'})`);
   broadcast();
   return { ok: true };
 }
 
+// Alle vergrendelde schermen tegelijk op zwart of terug naar het vergrendelbeeld.
+function setDim(on) {
+  dimmed = on;
+  for (const w of winsLocked) { try { if (!w.isDestroyed()) w.webContents.send('screenlock:dim', on); } catch { /* weg */ } }
+}
+// Een vergrendelvenster meldt een aanraking (muis, toets, klik): de schermen worden meteen weer zichtbaar.
+function touch() {
+  lastTouch = Date.now();
+  if (dimmed) setDim(false);
+}
+
 function unlock() {
   if (!isLocked()) return;
+  dimmed = false;
   clearInterval(topTimer); topTimer = null;
   for (const k of BLOCK_KEYS) { try { globalShortcut.unregister(k); } catch { /* was al weg */ } }
   const list = winsLocked; winsLocked = [];
@@ -334,6 +354,7 @@ function register() {
   // Door het vergrendelvenster zelf:
   ipcMain.handle('screenlock:boot', () => ({ name: displayName(), ...readAssets() }));
   ipcMain.handle('screenlock:verify', (_e, pin) => verify(pin));
+  ipcMain.on('screenlock:touch', () => { if (isLocked()) touch(); });
 }
 
 module.exports = { init, register, isLocked, hasPin, lock, unlock, status };
