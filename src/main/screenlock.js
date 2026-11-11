@@ -20,7 +20,7 @@ const V = 1;
 const SCRYPT = { N: 2 ** 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 const CHECK_TEXT = 'palv-screenlock-v1';
 const AAD = 'screenlock';
-const PIN_RE = /^\d{4,12}$/;
+const MAXLEN = 64; // het wachtwoord mag tekst zijn (letters, cijfers, tekens), 1 tot 64 tekens
 const FAILS_BEFORE_WAIT = 5, WAIT_MS = 30000;
 // De toetsen die een onbeheerde pc anders langs het slot zouden laten: wisselen van venster, de Windows-toets
 // en het afsluiten van het venster. Ctrl+Alt+Del is bewust afwezig: dat kan niet en pretenderen we niet.
@@ -39,7 +39,7 @@ let idleTimer = null, topTimer = null;
 
 const file = () => path.join(dir, 'palv-screenlock.json');
 const derive = (pin, salt) => crypto.scryptSync(String(pin), salt, 32, SCRYPT);
-const validPin = (pin) => PIN_RE.test(String(pin || ''));
+const validPin = (pin) => typeof pin === 'string' && pin.length >= 1 && pin.length <= MAXLEN;
 
 function sealWith(key, obj) {
   const iv = crypto.randomBytes(12);
@@ -184,7 +184,7 @@ function status() {
 
 /* ---------- de toegangscode ---------- */
 function setPin(oldPin, newPin) {
-  if (!validPin(newPin)) return { error: 'De toegangscode bestaat uit 4 tot 12 cijfers.' };
+  if (!validPin(newPin)) return { error: 'Geef een wachtwoord op (1 tot 64 tekens).' };
   if (state) {
     const key = derive(oldPin, Buffer.from(state.salt, 'base64'));
     if (openWith(key, state.check) !== CHECK_TEXT) return { error: 'De huidige toegangscode klopt niet.' };

@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.38.0
+
+### Schermslot: het wachtwoord mag nu tekst zijn
+- Het Schermslot neemt nu een gewoon **wachtwoord** in plaats van alleen een cijfercode: letters, cijfers en tekens, 1 tot 64 tekens. Het veld heet "Wachtwoord" en gedraagt zich als het Windows-aanmeldscherm met een wachtwoord (gemaskeerd, Enter of de pijl om aan te melden). Instellen, wijzigen of verwijderen onder Instellingen › Scherm › Schermslot
+
 ## 1.37.0
 
 ### Nieuw: Schermslot — vergrendel de pc, laat het dashboard staan

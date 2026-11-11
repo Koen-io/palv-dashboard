@@ -56,7 +56,7 @@
     }
     if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
     e.preventDefault();
-    toSignin(/^[0-9]$/.test(e.key) ? e.key : '');
+    toSignin(e.key.length === 1 ? e.key : '');
   }, true);
   for (const ev of ['mousedown', 'wheel', 'touchstart']) {
     window.addEventListener(ev, () => { if (!body.classList.contains('is-signin')) toSignin(''); }, { passive: true });
@@ -66,8 +66,7 @@
   const go = $('go');
   const showGo = () => { go.hidden = pin.value.length === 0; };
   pin.addEventListener('input', () => {
-    const clean = pin.value.replace(/\D/g, '').slice(0, 12);
-    if (clean !== pin.value) pin.value = clean;
+    if (pin.value.length > 64) pin.value = pin.value.slice(0, 64);
     if (msg.textContent) msg.textContent = '';
     showGo();
   });
@@ -97,7 +96,7 @@
       if (res && res.ok) return; // het hoofdproces sluit dit venster
       pin.disabled = false; checking(false);
       if (res && res.wait > 0) { startWait(res.wait); return; }
-      msg.textContent = 'De pincode is onjuist. Probeer het opnieuw.';
+      msg.textContent = 'Het wachtwoord is onjuist. Probeer het opnieuw.';
       pin.value = ''; showGo(); shake(); pin.focus();
     } catch {
       pin.disabled = false; checking(false);

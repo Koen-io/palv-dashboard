@@ -27,48 +27,48 @@ function applyBase(id) {
   toast(`Basis: ${next.long}`);
 }
 
-// Instellingen › Scherm › Schermslot: de eigen toegangscode van het vergrendelscherm instellen, wijzigen of
+// Instellingen › Scherm › Schermslot: het eigen wachtwoord van het vergrendelscherm instellen, wijzigen of
 // verwijderen, plus de naam onder de avatar en vanzelf vergrendelen bij inactiviteit. Alleen op Windows.
 function screenLockSection() {
   if (window.palv.platform !== 'win32') return null;
   const box = h('div', { class: 'sl-box' });
   const dyn = h('div', { style: 'display:flex;flex-direction:column;gap:.7rem' });
 
-  const codeInput = (ph) => h('input', { class: 'input', type: 'password', inputmode: 'numeric', maxlength: 12, placeholder: ph, autocomplete: 'off', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 12); } });
+  const codeInput = (ph) => h('input', { class: 'input', type: 'password', maxlength: 64, placeholder: ph, autocomplete: 'off', spellcheck: false });
 
   const openCode = (has) => {
-    const cur = has ? codeInput('Huidige code') : null;
-    const a = codeInput(has ? 'Nieuwe code (4–12 cijfers)' : 'Code (4–12 cijfers)');
+    const cur = has ? codeInput('Huidig wachtwoord') : null;
+    const a = codeInput(has ? 'Nieuw wachtwoord' : 'Wachtwoord');
     const b = codeInput('Nogmaals ter bevestiging');
     const err = h('div', { class: 'hint', style: 'color:#ff8c8c;min-height:1.1em' });
     openModal({
-      title: has ? 'Toegangscode wijzigen' : 'Toegangscode instellen',
+      title: has ? 'Wachtwoord wijzigen' : 'Wachtwoord instellen',
       body: h('div', { style: 'display:flex;flex-direction:column;gap:.6rem' },
-        h('p', { style: 'margin:0;line-height:1.5' }, 'Een eigen code voor het schermslot — ', h('b', {}, 'niet'), ' je Windows-wachtwoord. Bewaar hem goed: zonder de code verlaat je het vergrendelscherm alleen met Ctrl+Alt+Del en opnieuw aanmelden bij Windows.'),
-        has ? field('Huidige code', cur) : null, field(has ? 'Nieuwe code' : 'Code', a), field('Bevestigen', b), err),
+        h('p', { style: 'margin:0;line-height:1.5' }, 'Een eigen wachtwoord voor het schermslot — ', h('b', {}, 'niet'), ' je Windows-wachtwoord. Mag letters, cijfers en tekens bevatten. Bewaar het goed: zonder het wachtwoord verlaat je het vergrendelscherm alleen met Ctrl+Alt+Del en opnieuw aanmelden bij Windows.'),
+        has ? field('Huidig wachtwoord', cur) : null, field(has ? 'Nieuw wachtwoord' : 'Wachtwoord', a), field('Bevestigen', b), err),
       actions: [{ label: 'Annuleren' }, { label: 'Opslaan', primary: true, keepOpen: true, onClick: async (close) => {
         err.textContent = '';
-        if (!/^\d{4,12}$/.test(a.value)) { err.textContent = 'De code bestaat uit 4 tot 12 cijfers.'; return false; }
-        if (a.value !== b.value) { err.textContent = 'De twee codes zijn niet gelijk.'; return false; }
+        if (!a.value || a.value.length > 64) { err.textContent = 'Geef een wachtwoord op (1 tot 64 tekens).'; return false; }
+        if (a.value !== b.value) { err.textContent = 'De twee wachtwoorden zijn niet gelijk.'; return false; }
         const res = await window.palv.screenLock.setPin(has ? cur.value : '', a.value).catch(() => ({ error: 'Opslaan mislukt.' }));
         if (res && res.error) { err.textContent = res.error; return false; }
-        toast(has ? 'Toegangscode gewijzigd' : 'Toegangscode ingesteld'); close(); paint();
+        toast(has ? 'Wachtwoord gewijzigd' : 'Wachtwoord ingesteld'); close(); paint();
       } }],
     });
   };
 
   const removeCode = () => {
-    const cur = codeInput('Huidige code');
+    const cur = codeInput('Huidig wachtwoord');
     const err = h('div', { class: 'hint', style: 'color:#ff8c8c;min-height:1.1em' });
     openModal({
-      title: 'Toegangscode verwijderen',
+      title: 'Wachtwoord verwijderen',
       body: h('div', { style: 'display:flex;flex-direction:column;gap:.6rem' },
-        h('p', { style: 'margin:0;line-height:1.5' }, 'Voer de huidige code in om het schermslot uit te zetten.'), field('Huidige code', cur), err),
+        h('p', { style: 'margin:0;line-height:1.5' }, 'Voer het huidige wachtwoord in om het schermslot uit te zetten.'), field('Huidig wachtwoord', cur), err),
       actions: [{ label: 'Annuleren' }, { label: 'Verwijderen', danger: true, keepOpen: true, onClick: async (close) => {
         err.textContent = '';
         const res = await window.palv.screenLock.removePin(cur.value).catch(() => ({ error: 'Verwijderen mislukt.' }));
         if (res && res.error) { err.textContent = res.error; return false; }
-        toast('Toegangscode verwijderd'); close(); paint();
+        toast('Wachtwoord verwijderd'); close(); paint();
       } }],
     });
   };
@@ -81,10 +81,10 @@ function screenLockSection() {
     const nameInput = textInput(st.name || '', { maxlength: 40, placeholder: 'Naam onder de avatar', onchange: (e) => window.palv.screenLock.setOptions({ name: e.target.value }) });
     const idleInput = h('input', { class: 'input', type: 'number', min: 0, max: 240, step: 5, value: st.idleMin || 0, onchange: (e) => window.palv.screenLock.setOptions({ idleMin: parseInt(e.target.value, 10) || 0 }) });
     dyn.append(
-      h('p', { style: 'margin:0;line-height:1.5' }, has ? h('b', {}, 'Er is een toegangscode ingesteld. ') : 'Er is nog geen toegangscode. ', 'Het slot verschijnt op het werkscherm; het dashboard blijft op het tweede scherm staan. Vergrendelen met het slotje in de kop.'),
+      h('p', { style: 'margin:0;line-height:1.5' }, has ? h('b', {}, 'Er is een wachtwoord ingesteld. ') : 'Er is nog geen wachtwoord. ', 'Het slot verschijnt op het werkscherm; het dashboard blijft op het tweede scherm staan. Vergrendelen met het slotje in de kop.'),
       h('div', { style: 'display:flex;gap:.6rem;flex-wrap:wrap' },
-        h('button', { class: 'btn primary', onclick: () => openCode(has) }, icon(has ? 'edit' : 'lock'), has ? 'Code wijzigen' : 'Code instellen'),
-        has ? h('button', { class: 'btn danger', onclick: () => removeCode() }, icon('close'), 'Code verwijderen') : null),
+        h('button', { class: 'btn primary', onclick: () => openCode(has) }, icon(has ? 'edit' : 'lock'), has ? 'Wachtwoord wijzigen' : 'Wachtwoord instellen'),
+        has ? h('button', { class: 'btn danger', onclick: () => removeCode() }, icon('close'), 'Wachtwoord verwijderen') : null),
       has ? field('Naam onder de avatar', nameInput, 'Standaard de Windows-gebruikersnaam.') : null,
       has ? field('Vanzelf vergrendelen na (minuten zonder toetsenbord of muis)', idleInput, '0 = uit. Vergrendelt alleen als niemand de pc gebruikt, dus niet terwijl jij aan het werk bent.') : null,
       has ? checkbox('Ook vergrendelen als er maar één scherm is (dekt dan ook het dashboard af)', st.lockSingle, (v) => window.palv.screenLock.setOptions({ lockSingle: v })) : null,
