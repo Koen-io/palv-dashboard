@@ -145,98 +145,158 @@ function cycleTheme() {
   save();
 }
 
-/* ---------- page tabs ---------- */
+/* ---------- the pages: one picker where the first tab was ---------- */
+// The tab bar had become full. All pages now sit behind one button at the left: it shows the open page,
+// and opens a calm list of every page, to switch to (tap), reorder (drag the grip, or Alt+↑/↓), rename
+// (pencil, double tap or F2) and remove (cross); a new page at the bottom. Ctrl+1…9 still opens page 1–9.
+let pgOpen = null;
+const pgDrag = { justDropped: false };
+// The icon of a page: that of its widgets when they are all of one kind (a tool tab keeps its own tab
+// icon), weather when it holds only weather, otherwise a layout.
+function pageIcon(p) {
+  const kinds = [...new Set(p.widgets.map((w) => w.type))];
+  const def = kinds.length === 1 && WIDGETS[kinds[0]];
+  if (def) return def.tabIcon || def.icon || 'layout';
+  if (kinds.length && kinds.every((k) => k === 'windy' || k === 'metar')) return 'cloud';
+  return 'layout';
+}
 function renderTabs() {
   const nav = $('#page-tabs');
-  nav.replaceChildren();
-  state.pages.forEach((p, i) => {
-    const active = i === state.activePage;
-    nav.append(
-      h(
-        'button',
-        {
-          class: 'tab' + (active ? ' active' : ''), role: 'tab', 'aria-selected': String(active), 'data-i': i,
-          title: editing ? `${p.name}: slepen om te verplaatsen` : i < 9 ? `${p.name} (${MOD}${i + 1})` : p.name,
-          onclick: () => { if (tabDrag.justDropped) return; setPage(i); }, ondblclick: () => renamePage(i),
-          onpointerdown: (e) => tabDragStart(e, i),
-        },
-        h('span', { class: 'tab-grip', 'aria-hidden': 'true' }, icon('grip')),
-        // A page that is one tool (the Browser) carries its icon before the name.
-        (() => { const ic = p.widgets.length === 1 && WIDGETS[p.widgets[0].type] && WIDGETS[p.widgets[0].type].tabIcon; return ic ? icon(ic, 'tab-ic') : null; })(),
-        p.name,
-        // A page with the Timings tab shows the nearest running timer in its tab; nothing when none runs.
-        typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,
-        h('span', { class: 'tab-tool', title: 'Naam wijzigen', onclick: (e) => { e.stopPropagation(); renamePage(i); } }, icon('edit')),
-        state.pages.length > 1 ? h('span', { class: 'tab-tool danger', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null
-      )
-    );
+  const i = state.activePage, p = state.pages[i];
+  const btn = h('button', {
+    type: 'button', class: 'tab active pg-btn' + (pgOpen ? ' open' : ''), role: 'tab', 'aria-selected': 'true', 'aria-haspopup': 'listbox', 'aria-expanded': String(!!pgOpen),
+    title: `${p.name} — alle ${state.pages.length} tabbladen: kiezen, van volgorde wisselen, hernoemen of toevoegen`,
+    onclick: (e) => { e.stopPropagation(); togglePages(btn); },
+  },
+  h('span', { class: 'pg-ic' }, icon(pageIcon(p))),
+  h('span', { class: 'pg-name' }, p.name),
+  typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,
+  h('span', { class: 'pg-count' }, `${i + 1}/${state.pages.length}`),
+  h('span', { class: 'wp-caret pg-caret', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>' }));
+  // A running timer on a page that is not open stays in sight, next to the button; a tap opens that page.
+  const others = [];
+  state.pages.forEach((q, j) => {
+    if (j === i || typeof timingsTabBadge !== 'function') return;
+    const b = timingsTabBadge(q);
+    if (!b) return;
+    b.classList.add('pg-extbadge');
+    b.addEventListener('click', () => setPage(j));
+    others.push(b);
   });
-  nav.append(h('button', { class: 'tab tab-add', title: 'Pagina toevoegen', 'aria-label': 'Pagina toevoegen', onclick: addPage }, icon('plus')));
+  nav.replaceChildren(btn, ...others);
+  if (pgOpen) paintPages();
 }
-
-// In the edit mode the tabs can be dragged into another order, with the mouse or a finger. The others
-// make room as the tab passes them; on release the order is saved in this screen's own layout.
-const tabDrag = { justDropped: false };
-function tabDragStart(e, from) {
-  if (!editing || e.button !== 0 || e.target.closest('.tab-tool')) return;
-  const tab = e.currentTarget;
-  const nav = $('#page-tabs');
-  const tabs = [...nav.querySelectorAll('.tab:not(.tab-add)')];
-  const x0 = e.clientX;
-  let started = false, to = from, rects = null, width = 0;
+function closePages() {
+  if (!pgOpen) return;
+  pgOpen.remove(); pgOpen = null;
+  document.removeEventListener('pointerdown', pgOutside, true);
+  document.removeEventListener('keydown', pgKey, true);
+  renderTabs();
+}
+function pgOutside(e) { if (pgOpen && !pgOpen.contains(e.target) && !e.target.closest('.pg-btn') && !e.target.closest('.modal-backdrop')) closePages(); }
+function pgKey(e) {
+  if (!pgOpen || modalOpen()) return;
+  const rows = [...pgOpen.querySelectorAll('.pg-row')];
+  const at = rows.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); closePages(); return; }
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey && at >= 0) {
+    e.preventDefault(); e.stopPropagation();
+    const to = clamp(at + (e.key === 'ArrowDown' ? 1 : -1), 0, rows.length - 1);
+    if (to !== at) { movePage(at, to); const r = pgOpen.querySelectorAll('.pg-row')[to]; if (r) r.focus(); }
+    return;
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); e.stopPropagation();
+    const n = at < 0 ? state.activePage : clamp(at + (e.key === 'ArrowDown' ? 1 : -1), 0, rows.length - 1);
+    if (rows[n]) rows[n].focus();
+  }
+}
+function movePage(from, to) {
+  if (from === to) return;
+  const activeId = state.pages[state.activePage].id;
+  const [p] = state.pages.splice(from, 1);
+  state.pages.splice(to, 0, p);
+  state.activePage = state.pages.findIndex((x) => x.id === activeId);
+  plog('info', `tabblad "${p.name}" verplaatst naar plek ${to + 1}`);
+  save();
+  renderTabs();
+}
+function togglePages(btn) {
+  if (pgOpen) return closePages();
+  closeWorkplace();
+  pgOpen = h('div', { class: 'wp-menu pg-menu', role: 'listbox', 'aria-label': 'Tabbladen' });
+  document.body.append(pgOpen);
+  const r = btn.getBoundingClientRect();
+  pgOpen.style.top = `${Math.round(r.bottom + 6)}px`;
+  pgOpen.style.left = `${Math.max(8, Math.round(r.left))}px`;
+  btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+  paintPages();
+  document.addEventListener('pointerdown', pgOutside, true);
+  document.addEventListener('keydown', pgKey, true);
+  const cur = pgOpen.querySelector('.pg-row.on');
+  if (cur) { cur.scrollIntoView({ block: 'nearest' }); cur.focus({ preventScroll: true }); }
+}
+function paintPages() {
+  const old = pgOpen.querySelector('.pg-list');
+  const scroll = old ? old.scrollTop : 0;
+  const list = h('div', { class: 'pg-list' });
+  state.pages.forEach((p, i) => {
+    const on = i === state.activePage;
+    list.append(h('div', {
+      class: 'pg-row' + (on ? ' on' : ''), role: 'option', 'aria-selected': String(on), tabindex: '0', 'data-i': i,
+      onclick: (e) => { if (pgDrag.justDropped || e.target.closest('.pg-tool, .pg-grip')) return; closePages(); setPage(i); },
+      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closePages(); setPage(i); } else if (e.key === 'F2') { e.preventDefault(); renamePage(i); } },
+      ondblclick: (e) => { if (!e.target.closest('.pg-tool, .pg-grip')) renamePage(i); },
+    },
+    h('span', { class: 'pg-grip', title: 'Slepen om de volgorde te wisselen', onpointerdown: (e) => pgDragStart(e, i) }, icon('grip')),
+    h('span', { class: 'pg-ric' }, icon(pageIcon(p))),
+    h('span', { class: 'pg-rname' }, p.name),
+    typeof timingsTabBadge === 'function' ? timingsTabBadge(p) : null,
+    h('span', { class: 'pg-key' }, i < 9 ? `${MOD}${i + 1}` : ''),
+    h('span', { class: 'pg-tools' },
+      h('button', { type: 'button', class: 'pg-tool', title: 'Naam wijzigen', onclick: (e) => { e.stopPropagation(); renamePage(i); } }, icon('edit')),
+      state.pages.length > 1 ? h('button', { type: 'button', class: 'pg-tool danger', title: 'Pagina verwijderen', onclick: (e) => { e.stopPropagation(); deletePage(i); } }, icon('close')) : null)));
+  });
+  pgOpen.replaceChildren(
+    h('div', { class: 'wp-menu-head pg-head' }, h('span', {}, 'Tabbladen'), h('small', {}, String(state.pages.length))),
+    list,
+    h('div', { class: 'pg-foot' },
+      h('button', { type: 'button', class: 'pg-add', onclick: () => { closePages(); addPage(); } }, icon('plus'), 'Pagina toevoegen'),
+      h('span', { class: 'pg-tip' }, 'Sleep aan het greepje om de volgorde te wisselen')));
+  list.scrollTop = scroll;
+}
+// Dragging a row by its grip: the others glide aside; on release the order is saved for this screen.
+function pgDragStart(e, from) {
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const grip = e.currentTarget, row = grip.closest('.pg-row'), list = row.parentElement;
+  const rows = [...list.querySelectorAll('.pg-row')];
+  const rects = rows.map((x) => x.getBoundingClientRect());
+  const y0 = e.clientY, step = rects.length > 1 ? rects[1].top - rects[0].top : rects[0].height;
+  let to = from, started = false;
+  try { grip.setPointerCapture(e.pointerId); } catch { /* gone */ }
   const move = (ev) => {
-    const dx = ev.clientX - x0;
-    if (!started) {
-      if (Math.abs(dx) < 6) return;
-      started = true;
-      rects = tabs.map((t) => t.getBoundingClientRect());
-      const gap = tabs.length > 1 ? Math.max(0, rects[Math.min(1, tabs.length - 1)].left - rects[0].right) : 0;
-      width = rects[from].width + gap;
-      nav.classList.add('tab-sorting');
-      tab.classList.add('tab-dragging');
-      try { tab.setPointerCapture(ev.pointerId); } catch { /* already gone */ }
-    }
-    // Kept within the row of tabs.
-    const lo = rects[0].left - rects[from].left, hi = rects[rects.length - 1].right - rects[from].right;
-    const d = clamp(dx, lo, hi);
-    tab.style.transform = `translateX(${d}px)`;
-    const mid = rects[from].left + rects[from].width / 2 + d;
-    to = from;
-    rects.forEach((r, j) => {
-      const c = r.left + r.width / 2;
-      if (j < from && mid < c) to = Math.min(to, j);
-      if (j > from && mid > c) to = Math.max(to, j);
-    });
-    tabs.forEach((t, j) => {
+    const dy = ev.clientY - y0;
+    if (!started) { if (Math.abs(dy) < 4) return; started = true; list.classList.add('sorting'); row.classList.add('dragging'); }
+    const d = clamp(dy, rects[0].top - rects[from].top, rects[rects.length - 1].top - rects[from].top);
+    row.style.transform = `translateY(${d}px)`;
+    to = clamp(Math.round((rects[from].top + d - rects[0].top) / step), 0, rows.length - 1);
+    rows.forEach((x, j) => {
       if (j === from) return;
-      const shift = from < to && j > from && j <= to ? -width : from > to && j < from && j >= to ? width : 0;
-      t.style.transform = shift ? `translateX(${shift}px)` : '';
+      const s = from < to && j > from && j <= to ? -step : from > to && j < from && j >= to ? step : 0;
+      x.style.transform = s ? `translateY(${s}px)` : '';
     });
   };
   const end = () => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', end);
-    window.removeEventListener('pointercancel', end);
+    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end);
     if (!started) return;
-    // The click that follows the release is not a page change.
-    tabDrag.justDropped = true;
-    setTimeout(() => { tabDrag.justDropped = false; }, 0);
-    nav.classList.remove('tab-sorting');
-    if (to !== from) {
-      const activeId = state.pages[state.activePage].id;
-      const [p] = state.pages.splice(from, 1);
-      state.pages.splice(to, 0, p);
-      state.activePage = state.pages.findIndex((x) => x.id === activeId);
-      plog('info', `tabblad "${p.name}" verplaatst naar plek ${to + 1}`);
-      save();
-    }
-    renderTabs();
-    const moved = $('#page-tabs').querySelector(`.tab[data-i="${to}"]`);
-    if (moved) { moved.classList.add('tab-dropped'); setTimeout(() => moved.classList.remove('tab-dropped'), 450); }
+    pgDrag.justDropped = true; setTimeout(() => { pgDrag.justDropped = false; }, 0);
+    list.classList.remove('sorting');
+    if (to !== from) movePage(from, to); else if (pgOpen) paintPages();
+    const moved = pgOpen && pgOpen.querySelectorAll('.pg-row')[to];
+    if (moved) { moved.classList.add('dropped'); setTimeout(() => moved.classList.remove('dropped'), 450); }
   };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', end);
-  window.addEventListener('pointercancel', end);
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
 }
 
 function pageNameDialog(title, value, onOk) {
@@ -750,6 +810,7 @@ function wpOutside(e) { if (wpOpen && !wpOpen.contains(e.target) && !e.target.cl
 function wpKey(e) { if (e.key === 'Escape' && wpOpen) { e.stopPropagation(); e.preventDefault(); closeWorkplace(); } }
 function toggleWorkplace(btn) {
   if (wpOpen) return closeWorkplace();
+  closePages();
   const cur = activeBase().id;
   const menu = h('div', { class: 'wp-menu', role: 'listbox', 'aria-label': 'Werkplek kiezen' },
     h('div', { class: 'wp-menu-head' }, 'Werkplek kiezen'),

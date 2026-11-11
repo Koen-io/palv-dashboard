@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 1.46.0
+
+### Tabbladen in één keuzelijst
+- **De rij met tabbladen is vervangen door één knop links**, op de plek van het eerste tabblad. Die toont het open tabblad met zijn icoon en de plek (bijvoorbeeld 5/11); een tik opent een rustige lijst met alle tabbladen. Zo is er rechts in de balk weer ruimte vrij
+- **In de lijst kies je een tabblad met één tik**, en **wissel je de volgorde door aan het greepje te slepen** (met de vinger of de muis, of met Alt+↑/↓). Hernoemen (potlood, dubbeltik of F2), verwijderen (kruisje) en **Pagina toevoegen** zitten er ook in; je hoeft daarvoor niet meer eerst naar Bewerken
+- Niets is verdwenen: Ctrl+1 t/m 9 opent nog steeds tabblad 1 t/m 9 (de sneltoets staat in de lijst), de lopende timer van Timings staat in de lijst én naast de knop (een tik opent Timings), en de pijltjestoetsen, Enter en Esc werken in de lijst
+
 ## 1.45.0
 
 ### Nieuw tabblad: COA Planner
