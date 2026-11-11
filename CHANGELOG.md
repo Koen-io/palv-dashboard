@@ -1,5 +1,11 @@
 # Wijzigingen
 
+## 1.42.0
+
+### Schermslot op meerdere schermen
+- **Bij meer dan één werkscherm verschijnt het wachtwoordveld nog maar op één scherm** (het primaire); de overige vergrendelde schermen tonen alleen het vergrendelbeeld met de klok, net zoals Windows dat op meerdere monitoren doet. Het dashboardscherm blijft altijd vrij en bedienbaar
+- (Intern) de statuspagina toont nu de schermindeling (van links naar rechts, welk scherm primair is en op welk scherm het dashboard staat), om de opstelling te kunnen nalezen
+
 ## 1.41.0
 
 ### Het dashboard onthoudt op welk scherm het staat

@@ -9,6 +9,9 @@
   let waiting = false;
 
   body.classList.add('is-clock');
+  // Op meerdere schermen toont maar één scherm het wachtwoordveld (role=primary); de andere schermen tonen
+  // alleen het vergrendelbeeld met de klok (role=secondary) en reageren niet op toetsen of klikken.
+  const secondary = new URLSearchParams(location.search).get('role') === 'secondary';
 
   /* ---------- klok en datum ---------- */
   const timeFmt = new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -49,19 +52,22 @@
 
   // De eerste aanraking (toets, klik, scrollen) brengt het aanmeldbeeld, net als Windows. Een cijfertoets
   // komt meteen in het veld te staan.
-  window.addEventListener('keydown', (e) => {
-    if (body.classList.contains('is-signin')) {
-      if (e.key === 'Escape') { e.preventDefault(); toClock(); }
-      return;
+  // Alleen het scherm met het wachtwoordveld reageert op een aanraking; de andere schermen tonen enkel beeld.
+  if (!secondary) {
+    window.addEventListener('keydown', (e) => {
+      if (body.classList.contains('is-signin')) {
+        if (e.key === 'Escape') { e.preventDefault(); toClock(); }
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
+      e.preventDefault();
+      // Spatie en Enter tonen alleen het aanmeldvenster (zoals Windows), zonder een teken in te voeren; een
+      // gewoon teken komt meteen in het wachtwoordveld.
+      toSignin(e.key.length === 1 && e.key !== ' ' ? e.key : '');
+    }, true);
+    for (const ev of ['mousedown', 'wheel', 'touchstart']) {
+      window.addEventListener(ev, () => { if (!body.classList.contains('is-signin')) toSignin(''); }, { passive: true });
     }
-    if (e.key === 'Tab' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
-    e.preventDefault();
-    // Spatie en Enter tonen alleen het aanmeldvenster (zoals Windows), zonder een teken in te voeren; een
-    // gewoon teken komt meteen in het wachtwoordveld.
-    toSignin(e.key.length === 1 && e.key !== ' ' ? e.key : '');
-  }, true);
-  for (const ev of ['mousedown', 'wheel', 'touchstart']) {
-    window.addEventListener(ev, () => { if (!body.classList.contains('is-signin')) toSignin(''); }, { passive: true });
   }
 
   /* ---------- toegangscode ---------- */

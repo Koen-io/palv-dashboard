@@ -645,6 +645,14 @@ function screenStatus() {
     window: win && !win.isDestroyed() ? { visible: win.isVisible(), minimized: win.isMinimized(), fullscreen: isFull(), focused: win.isFocused() } : null,
     displays: displays.length,
     displayList: displays.map((d) => `${d.size.width}×${d.size.height}${d.internal ? ' intern' : ''}`),
+    // De schermen van links naar rechts, met welke het primaire is en op welke het dashboard staat — om de
+    // indeling en de plek van het dashboard te kunnen nalezen (bijvoorbeeld voor het Schermslot).
+    screenLayout: (() => {
+      const prim = screen.getPrimaryDisplay().id;
+      const wb = win && !win.isDestroyed() ? win.getBounds() : null;
+      const dashId = wb ? screen.getDisplayMatching(wb).id : null;
+      return displaysLR().map((d, i) => ({ i, size: `${d.size.width}x${d.size.height}`, pos: `${d.bounds.x},${d.bounds.y}`, scale: d.scaleFactor, primary: d.id === prim, internal: !!d.internal, dashboard: d.id === dashId }));
+    })(),
     renderer: { heartbeat: st.heartbeat, alive: !!st.heartbeat && Date.now() - st.heartbeat < 20000, reloads: st.reloads, crashes: st.crashes, webviewCrashes: st.webviewCrashes },
     awake: watchdog.awake(),
     locked: st.locked,

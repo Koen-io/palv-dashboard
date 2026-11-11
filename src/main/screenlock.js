@@ -239,7 +239,16 @@ function lock() {
   const displays = targetDisplays();
   if (!displays.length) return { ok: false, reason: 'single-screen' };
 
-  for (const d of displays) {
+  // Op één van de vergrendelde schermen verschijnt het wachtwoordveld (zoals Windows bij meerdere schermen):
+  // het primaire scherm als dat erbij zit, anders het meest linkse. De overige schermen tonen alleen het
+  // vergrendelbeeld met de klok, zonder wachtwoordveld.
+  const primId = screen.getPrimaryDisplay().id;
+  let mainIdx = displays.findIndex((d) => d.id === primId);
+  if (mainIdx < 0) mainIdx = 0;
+
+  for (let k = 0; k < displays.length; k++) {
+    const d = displays[k];
+    const role = k === mainIdx ? 'primary' : 'secondary';
     // Precies dit ene scherm afdekken via de exacte schermgrens (inclusief de taakbalk) en het hoogste
     // venstervlak ('screen-saver'). Bewust GEEN OS-volledig-scherm/kiosk in de constructor: dat springt op
     // Windows soms naar het primaire scherm, en dat zou het dashboardscherm kunnen raken.
@@ -256,15 +265,15 @@ function lock() {
     w._lockBounds = d.bounds;
     w.setAlwaysOnTop(true, 'screen-saver');
     w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    w.loadFile(path.join(__dirname, '..', 'lock', 'lock.html'));
+    w.loadFile(path.join(__dirname, '..', 'lock', 'lock.html'), { query: { role } });
     // Geen weg eromheen: niets opent een nieuw venster en het slot navigeert nergens heen.
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     w.webContents.on('will-navigate', (e) => e.preventDefault());
     w.once('ready-to-show', () => { w.setBounds(d.bounds); w.show(); w.moveTop(); });
     winsLocked.push(w);
   }
-  // Het eerste venster krijgt de aandacht, zodat de code meteen te typen is.
-  try { winsLocked[0].focus(); } catch { /* komt vanzelf */ }
+  // Het scherm met het wachtwoordveld krijgt de aandacht, zodat de code meteen te typen is.
+  try { winsLocked[mainIdx].focus(); } catch { /* komt vanzelf */ }
 
   for (const k of BLOCK_KEYS) { try { globalShortcut.register(k, () => {}); } catch { /* niet elke combinatie bestaat */ } }
   // Bovenop blijven, ook als een ander venster zich naar voren dringt — zonder de toetsaandacht van het
