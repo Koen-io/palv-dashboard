@@ -15,6 +15,7 @@ const ais = require('./ais');
 const offshore = require('./offshore');
 const docs = require('./main/docs');
 const privBrowser = require('./main/privbrowser');
+const screenlock = require('./main/screenlock');
 require('./main/tiles');
 
 const { BROWSER: UA, APP: APP_UA } = require('./ua');
@@ -40,6 +41,7 @@ plan.registerScheme();
 }
 
 let win = null;
+let quitting = false;
 
 // Dev helper: `electron . --shot=out.png [--shot-delay=8000] [--shot-js="..."] [--shot-size=1920x1080] [--shot-resize=1100x640]`
 // renders a screenshot and quits; --shot-resize changes the window size halfway, to check that the layout follows.
@@ -225,6 +227,10 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 
+  // Zolang het Schermslot aan staat, moet het dashboard op het tweede scherm zichtbaar blijven: het venster
+  // mag dan niet dicht (ook niet met Alt+F4), want dat zou het slot wegnemen.
+  win.on('close', (e) => { if (!quitting && screenlock.isLocked()) e.preventDefault(); });
+
   win.on('closed', () => {
     win = null;
   });
@@ -378,6 +384,8 @@ app.whenReady().then(() => {
   const planOut = plan.start({ screens, share, getWin: () => win, test: !!shotPath });
   const planStore = require('./plan/store');
   const lg = { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) };
+  screenlock.init({ dir: app.getPath('userData'), getWin: () => win, log: { info: (s, m) => log.info(s, m), warn: (s, m) => log.warn(s, m) } });
+  screenlock.register();
   const aisOut = ais.start({ dir: app.getPath('userData'), screens, share, store: planStore, peerGet: plan.peerGet, request: screens.request, log: lg });
   offshore.start({ dir: app.getPath('userData'), fetchText: plan.fetchText, log: lg, ais, store: planStore, poke: plan.pokePeers });
   docs.start({ store: planStore, getWin: () => win, poke: plan.pokePeers });
@@ -394,19 +402,21 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { ais.stop(); log.info('app', 'afgesloten'); });
+// Bij een echte afsluiting (ook een update-herstart) mag het dashboardvenster wél dicht, ook als het
+// Schermslot nog aan stond: `quitting` zet de blokkade in de close-handler opzij.
+app.on('before-quit', () => { quitting = true; ais.stop(); log.info('app', 'afgesloten'); });
 
 const send = (channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); };
 
 /* ---------- window controls ---------- */
-ipcMain.on('win:minimize', () => win && win.minimize());
+ipcMain.on('win:minimize', () => { if (win && !screenlock.isLocked()) win.minimize(); });
 ipcMain.on('win:toggleMaximize', () => {
   if (!win) return;
   if (isFull()) setFull(false);
   else if (win.isMaximized()) win.unmaximize();
   else win.maximize();
 });
-ipcMain.on('win:close', () => win && win.close());
+ipcMain.on('win:close', () => { if (win && !screenlock.isLocked()) win.close(); });
 ipcMain.on('win:setFullscreen', (_e, on) => setFull(!!on));
 ipcMain.handle('win:getState', () => ({
   maximized: !!win && win.isMaximized(),

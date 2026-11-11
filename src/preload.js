@@ -166,4 +166,14 @@ contextBridge.exposeInMainWorld('palv', {
     status: () => ipcRenderer.invoke('opensky:status'),
     setKey: (id, secret) => ipcRenderer.invoke('opensky:setKey', id, secret),
   },
+  // Het Schermslot: een vergrendelscherm in Windows-stijl op het werkscherm, terwijl het dashboard op het
+  // tweede scherm blijft. Zie src/main/screenlock.js. Eigen toegangscode, niet het Windows-wachtwoord.
+  screenLock: {
+    status: () => ipcRenderer.invoke('screenlock:status'),
+    setPin: (oldPin, newPin) => ipcRenderer.invoke('screenlock:setPin', oldPin, newPin),
+    removePin: (pin) => ipcRenderer.invoke('screenlock:removePin', pin),
+    setOptions: (opts) => ipcRenderer.invoke('screenlock:setOptions', opts),
+    lock: () => ipcRenderer.invoke('screenlock:lock'),
+    onState: (cb) => on('screenlock:state', cb),
+  },
 });

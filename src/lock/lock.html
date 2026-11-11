@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'">
+  <title>Vergrendeld</title>
+  <link rel="stylesheet" href="lock.css">
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="scrim"></div>
+
+  <main id="screen" class="is-clock">
+    <!-- Het klokbeeld, zoals het vergrendelscherm wanneer er niemand aan zit. -->
+    <section id="clockface">
+      <div id="time">--:--</div>
+      <div id="date"></div>
+    </section>
+
+    <!-- Het aanmeldbeeld: avatar, naam en de toegangscode. -->
+    <section id="signin" aria-hidden="true">
+      <div id="avatar" aria-hidden="true"></div>
+      <div id="name"></div>
+      <form id="pinform" autocomplete="off">
+        <div id="pinwrap">
+          <input id="pin" type="password" inputmode="numeric" autocomplete="off" spellcheck="false"
+                 maxlength="12" placeholder="Pincode" aria-label="Pincode">
+          <button id="go" type="submit" title="Aanmelden" aria-label="Aanmelden" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div id="spin" hidden><span class="ring"></span><span>Even geduld</span></div>
+        <div id="msg" role="alert"></div>
+        <button id="pinopt" type="button" tabindex="-1">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+          Aanmeldingsopties
+        </button>
+      </form>
+      <div id="brand">P-ALV Dashboard · schermslot</div>
+    </section>
+  </main>
+
+  <div id="corner" aria-hidden="true">
+    <span class="gl" title="Netwerk"><svg viewBox="0 0 24 24"><path d="M12 19.5a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8Z" fill="currentColor"/><path d="M4.5 10.5a11 11 0 0 1 15 0M7.5 13.5a7 7 0 0 1 9 0M10.3 16.3a3 3 0 0 1 3.4 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+    <span class="gl" title="Toegankelijkheid"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="7.3" r="1.3" fill="currentColor"/><path d="M6.8 9.4h10.4M12 9.4v5m0 0-2.4 3.4M12 14.4l2.4 3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+    <span class="gl" title="Aan/uit"><svg viewBox="0 0 24 24"><path d="M12 4v8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 6.8a7 7 0 1 0 9 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+  </div>
+
+  <script src="lock.js"></script>
+</body>
+</html>

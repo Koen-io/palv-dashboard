@@ -48,6 +48,11 @@ module.exports = [
     languageOptions: { globals: { ...globals.browser } },
   },
   {
+    // The screen lock's own page script (src/lock/lock.html loads it in the lock window).
+    files: ['src/lock/lock.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.browser } },
+  },
+  {
     // Runs inside embedded pages (Windy, ADS-B Exchange), where these are the sites' own globals.
     files: ['src/renderer/widgets/windy.js', 'src/renderer/widgets/adsb.js'],
     languageOptions: { globals: { W: 'readonly', OLMap: 'readonly', ol: 'readonly' } },

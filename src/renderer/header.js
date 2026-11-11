@@ -62,28 +62,43 @@ function renderTitlebar() {
 }
 
 /* ---------- de pc vergrendelen ---------- */
-// The lock beside the name in the header (always in sight, also full screen): one click when you walk away, and Windows asks for the
-// password or PIN again (as Windows+L). Only on Windows; on the Mac it is not shown.
+// The lock beside the name in the header (always in sight, also full screen): one click when you walk away.
+// With a Schermslot code set it draws a Windows-style lock screen over the work monitor while the dashboard
+// keeps running on the second screen; with two monitors absent, or no code yet, it falls back to Windows+L or
+// opens the settings. Only on Windows; on the Mac it is not shown.
+let screenLockBound = false;
 function renderLockButton() {
   const btn = $('#hd-lock');
   if (!btn || window.palv.platform !== 'win32') return;
-  const idle = () => {
-    btn.classList.remove('locking');
-    btn.disabled = false;
-    btn.replaceChildren(icon('unlock'));
-  };
-  btn.title = 'Pc vergrendelen (Windows+L): daarna is het wachtwoord of de pincode nodig. Het dashboard blijft gewoon doorlopen.';
-  btn.setAttribute('aria-label', 'Pc vergrendelen');
+  if (!screenLockBound) {
+    screenLockBound = true;
+    window.palv.screenLock.onState(() => { /* state changes are reflected on the next render */ });
+  }
+  btn.title = 'Scherm vergrendelen: een vergrendelscherm over het werkscherm, met een eigen toegangscode. Het dashboard blijft op het tweede scherm doorlopen. Zonder tweede scherm vergrendelt het Windows zelf (Windows+L). Code instellen onder Instellingen › Scherm › Schermslot.';
+  btn.setAttribute('aria-label', 'Scherm vergrendelen');
+  const idle = () => { btn.classList.remove('locking'); btn.disabled = false; btn.replaceChildren(icon('unlock')); };
   btn.onclick = async () => {
     if (btn.disabled) return;
+    const st = await window.palv.screenLock.status().catch(() => null);
+    if (!st || !st.hasPin) {
+      toast('Stel eerst een toegangscode in onder Instellingen › Scherm › Schermslot.', true);
+      openSettings('scherm');
+      return;
+    }
     btn.disabled = true;
     btn.classList.add('locking');
     btn.replaceChildren(icon('lock'));
-    // A beat for the shackle to close, then Windows locks.
     await new Promise((r) => setTimeout(r, 280));
-    const res = await window.palv.app.lockScreen().catch((e) => ({ ok: false, reason: String(e && e.message) }));
-    if (!res || !res.ok) toast('Vergrendelen lukte niet. Gebruik Windows+L.', true);
-    setTimeout(idle, res && res.ok ? 1500 : 0);
+    const res = await window.palv.screenLock.lock().catch((e) => ({ ok: false, reason: String(e && e.message) }));
+    if (res && res.ok) { idle(); return; }
+    // Geen tweede scherm om het dashboard op te laten staan: dan vergrendelt Windows zelf.
+    if (res && res.reason === 'single-screen') {
+      const w = await window.palv.app.lockScreen().catch(() => ({ ok: false }));
+      if (!w || !w.ok) toast('Vergrendelen lukte niet. Gebruik Windows+L.', true);
+    } else {
+      toast('Vergrendelen lukte niet.', true);
+    }
+    idle();
   };
   idle();
   btn.hidden = false;

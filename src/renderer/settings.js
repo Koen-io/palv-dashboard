@@ -27,6 +27,80 @@ function applyBase(id) {
   toast(`Basis: ${next.long}`);
 }
 
+// Instellingen › Scherm › Schermslot: de eigen toegangscode van het vergrendelscherm instellen, wijzigen of
+// verwijderen, plus de naam onder de avatar en vanzelf vergrendelen bij inactiviteit. Alleen op Windows.
+function screenLockSection() {
+  if (window.palv.platform !== 'win32') return null;
+  const box = h('div', { class: 'sl-box' });
+  const dyn = h('div', { style: 'display:flex;flex-direction:column;gap:.7rem' });
+
+  const codeInput = (ph) => h('input', { class: 'input', type: 'password', inputmode: 'numeric', maxlength: 12, placeholder: ph, autocomplete: 'off', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 12); } });
+
+  const openCode = (has) => {
+    const cur = has ? codeInput('Huidige code') : null;
+    const a = codeInput(has ? 'Nieuwe code (4–12 cijfers)' : 'Code (4–12 cijfers)');
+    const b = codeInput('Nogmaals ter bevestiging');
+    const err = h('div', { class: 'hint', style: 'color:#ff8c8c;min-height:1.1em' });
+    openModal({
+      title: has ? 'Toegangscode wijzigen' : 'Toegangscode instellen',
+      body: h('div', { style: 'display:flex;flex-direction:column;gap:.6rem' },
+        h('p', { style: 'margin:0;line-height:1.5' }, 'Een eigen code voor het schermslot — ', h('b', {}, 'niet'), ' je Windows-wachtwoord. Bewaar hem goed: zonder de code verlaat je het vergrendelscherm alleen met Ctrl+Alt+Del en opnieuw aanmelden bij Windows.'),
+        has ? field('Huidige code', cur) : null, field(has ? 'Nieuwe code' : 'Code', a), field('Bevestigen', b), err),
+      actions: [{ label: 'Annuleren' }, { label: 'Opslaan', primary: true, keepOpen: true, onClick: async (close) => {
+        err.textContent = '';
+        if (!/^\d{4,12}$/.test(a.value)) { err.textContent = 'De code bestaat uit 4 tot 12 cijfers.'; return false; }
+        if (a.value !== b.value) { err.textContent = 'De twee codes zijn niet gelijk.'; return false; }
+        const res = await window.palv.screenLock.setPin(has ? cur.value : '', a.value).catch(() => ({ error: 'Opslaan mislukt.' }));
+        if (res && res.error) { err.textContent = res.error; return false; }
+        toast(has ? 'Toegangscode gewijzigd' : 'Toegangscode ingesteld'); close(); paint();
+      } }],
+    });
+  };
+
+  const removeCode = () => {
+    const cur = codeInput('Huidige code');
+    const err = h('div', { class: 'hint', style: 'color:#ff8c8c;min-height:1.1em' });
+    openModal({
+      title: 'Toegangscode verwijderen',
+      body: h('div', { style: 'display:flex;flex-direction:column;gap:.6rem' },
+        h('p', { style: 'margin:0;line-height:1.5' }, 'Voer de huidige code in om het schermslot uit te zetten.'), field('Huidige code', cur), err),
+      actions: [{ label: 'Annuleren' }, { label: 'Verwijderen', danger: true, keepOpen: true, onClick: async (close) => {
+        err.textContent = '';
+        const res = await window.palv.screenLock.removePin(cur.value).catch(() => ({ error: 'Verwijderen mislukt.' }));
+        if (res && res.error) { err.textContent = res.error; return false; }
+        toast('Toegangscode verwijderd'); close(); paint();
+      } }],
+    });
+  };
+
+  const paint = async () => {
+    const st = await window.palv.screenLock.status().catch(() => null);
+    dyn.replaceChildren();
+    if (!st) { dyn.append(h('p', { class: 'hint' }, 'Het schermslot is niet beschikbaar.')); return; }
+    const has = st.hasPin;
+    const nameInput = textInput(st.name || '', { maxlength: 40, placeholder: 'Naam onder de avatar', onchange: (e) => window.palv.screenLock.setOptions({ name: e.target.value }) });
+    const idleInput = h('input', { class: 'input', type: 'number', min: 0, max: 240, step: 5, value: st.idleMin || 0, onchange: (e) => window.palv.screenLock.setOptions({ idleMin: parseInt(e.target.value, 10) || 0 }) });
+    dyn.append(
+      h('p', { style: 'margin:0;line-height:1.5' }, has ? h('b', {}, 'Er is een toegangscode ingesteld. ') : 'Er is nog geen toegangscode. ', 'Het slot verschijnt op het werkscherm; het dashboard blijft op het tweede scherm staan. Vergrendelen met het slotje in de kop.'),
+      h('div', { style: 'display:flex;gap:.6rem;flex-wrap:wrap' },
+        h('button', { class: 'btn primary', onclick: () => openCode(has) }, icon(has ? 'edit' : 'lock'), has ? 'Code wijzigen' : 'Code instellen'),
+        has ? h('button', { class: 'btn danger', onclick: () => removeCode() }, icon('close'), 'Code verwijderen') : null),
+      has ? field('Naam onder de avatar', nameInput, 'Standaard de Windows-gebruikersnaam.') : null,
+      has ? field('Vanzelf vergrendelen na (minuten zonder toetsenbord of muis)', idleInput, '0 = uit. Vergrendelt alleen als niemand de pc gebruikt, dus niet terwijl jij aan het werk bent.') : null,
+      has ? checkbox('Ook vergrendelen als er maar één scherm is (dekt dan ook het dashboard af)', st.lockSingle, (v) => window.palv.screenLock.setOptions({ lockSingle: v })) : null,
+    );
+  };
+  paint();
+
+  box.append(
+    h('h3', {}, 'Schermslot'),
+    dyn,
+    h('p', { class: 'hint' }, 'Dit is een slot van het dashboard, geen Windows-aanmelding. Het houdt een gescreende collega die wegloopt buiten — Alt+Tab, de Windows-toets en Alt+F4 zijn geblokkeerd en vensters erachter zijn niet te bereiken — maar Ctrl+Alt+Del blijft werken; dat kan geen enkel programma afvangen.'),
+    h('hr'),
+  );
+  return box;
+}
+
 function openSettings(startTab) {
   const s = state.settings;
   const pane = h('div', { class: 'settings-pane' });
@@ -111,6 +185,7 @@ function openSettings(startTab) {
         checkbox('OLED-bescherming tegen inbranden', s.oledCare, changed((v) => { s.oledCare = v; oledTick(); oledPointer(); })),
         h('div', { class: 'hint' }, 'Het hele beeld schuift heel langzaam een paar pixels heen en weer (één stap per minuut, nooit meer dan 3 pixels), de muisaanwijzer verdwijnt na 4 seconden stilstand en ’s nachts gaat de helderheid 4 % omlaag. Je ziet het niet, maar geen pixel brandt uren op dezelfde manier. Een vastgelopen dashboard of ingesloten pagina wordt automatisch opnieuw gestart.'),
         h('hr'),
+        screenLockSection(),
         h('h3', {}, 'Pagina\'s'),
         field('Automatisch wisselen tussen pagina\'s (seconden)', h('input', { class: 'input', type: 'number', min: 0, step: 5, value: s.rotate, onchange: changed((e) => { s.rotate = Math.max(0, parseInt(e.target.value, 10) || 0); }) }), '0 = niet automatisch wisselen. Handig wanneer het dashboard onbeheerd op de tv draait.'),
         h('hr'),

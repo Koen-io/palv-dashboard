@@ -1,5 +1,13 @@
 # Wijzigingen
 
+## 1.37.0
+
+### Nieuw: Schermslot — vergrendel de pc, laat het dashboard staan
+- **Een vergrendelscherm over het werkscherm, terwijl het dashboard doorloopt.** Op een pc met twee schermen legt het Schermslot een schermvullend vergrendelscherm over het werkscherm (het scherm waar het dashboard níét op staat) en laat het dashboard op het tweede scherm gewoon draaien. Zo is een onbeheerde pc dicht zonder dat de operator het dashboard kwijt is. Vergrendelen met het slotje in de kop; op een pc met één scherm vergrendelt Windows zelf (Windows+L)
+- **Eén op één het Windows-vergrendelscherm.** Het toont de echte vergrendelachtergrond van deze pc (het ingestelde vergrendelbeeld, anders de nieuwste Windows Spotlight-foto, anders de bureaubladachtergrond), de klok en de datum, en na een aanraking de accountavatar met de naam en het codeveld — met de echte Windows-accentkleur onder het veld, de ronde pijlknop erin en de "Even geduld"-animatie bij het aanmelden
+- **Een eigen toegangscode, niet je Windows-wachtwoord.** De code (4 tot 12 cijfers) staat versleuteld en alleen lokaal (scrypt + AES-256-GCM, in palv-screenlock.json, alleen voor deze gebruiker leesbaar). Na vijf foute pogingen een halve minuut wachten. Instellen, wijzigen of verwijderen onder Instellingen › Scherm › Schermslot, net als de naam onder de avatar en vanzelf vergrendelen na een aantal minuten zonder toetsenbord of muis
+- **Het houdt wie wegloopt buiten.** Alt+Tab, de Windows-toets en Alt+F4 zijn geblokkeerd, vensters erachter zijn niet te bereiken en het dashboardvenster kan niet dicht zolang het slot aan staat. Wat geen enkel programma kan afvangen is Ctrl+Alt+Del; dat blijft de grens van een slot op dit niveau — bedoeld voor gescreend personeel, geen vervanging van de Windows-aanmelding. Alleen op Windows
+
 ## 1.36.0
 
 ### Weerradar: nieuwe labels bij de meetstations
