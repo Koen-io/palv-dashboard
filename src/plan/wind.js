@@ -394,7 +394,7 @@ function pointFrom(c, p, ti, stale) {
     ok: true, dirDeg: Math.round(at.dir) % 360, speedKt: Math.round(at.speed * 10) / 10,
     gustKt: typeof g === 'number' ? g : null,
     tempC: Number.isFinite(at.t) ? Math.round(at.t * 10) / 10 : typeof t2 === 'number' ? t2 : null,
-    validTime: c.times[i], source: 'Open-Meteo ' + c.model, elevM: elev,
+    validTime: c.times[i], fetchedAt: c.fetchedAt, source: 'Open-Meteo ' + c.model, elevM: elev,
   };
   if (at.above) out.aboveTop = true;
   if (stale) { out.stale = true; out.ok = false; out.error = stale; }

@@ -1,5 +1,22 @@
 # Wijzigingen
 
+## 1.48.0
+
+### COA Planner: strakker en in de Engelse termen
+- **In twee stappen**: links bovenin staan nu twee grote knoppen, **1. Kies schip** (positie, koers en vaart uit AIS) en **2. Weer overnemen** (de wind op de positie op het H-uur). Een afgeronde stap krijgt een groen vinkje; daarna vul je de rest zelf in
+- **Het schip is leeg**: dezelfde vorm, alleen nog een rode (bakboord) en groene (stuurboord) zijde, zonder opbouw, kraan of sloepen
+- **Relatieve wind met de knopen**: in plaats van BOW/MID/STERN staat er nu bijvoorbeeld **G045 - 15 kt** (groen, stuurboord) of **R120 - 8 kt** (rood, bakboord). Windstil over het dek staat als kleinere tekst **CALM OVER DECK** netjes in de kaart
+- **Engelse benamingen**: Ship HDG, Gust, HELO ON AT met **HW/TW** (head-/tailwind) en **XW** (crosswind van L/R), **Approach from G090**, de zee t.o.v. het schip (**Head sea, Sea on the bow, Beam sea, Quartering sea, Following sea**) met de bewegingen (**pitching, rolling, yawing and surging**), de sea state in de WMO/Douglas-termen (Slight, Moderate, Rough…), Approach into sun/moon (NVG) en de lichtfase (Day, Civil twilight…). Ook op de A5-kniebordkaart
+- **Zon en maan**: de hoogte in graden staat nu direct tegen de zon of maan aan, in een plaatje met de rand in de eigen kleur
+- **Waarschuwing bij oude weerdata**: komt de wind uit een METAR van meer dan een uur oud, of uit een verwachting die al ruim drie uur niet ververst kon worden, dan verschijnt een pop-up met de tijd van de gegevens en hoe oud ze zijn, met een knop om ze opnieuw op te halen. Ook in de invoer staat dan hoe oud het is
+- De golfperiode heet nu correct **Mean wave period (Tm)** (het is de gemiddelde periode, niet de piekperiode)
+
+### Hoogtes · deconflictie werkt weer
+- **Ingevulde hoogtes worden meteen verwerkt**: rode rijen, waarschuwingen en de doorsnede verschijnen zodra je een veld verlaat. Voorheen gebeurde er niets tot de kolom om een andere reden opnieuw werd getekend, en een tweede invoer kon de eerste wissen
+- **Doorsnede van het luchtruim**: een zijaanzicht boven het schip met elk toestel op zijn hoogte en een band van de minimale scheiding; overlappende banden zijn rood. Altijd zichtbaar, ook op het touchscreen van PC QRA, en op de A5-afdruk naast de hoogtetabel
+- Zijn alle toestellen ver genoeg uit elkaar, dan staat er een groene melding "Gedeconflicteerd"
+- De knop **+ Rij** en het kruisje werken weer meteen (de kolom wachtte eerst tot je ergens anders tikte)
+
 ## 1.47.0
 
 ### Schermslot gaat op zwart

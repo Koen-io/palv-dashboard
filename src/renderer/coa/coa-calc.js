@@ -40,14 +40,15 @@
 
   // Bow, midships or stern: the zones of the tactical picture (0–45 bow, 45–139 mid, 139–180 stern).
   const SECTORS = [{ id: 'bow', name: 'BOW', to: 45 }, { id: 'mid', name: 'MID', to: 139 }, { id: 'stern', name: 'STERN', to: 180 }];
-  // A relative bearing (from the bow, signed): side, rounded degrees, sector and the text "G 030".
+  // A relative bearing (from the bow, signed): side, rounded degrees, sector and the text "G030" (green
+  // 030, starboard) or "R030" (red, port); dead ahead "000" and dead astern "180".
   function relative(fromT, headingT) {
     if (fromT == null || headingT == null) return null;
     const r = signed(fromT - headingT);
     const a = Math.round(Math.abs(r));
     const side = a === 0 || a === 180 ? '' : r > 0 ? 'G' : 'R';
     const sector = SECTORS.find((s) => a <= s.to && !(s.id === 'mid' && a === 139)) || SECTORS[2];
-    return { rel: r, abs: a, side, sector: sector.id, sectorName: sector.name, text: `${side ? side + ' ' : ''}${String(a).padStart(3, '0')}` };
+    return { rel: r, abs: a, side, sector: sector.id, sectorName: sector.name, text: `${side}${String(a).padStart(3, '0')}` };
   }
 
   // What the helicopter feels on the assault track (heading trackT) in a wind from fromT at spd: the
@@ -90,20 +91,23 @@
   }
 
   /* ---------- the sea relative to the ship ---------- */
-  // Waves from waveFromT on a ship heading headingT: head sea pitches, beam sea rolls, following sea yaws.
+  // Waves from waveFromT on a ship heading headingT, in the seamanship terms: a head sea makes her pitch,
+  // seas on the bow pitch and roll, a beam sea rolls, a quartering sea rolls and yaws, and a following sea
+  // yaws and surges.
   function seaRelative(waveFromT, headingT) {
     const a = Math.abs(signed(waveFromT - headingT));
-    if (a <= 30) return { id: 'head', name: 'Kopzee', motion: 'stampen', abs: a };
-    if (a <= 60) return { id: 'bow', name: 'Schuin van voren', motion: 'stampen en slingeren', abs: a };
-    if (a <= 120) return { id: 'beam', name: 'Dwarszee', motion: 'slingeren', abs: a };
-    if (a <= 150) return { id: 'quarter', name: 'Schuin van achteren', motion: 'gieren en slingeren', abs: a };
-    return { id: 'following', name: 'Achterinkomend', motion: 'gieren', abs: a };
+    if (a <= 30) return { id: 'head', name: 'Head sea', motion: 'pitching', abs: a };
+    if (a <= 60) return { id: 'bow', name: 'Sea on the bow', motion: 'pitching and rolling', abs: a };
+    if (a <= 120) return { id: 'beam', name: 'Beam sea', motion: 'rolling', abs: a };
+    if (a <= 150) return { id: 'quarter', name: 'Quartering sea', motion: 'rolling and yawing', abs: a };
+    return { id: 'following', name: 'Following sea', motion: 'yawing and surging', abs: a };
   }
+  // The WMO/Douglas sea state code with its official English terms, by significant wave height (m).
   const DOUGLAS = [
-    { code: 0, max: 0.05, nl: 'Spiegelglad' }, { code: 1, max: 0.1, nl: 'Vlak' }, { code: 2, max: 0.5, nl: 'Kalm' },
-    { code: 3, max: 1.25, nl: 'Licht' }, { code: 4, max: 2.5, nl: 'Matig' }, { code: 5, max: 4, nl: 'Ruw' },
-    { code: 6, max: 6, nl: 'Zeer ruw' }, { code: 7, max: 9, nl: 'Hoog' }, { code: 8, max: 14, nl: 'Zeer hoog' },
-    { code: 9, max: Infinity, nl: 'Buitengewoon' },
+    { code: 0, max: 0.05, name: 'Calm (glassy)' }, { code: 1, max: 0.1, name: 'Calm (rippled)' }, { code: 2, max: 0.5, name: 'Smooth' },
+    { code: 3, max: 1.25, name: 'Slight' }, { code: 4, max: 2.5, name: 'Moderate' }, { code: 5, max: 4, name: 'Rough' },
+    { code: 6, max: 6, name: 'Very rough' }, { code: 7, max: 9, name: 'High' }, { code: 8, max: 14, name: 'Very high' },
+    { code: 9, max: Infinity, name: 'Phenomenal' },
   ];
   const douglas = (hs) => (!Number.isFinite(hs) || hs < 0 ? null : DOUGLAS.find((d) => hs < d.max) || DOUGLAS[9]);
 
@@ -149,11 +153,11 @@
   // Light at the moment: day, twilight (civil, nautical, astronomical) or night, from the sun's height.
   function lightPhase(sunAlt) {
     if (sunAlt == null) return null;
-    if (sunAlt > -0.833) return { id: 'day', name: 'Dag' };
-    if (sunAlt > -6) return { id: 'civil', name: 'Burgerlijke schemering' };
-    if (sunAlt > -12) return { id: 'nautical', name: 'Nautische schemering' };
-    if (sunAlt > -18) return { id: 'astro', name: 'Astronomische schemering' };
-    return { id: 'night', name: 'Nacht' };
+    if (sunAlt > -0.833) return { id: 'day', name: 'Day' };
+    if (sunAlt > -6) return { id: 'civil', name: 'Civil twilight' };
+    if (sunAlt > -12) return { id: 'nautical', name: 'Nautical twilight' };
+    if (sunAlt > -18) return { id: 'astro', name: 'Astronomical twilight' };
+    return { id: 'night', name: 'Night' };
   }
 
   /* ---------- height deconfliction ---------- */

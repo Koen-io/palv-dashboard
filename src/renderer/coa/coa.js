@@ -211,7 +211,16 @@ function coaCreate(body, w) {
   const wsIn = S({ label: 'Windsnelheid', unit: 'kt', step: 1, max: 150, get: () => (P ? +P.ws : null), put: (v) => set({ ws: v, windSrc: manual }, { repaintInputs: false }) });
   const gustIn = S({ label: 'Windstoten', unit: 'kt', step: 1, max: 150, optional: true, get: () => (P && P.gust != null ? +P.gust : null), put: (v) => set({ gust: v, windSrc: manual }, { repaintInputs: false }) });
   const windSrcEl = h('div', { class: 'coa-src' });
-  const posBtn = h('button', { class: 'btn zp-btn primary coa-posbtn', onclick: () => pickPosition() }, icon('target'), 'Kies positie schip');
+  // The two steps before anything is typed: 1. the ship (position, and from AIS its course and speed),
+  // 2. the weather at that position on the H-hour.
+  const stepBtn = (n, title, sub, onclick) => {
+    const el = h('button', { class: 'coa-stepcta', onclick }, h('span', { class: 'coa-stepn' }, String(n)), h('span', { class: 'coa-steptxt' }, h('b', {}, `${n}. ${title}`), h('small', {}, sub)), icon('right'));
+    el.setNum = (done) => { el.classList.toggle('done', done); el.querySelector('.coa-stepn').replaceChildren(done ? icon('check') : String(n)); };
+    return el;
+  };
+  const posBtn = stepBtn(1, 'Kies schip', 'Positie, koers en vaart (AIS)', () => pickPosition());
+  const wxBtn = stepBtn(2, 'Weer overnemen', 'Wind op de positie op het H-uur', () => windFromModel(true));
+  const wxEl = h('div', { class: 'coa-pos coa-wxstate' });
   const posEl = h('div', { class: 'coa-pos' });
   const drChk = h('input', { type: 'checkbox', onchange: (e) => set({ dr: e.target.checked }) });
   const dateIn = h('input', { class: 'input coa-date', type: 'date', title: 'Datum H-uur (UTC)' });
@@ -224,13 +233,14 @@ function coaCreate(body, w) {
   slider.addEventListener('input', () => { offMin = +slider.value; paint({ inputs: false }); });
   const sliderReset = h('button', { class: 'coa-clear', title: 'Terug naar het H-uur', onclick: () => { offMin = 0; slider.value = '0'; paint({ inputs: false }); } }, icon('refresh'));
   const metarBtn = h('button', { class: 'btn zp-btn', title: 'De wind uit de laatste METAR van de basis', onclick: () => windFromMetar() }, icon('cloud'), 'METAR');
-  const modelBtn = h('button', { class: 'btn zp-btn', title: 'De verwachte wind op de positie van het schip op het H-uur (Open-Meteo)', onclick: () => windFromModel(true) }, icon('wind'), 'Op positie');
   const sec = (title, ...kids) => h('section', { class: 'coa-sec' }, h('h3', {}, title), ...kids);
   input.append(
+    h('section', { class: 'coa-sec coa-steps' }, h('h3', {}, 'In twee stappen'),
+      posBtn, posEl, h('label', { class: 'check coa-dr' }, drChk, 'Gegist bestek naar het H-uur'),
+      wxBtn, wxEl),
     sec('Koers en vaart', atIn, brcIn, bsIn),
-    sec('Wind', wdIn, wsIn, gustIn, h('div', { class: 'coa-srcrow' }, windSrcEl, modelBtn, metarBtn)),
+    sec('Wind', wdIn, wsIn, gustIn, h('div', { class: 'coa-srcrow' }, windSrcEl, metarBtn)),
     sec('H-uur (UTC)', h('div', { class: 'coa-hrow' }, dateIn, timeIn, nowBtn), h('div', { class: 'coa-srow' }, icon('sun'), slider, sliderReset), sliderLbl),
-    sec('Schip', posBtn, posEl, h('label', { class: 'check coa-dr' }, drChk, 'Gegist bestek naar het H-uur')),
   );
   function paintInputs() {
     if (!P) return;
@@ -244,9 +254,17 @@ function coaCreate(body, w) {
   function paintSide() {
     if (!P || !vm) return;
     const src = P.windSrc || manual;
-    windSrcEl.textContent = src.kind === 'model' ? `Open-Meteo op positie${src.at ? ' · ' + zulu(src.at) : ''}` : src.kind === 'metar' ? `METAR ${src.label || ''}${src.at ? ' · ' + zulu(src.at) : ''}` : 'Handmatig ingevuld';
-    windSrcEl.className = 'coa-src ' + src.kind;
+    const age = wxAge();
+    const old = age && age.old ? ` · ${ageText(age.ms)} oud` : '';
+    windSrcEl.textContent = src.kind === 'model' ? `Open-Meteo op positie${src.at ? ' · ' + zulu(src.at) : ''}${old}` : src.kind === 'metar' ? `METAR ${src.label || ''}${src.at ? ' · ' + zulu(src.at) : ''}${old}` : 'Handmatig ingevuld';
+    windSrcEl.className = 'coa-src ' + src.kind + (old ? ' old' : '');
     const has = P.lat != null;
+    posBtn.setNum(has);
+    wxBtn.setNum(has && src.kind === 'model');
+    wxBtn.disabled = !has;
+    wxEl.replaceChildren(!has ? h('small', {}, 'Eerst stap 1: het schip.')
+      : src.kind === 'model' ? h('small', { class: old ? 'coa-old' : '' }, `Overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt${src.at ? ' · verwachting ' + zulu(src.at) : ''}${old}`)
+        : h('small', {}, src.kind === 'metar' ? `Nu: wind uit de METAR van ${src.label || 'de basis'}` : 'Nu: wind met de hand ingevuld'));
     posEl.replaceChildren(
       has ? h('b', {}, PlanCoords.fmt(P.lat, P.lon, 'ddm')) : h('b', { class: 'muted' }, 'Nog geen positie gekozen'),
       h('small', {}, has ? `${P.posLabel || 'Gekozen punt'}${P.posAt ? ' · fix ' + zulu(P.posAt) : ''}` : `Zon en maan voor ${vm.base.name}`),
@@ -303,8 +321,8 @@ function coaCreate(body, w) {
     const c = vm.brc;
     const rc = c.rel ? (c.rel.side === 'G' ? 'g' : c.rel.side === 'R' ? 'r' : '') : '';
     return card('coa-brc', `Op BRC · COA ${c.n}`, h('span', { class: 'coa-badge' }, `${vm.fmt(c.heading)}°${vm.refText} · ${Math.round(+P.bs)} kt`),
-      h('div', { class: 'coa-big' }, h('span', { class: 'coa-wind' }, `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${vm.refText} / ${Math.round(c.app.spd)} kt`), h('span', { class: 'coa-rel ' + rc }, c.rel ? `${c.rel.text} ${c.rel.sectorName}` : 'windstil')),
-      h('div', { class: 'coa-line' }, `Heli op AT: ${c.helo.head >= 0 ? 'kop' : 'staart'} ${Math.abs(Math.round(c.helo.head))} kt, zij ${Math.abs(Math.round(c.helo.cross))} kt${c.helo.side ? ' van ' + (c.helo.side === 'R' ? 'rechts' : 'links') : ''}${c.gust ? ` · windstoot ${Math.round(c.gust.spd)} kt` : ''}`));
+      h('div', { class: 'coa-big' }, h('span', { class: 'coa-wind' }, `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${vm.refText} / ${Math.round(c.app.spd)} kt`), h('span', { class: 'coa-rel ' + rc + (c.rel ? '' : ' calm') }, coaRelText(c))),
+      h('div', { class: 'coa-line' }, `Helo on AT: ${coaHeloText(c.helo)}${c.gust ? ` · gust ${Math.round(c.gust.spd)} kt` : ''} · approach from ${c.approach.text}`));
   }
   function seaCard() {
     const sea = P._sea, wind = P._wind;
@@ -314,18 +332,19 @@ function coaCreate(body, w) {
     const m = sea && sea.model;
     const ds = m && m.hs != null ? C.douglas(m.hs) : null;
     const rel = m && m.dir != null ? C.seaRelative(m.dir, vm.brc ? vm.brc.heading : vm.at) : null;
-    const tile = h('div', { class: 'coa-ss' + (ds ? ' ss' + Math.min(9, ds.code) : '') }, h('small', {}, 'SEA STATE'), h('b', {}, ds ? String(ds.code) : '–'), h('span', {}, ds ? ds.nl : 'onbekend'));
+    const tile = h('div', { class: 'coa-ss' + (ds ? ' ss' + Math.min(9, ds.code) : '') }, h('small', {}, 'SEA STATE'), h('b', {}, ds ? String(ds.code) : '–'), h('span', {}, ds ? ds.name : 'unknown'));
     const rows = h('div', { class: 'coa-kvs' },
-      m ? kv('Golfhoogte (Hs)', m.hs != null ? `${m.hs.toFixed(1).replace('.', ',')} m` : '–') : null,
-      m ? kv('Periode', m.period != null ? `${m.period.toFixed(1).replace('.', ',')} s` : '–') : null,
-      m && m.dir != null ? kv('Golven uit', `${vm.fmt(m.dir)}°${vm.refText}`) : null,
-      rel ? kv(vm.brc ? 'Op BRC' : 'Op AT', `${rel.name} · ${rel.motion}`, 'em') : null,
-      m && m.swell != null ? kv('Deining', `${m.swell.toFixed(1).replace('.', ',')} m${m.swellPeriod ? ` · ${Math.round(m.swellPeriod)} s` : ''}`) : null,
-      m && m.sst != null ? kv('Zeewater', `${m.sst.toFixed(1).replace('.', ',')} °C`) : null);
+      m ? kv('Sig. wave height (Hs)', m.hs != null ? `${m.hs.toFixed(1)} m` : '–') : null,
+      m ? kv('Mean wave period (Tm)', m.period != null ? `${m.period.toFixed(1)} s` : '–') : null,
+      m && m.dir != null ? kv('Waves from', `${vm.fmt(m.dir)}°${vm.refText}`) : null,
+      rel ? kv(vm.brc ? `Ship on BRC` : 'Ship on COA 1', `${rel.name}`, 'em') : null,
+      rel ? kv('Ship motion', rel.motion.replace(/^./, (x) => x.toUpperCase()), 'em') : null,
+      m && m.swell != null ? kv('Swell', `${m.swell.toFixed(1)} m${m.swellPeriod ? ` · ${Math.round(m.swellPeriod)} s` : ''}`) : null,
+      m && m.sst != null ? kv('Sea temp (SST)', `${m.sst.toFixed(1)} °C`) : null);
     const wrow = wind && wind.ok ? h('div', { class: 'coa-wx' }, icon('wind'), h('div', {},
       h('b', {}, `${vm.fmt(wind.dirDeg)}°${vm.refText} / ${Math.round(wind.speedKt)}${wind.gustKt != null ? 'G' + Math.round(wind.gustKt) : ''} kt`),
-      h('small', {}, `Verwachting op H (${zulu(wind.validTime)}), Open-Meteo`)),
-      h('button', { class: 'btn zp-btn', title: 'Deze wind in de COA Planner zetten', onclick: () => windFromModel(true) }, 'Overnemen'))
+      h('small', {}, `Forecast for H (${zulu(wind.validTime)}), Open-Meteo`)),
+      h('button', { class: 'btn zp-btn', title: 'Deze wind in de COA Planner zetten (stap 2)', onclick: () => windFromModel(true) }, 'Overnemen'))
       : wind && !wind.ok ? h('p', { class: 'coa-hint' }, `Wind: ${wind.error || 'niet beschikbaar'}`) : null;
     const near = sea && Array.isArray(sea.nearest) && sea.nearest.length ? h('p', { class: 'coa-hint' }, 'Dichtstbij gemeten: ' + sea.nearest.slice(0, 2).map((o) => `${o.name} ${o.hs != null ? o.hs.toFixed(1).replace('.', ',') + ' m' : ''} (${Math.round(o.km)} km)`).join(' · ')) : null;
     return card('coa-seacard', 'Zee en weer', h('span', { class: 'coa-badge' }, where), h('div', { class: 'coa-searow' }, tile, rows), wrow, near,
@@ -334,44 +353,51 @@ function coaCreate(body, w) {
   function astroCard() {
     const s = vm.sun, m = vm.moon, lx = ASTRO.formatLux(vm.light.lux);
     const warn = [];
-    if (vm.glareSun) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Nadering tegen de zon in'), ` · zon ${Math.round(s.alt)}° hoog, ${Math.round(Math.abs(C.signed(s.az - vm.at)))}° naast de AT`)));
-    if (vm.glareMoon) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Nadering tegen de maan in (NVG)'), ` · maan ${Math.round(m.alt)}° hoog, ${Math.round(m.fraction * 100)}% verlicht, ${Math.round(Math.abs(C.signed(m.az - vm.at)))}° naast de AT`)));
+    if (vm.glareSun) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Approach into sun'), ` · elevation ${Math.round(s.alt)}°, ${Math.round(Math.abs(C.signed(s.az - vm.at)))}° off the AT`)));
+    if (vm.glareMoon) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Approach into moon (NVG)'), ` · elevation ${Math.round(m.alt)}°, ${Math.round(m.fraction * 100)}% illuminated, ${Math.round(Math.abs(C.signed(m.az - vm.at)))}° off the AT`)));
     return card('coa-astro', 'Zon en maan', h('span', { class: 'coa-badge' + (vm.dark ? ' night' : '') }, vm.phase ? vm.phase.name : ''),
       h('div', { class: 'coa-bodies' },
-        h('div', { class: 'coa-body2 coa-b-sun' + (s.alt < 0 ? ' coa-down' : '') }, h('i'), h('div', {}, h('small', {}, 'ZON'), h('b', {}, `${vm.fmt(s.az)}°${vm.refText}`), h('span', {}, `hoogte ${Math.round(s.alt)}°`))),
-        h('div', { class: 'coa-body2 coa-b-moon' + (m.alt < 0 ? ' coa-down' : '') }, h('i', { style: `--f:${m.fraction.toFixed(2)}` }), h('div', {}, h('small', {}, 'MAAN'), h('b', {}, `${vm.fmt(m.az)}°${vm.refText}`), h('span', {}, `hoogte ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`))),
-        h('div', { class: 'coa-body2 coa-b-lux' }, h('i'), h('div', {}, h('small', {}, 'LICHT'), h('b', {}, `${lx.value} ${lx.unit}`), h('span', {}, m.phaseName)))),
+        h('div', { class: 'coa-body2 coa-b-sun' + (s.alt < 0 ? ' coa-down' : '') }, h('i'), h('div', {}, h('small', {}, 'SUN'), h('b', {}, `${vm.fmt(s.az)}°${vm.refText}`), h('span', {}, `elev ${Math.round(s.alt)}°`))),
+        h('div', { class: 'coa-body2 coa-b-moon' + (m.alt < 0 ? ' coa-down' : '') }, h('i', { style: `--f:${m.fraction.toFixed(2)}` }), h('div', {}, h('small', {}, 'MOON'), h('b', {}, `${vm.fmt(m.az)}°${vm.refText}`), h('span', {}, `elev ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`))),
+        h('div', { class: 'coa-body2 coa-b-lux' }, h('i'), h('div', {}, h('small', {}, 'LIGHT'), h('b', {}, `${lx.value} ${lx.unit}`), h('span', {}, m.phaseName)))),
       ...warn,
       vm.shadow ? h('p', { class: 'coa-hint' }, `Schaduw ${vm.shadow.moon ? 'van de maan ' : ''}valt naar ${vm.fmt(vm.shadow.dir)}°${vm.refText}, ${vm.shadow.len < 1 ? 'kort' : vm.shadow.len < 2.5 ? 'middellang' : 'lang'} (getekend naast elk schip).`) : null,
       h('p', { class: 'coa-hint' }, `${offMin ? 'Tijdschuif ' : ''}${zulu(vm.tAstro)} · ${vm.ref === 'M' ? `variatie ${Math.abs(vm.decl).toFixed(1).replace('.', ',')}°${vm.decl >= 0 ? 'E' : 'W'} · ` : ''}${vm.pos ? 'op de positie van het schip' : 'voor ' + vm.base.name}`));
   }
+  // The heights card. Typing in it never repaints the whole column (the focus would be lost); a change
+  // repaints only what depends on it: the red rows, the cross-section and the conflicts.
   function heightsCard() {
-    const rows = P.heights;
-    const sep = +P.sep || 500;
-    const conf = C.heightConflicts(rows, sep);
-    const bad = new Set(conf.flatMap((c) => [c.a.i, c.b.i]));
-    const put = (i, k, v) => { const list = rows.map((r) => ({ ...r })); list[i][k] = v; set({ heights: list }, { repaintInputs: false, info: false }); };
-    const tbl = h('table', { class: 'coa-ht' }, h('thead', {}, h('tr', {}, h('th', {}, 'Callsign'), h('th', {}, 'Type'), h('th', {}, 'Hoogte ft'), h('th', {}, 'Taak'), h('th'))),
-      h('tbody', {}, rows.map((r, i) => h('tr', { class: bad.has(i) ? 'bad' : '' },
-        ...['cs', 'type', 'alt', 'role'].map((k) => h('td', {}, h('input', { class: 'input', value: r[k] || '', inputmode: k === 'alt' ? 'numeric' : null, placeholder: { cs: 'LION01', type: 'AW139', alt: '1500', role: 'sniper' }[k], onchange: (e) => put(i, k, e.target.value.trim()) }))),
-        h('td', {}, h('button', { class: 'w-tool', title: 'Rij verwijderen', onclick: () => set({ heights: rows.filter((_, j) => j !== i) }) }, icon('close')))))));
-    const stack = heightStack(rows, bad);
-    return card('coa-heights', 'Hoogtes · deconflictie', h('span', { class: 'coa-seps' }, 'min.', zpSelect(COA_SEPS.map((v) => ({ value: v, label: `${v} ft` })), sep, (v) => set({ sep: +v }))),
-      h('div', { class: 'coa-htwrap' }, tbl, stack),
-      h('div', { class: 'coa-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => set({ heights: [...rows, coaBaseRow()] }) }, icon('plus'), 'Rij')),
-      conf.length ? h('div', { class: 'coa-conf' }, conf.slice(0, 4).map((c) => h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, `${c.a.name} ↔ ${c.b.name}`), ` · ${c.diff} ft (minder dan ${sep})`)))) : null);
-  }
-  // A small vertical picture of the heights, so a stack reads at a glance.
-  function heightStack(rows, bad) {
-    const list = rows.map((r, i) => ({ i, ft: C.parseFt(r.alt), name: r.cs || r.type || `Rij ${i + 1}` })).filter((r) => r.ft != null);
-    if (!list.length) return h('div', { class: 'coa-stack empty' });
-    const top = Math.max(500, ...list.map((r) => r.ft)) * 1.12;
-    const H = 120;
-    const marks = list.map((r) => {
-      const y = H - (r.ft / top) * H;
-      return `<g><path d="M4 ${y.toFixed(1)}H26" stroke="${bad.has(r.i) ? '#ff5a52' : '#4fb3ff'}" stroke-width="3" stroke-linecap="round"/><text x="30" y="${(y + 4).toFixed(1)}" font-size="10" font-weight="700" fill="currentColor">${escHtml(String(r.name).slice(0, 8))}</text></g>`;
-    }).join('');
-    return h('div', { class: 'coa-stack', html: `<svg viewBox="0 0 90 ${H + 6}" preserveAspectRatio="xMinYMin meet"><path d="M15 0V${H}" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.5"/><path d="M8 ${H}H22" stroke="currentColor" stroke-opacity="0.5" stroke-width="2"/>${marks}</svg>` });
+    const sep = () => +P.sep || 500;
+    const put = (i, k, v) => {
+      const list = P.heights.map((r) => ({ ...r }));
+      if (!list[i]) return;
+      list[i][k] = v;
+      set({ heights: list }, { repaintInputs: false, info: false });
+      live();
+    };
+    const trs = P.heights.map((r, i) => h('tr', {},
+      ...['cs', 'type', 'alt', 'role'].map((k) => h('td', {}, h('input', { class: 'input', value: r[k] || '', inputmode: k === 'alt' ? 'numeric' : null, placeholder: { cs: 'LION01', type: 'AW139', alt: '1500', role: 'sniper' }[k],
+        title: k === 'alt' ? 'Hoogte in ft (bv. 1500, 1.500 of FL045)' : null, onchange: (e) => put(i, k, e.target.value.trim()), onkeydown: (e) => { if (e.key === 'Enter') e.target.blur(); } }))),
+      h('td', {}, h('button', { class: 'w-tool', title: 'Rij verwijderen', onclick: () => set({ heights: P.heights.filter((_, j) => j !== i) }) }, icon('close')))));
+    const tbl = h('table', { class: 'coa-ht' }, h('thead', {}, h('tr', {}, h('th', {}, 'Callsign'), h('th', {}, 'Type'), h('th', {}, 'Alt ft'), h('th', {}, 'Task'), h('th'))), h('tbody', {}, trs));
+    const xs = h('div', { class: 'coa-xsec' });
+    const confEl = h('div', { class: 'coa-conf' });
+    function live() {
+      const rows = P.heights, conf = C.heightConflicts(rows, sep());
+      const bad = new Set(conf.flatMap((c) => [c.a.i, c.b.i]));
+      trs.forEach((tr, i) => tr.classList.toggle('bad', bad.has(i)));
+      const n = rows.filter((r) => C.parseFt(r.alt) != null).length;
+      xs.innerHTML = n ? coaHeightSvg(rows, sep(), bad, COA_PAL[document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'], { w: Math.max(240, Math.round(info.clientWidth - 34)), h: 168 }) : '';
+      xs.hidden = !n;
+      confEl.replaceChildren(...(conf.length ? conf.slice(0, 4).map((c) => h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, `${c.a.name} ↔ ${c.b.name}`), ` · ${c.diff} ft verschil (minder dan ${sep()} ft)`)))
+        : n >= 2 ? [h('div', { class: 'coa-ok' }, icon('check'), h('span', {}, `Gedeconflicteerd: alle ${n} minstens ${sep()} ft uit elkaar`))]
+          : [h('p', { class: 'coa-hint' }, 'Vul bij twee of meer toestellen een hoogte in (ft, of FL): de doorsnede en de deconflictie verschijnen hier meteen.')]));
+    }
+    live();
+    return card('coa-heights', 'Hoogtes · deconflictie', h('span', { class: 'coa-seps' }, 'min.', zpSelect(COA_SEPS.map((v) => ({ value: v, label: `${v} ft` })), sep(), (v) => set({ sep: +v }))),
+      tbl,
+      h('div', { class: 'coa-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => set({ heights: [...P.heights, coaBaseRow()] }) }, icon('plus'), 'Rij')),
+      xs, confEl);
   }
   function paintInfo() {
     if (!P || !vm) { info.replaceChildren(); return; }
@@ -387,7 +413,7 @@ function coaCreate(body, w) {
     fetchTimer = setTimeout(() => fetchData(force), force ? 50 : 900);
   }
   async function fetchData(force) {
-    if (!P || P.lat == null) return;
+    if (!P || P.lat == null) { checkWxAge(); return; }
     const pos = C.positionAt(P) || { lat: P.lat, lon: P.lon };
     const hour = Math.floor((P.hhour || Date.now()) / 3600000);
     // Rounded as the sources round it: a few hundred metres more never asks again.
@@ -404,6 +430,7 @@ function coaCreate(body, w) {
     // A plan whose wind came from the model follows the model; a wind typed by hand stays.
     if (wind && wind.ok && P.windSrc && P.windSrc.kind === 'model') windFromModel(false);
     else paint({ inputs: false });
+    checkWxAge();
   }
   function windFromModel(ask) {
     const wd = P && P._wind;
@@ -411,7 +438,8 @@ function coaCreate(body, w) {
       if (ask) { if (P && P.lat == null) toast('Kies eerst de positie van het schip', true); else { toast('De wind op de positie wordt opgehaald…'); fetchSoon(true); P.windSrc = { kind: 'model' }; } }
       return;
     }
-    set({ wd: C.norm(wd.dirDeg), ws: Math.round(wd.speedKt), gust: wd.gustKt != null && wd.gustKt > wd.speedKt + 2 ? Math.round(wd.gustKt) : null, windSrc: { kind: 'model', at: wd.validTime } });
+    set({ wd: C.norm(wd.dirDeg), ws: Math.round(wd.speedKt), gust: wd.gustKt != null && wd.gustKt > wd.speedKt + 2 ? Math.round(wd.gustKt) : null, windSrc: { kind: 'model', at: wd.validTime, fetched: wd.fetchedAt || Date.now() } });
+    if (ask) toast(`Weer overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt op de positie`);
   }
   function windFromMetar() {
     const icao = activeBase().icao;
@@ -421,6 +449,41 @@ function coaCreate(body, w) {
     if (wnd.dir === 'VRB') return toast(`${icao}: wind variabel (VRB ${wnd.spd} kt); vul de richting zelf in`, true);
     const k = wnd.unit === 'MPS' ? 1.943844 : 1;
     set({ wd: C.norm(+wnd.dir), ws: Math.round(wnd.spd * k), gust: wnd.gust ? Math.round(wnd.gust * k) : null, windSrc: { kind: 'metar', label: icao, at: st.obsTime || null } });
+    checkWxAge();
+  }
+  // How old the weather in the plan is: a METAR by its observation time (old after an hour), a model wind
+  // by when it was fetched (old after three hours; while online it is refreshed every time it is opened).
+  const WX_OLD = { metar: 60 * 60000, model: 3 * 3600000 };
+  function wxAge() {
+    const src = P && P.windSrc;
+    if (!src) return null;
+    const t = src.kind === 'metar' ? src.at : src.kind === 'model' ? src.fetched : null;
+    if (!t) return null;
+    const ms = Date.now() - t;
+    return { t, ms, old: ms > WX_OLD[src.kind], what: src.kind === 'metar' ? `de METAR van ${src.label || 'de basis'}` : 'de Open-Meteo-verwachting op de positie', kind: src.kind };
+  }
+  // Old weather gets a pop-up once per plan and per data time, and only while the tab is in view.
+  const wxWarned = new Set();
+  let wxPending = false;
+  function checkWxAge() {
+    const a = wxAge();
+    if (!a || !a.old) { wxPending = false; return; }
+    const key = `${P.id}|${a.kind}|${a.t}`;
+    if (wxWarned.has(key)) return;
+    if (!onScreen(body) || document.querySelector('.modal-backdrop')) { wxPending = true; return; }
+    wxPending = false;
+    wxWarned.add(key);
+    const d = new Date(a.t);
+    const when = `${zulu(a.t)}${new Date().toISOString().slice(0, 10) !== d.toISOString().slice(0, 10) ? ' op ' + d.toISOString().slice(0, 10).split('-').reverse().join('-') : ''}`;
+    openModal({
+      title: 'Weerdata is ouder', cls: 'coa-oldmodal',
+      body: [
+        h('div', { class: 'coa-warn coa-oldwarn' }, icon('alert'), h('span', {}, h('b', {}, `${ageText(a.ms)} oud`), ` · de wind in dit plan komt uit ${a.what} van ${when}.`)),
+        h('p', { class: 'coa-hint' }, a.kind === 'metar' ? 'Een METAR is een waarneming op de basis, niet een verwachting op de positie van het schip. Neem bij voorkeur het weer op de positie over (stap 2), of controleer de wind voordat je de COA gebruikt.'
+          : 'Nieuwe gegevens konden niet worden opgehaald (geen verbinding?). Controleer de wind voordat je de COA gebruikt, of probeer het opnieuw.'),
+      ],
+      actions: [{ label: 'Begrepen' }, { label: P.lat != null ? 'Weer opnieuw ophalen' : 'METAR opnieuw', primary: true, onClick: () => { if (P.lat != null) { P.windSrc = { kind: 'model' }; fetchSoon(true); toast('Het weer op de positie wordt opgehaald…'); } else windFromMetar(); } }],
+    });
   }
   const unwatchWx = watchWx(() => {});
   cleanups.push(unwatchWx);
@@ -760,7 +823,7 @@ function coaCreate(body, w) {
     if (!list.length) return toast('Er is nog geen missie in Mission Planning', true);
     const s = h('select', { class: 'input' }, list.map((m) => h('option', { value: m.id, selected: m.id === P.missionId || null }, m.name)));
     const wv = `${vm.fmt(vm.wd)}°${vm.refText}/${Math.round(vm.ws)}${vm.gust ? 'G' + Math.round(vm.gust) : ''} kt`;
-    const sunMoon = `Zon ${vm.fmt(vm.sun.az)}°${vm.refText} ${Math.round(vm.sun.alt)}° · Maan ${vm.fmt(vm.moon.az)}°${vm.refText} ${Math.round(vm.moon.alt)}° ${Math.round(vm.moon.fraction * 100)}%${vm.glareSun ? ' · LET OP zon op de nadering' : ''}${vm.glareMoon ? ' · LET OP maan op de nadering (NVG)' : ''}`;
+    const sunMoon = `Sun ${vm.fmt(vm.sun.az)}°${vm.refText} ${Math.round(vm.sun.alt)}° · Moon ${vm.fmt(vm.moon.az)}°${vm.refText} ${Math.round(vm.moon.alt)}° ${Math.round(vm.moon.fraction * 100)}%${vm.glareSun ? ' · APPROACH INTO SUN' : ''}${vm.glareMoon ? ' · APPROACH INTO MOON (NVG)' : ''}`;
     const c = vm.brc || vm.coas[0];
     const ingress = `AT ${vm.fmt(vm.at)}°${vm.refText} · COA ${c.n} schip ${vm.fmt(c.heading)}°${vm.refText}: rel. wind ${c.rel ? c.rel.text : '---'} / ${Math.round(c.app.spd)} kt`;
     openModal({
@@ -789,16 +852,19 @@ function coaCreate(body, w) {
     const d = new Date(P.hhour || Date.now());
     const dtg = `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z ${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
     const R = v.refText;
-    const pos = v.pos ? `${PlanCoords.fmt(v.pos.lat, v.pos.lon, 'ddm')}${v.pos.dr ? ' (gegist op H)' : ''}` : '—';
-    const rows = v.coas.map((c) => `<tr class="${c.brc ? 'brc' : ''}"><td><b>COA ${c.n}</b>${c.brc ? ' <i>BRC</i>' : ''}</td><td>${v.fmt(c.heading)}°</td><td><b>${c.app.dir == null ? '---' : v.fmt(c.app.dir)}° / ${Math.round(c.app.spd)}</b>${c.gust ? ` (G${Math.round(c.gust.spd)})` : ''}</td><td class="${c.rel && c.rel.side === 'G' ? 'g' : c.rel && c.rel.side === 'R' ? 'r' : ''}"><b>${c.rel ? c.rel.text : '---'}</b> ${c.rel ? c.rel.sectorName : ''}</td><td>${c.helo.head >= 0 ? 'K' : 'S'}${Math.abs(Math.round(c.helo.head))} · Z${Math.abs(Math.round(c.helo.cross))}${c.helo.side}</td><td>${c.approach.text} ${c.approach.sectorName}</td><td>${c.sea ? e(c.sea.name) : '—'}</td></tr>`).join('');
+    const pos = v.pos ? `${PlanCoords.fmt(v.pos.lat, v.pos.lon, 'ddm')}${v.pos.dr ? ' (DR at H)' : ''}` : '—';
+    const heloShort = (hl) => `${hl.head >= 0 ? 'HW' : 'TW'}${Math.abs(Math.round(hl.head))} XW${Math.abs(Math.round(hl.cross))}${hl.side}`;
+    const rows = v.coas.map((c) => `<tr class="${c.brc ? 'brc' : ''}"><td><b>COA ${c.n}</b>${c.brc ? ' <i>BRC</i>' : ''}</td><td>${v.fmt(c.heading)}°</td><td><b>${c.app.dir == null ? '---' : v.fmt(c.app.dir)}° / ${Math.round(c.app.spd)}</b>${c.gust ? ` (G${Math.round(c.gust.spd)})` : ''}</td><td class="${c.rel && c.rel.side === 'G' ? 'g' : c.rel && c.rel.side === 'R' ? 'r' : ''}"><b>${e(coaRelText(c))}</b></td><td>${heloShort(c.helo)}</td><td>${c.approach.text}</td><td>${c.sea ? e(c.sea.name) : '—'}</td></tr>`).join('');
     const m = P._sea && P._sea.model, ds = m && m.hs != null ? COA_CALC.douglas(m.hs) : null;
-    const sea = m ? `Sea state <b>${ds ? ds.code + ' ' + ds.nl : '–'}</b> · Hs ${m.hs != null ? m.hs.toFixed(1).replace('.', ',') + ' m' : '–'} · Tp ${m.period != null ? m.period.toFixed(0) + ' s' : '–'} · golven uit ${m.dir != null ? v.fmt(m.dir) + '°' : '–'}${m.sst != null ? ' · zeewater ' + m.sst.toFixed(0) + ' °C' : ''}` : 'Zee: geen gegevens';
-    const warn = [v.glareSun ? 'NADERING TEGEN DE ZON IN' : '', v.glareMoon ? 'NADERING TEGEN DE MAAN IN (NVG)' : ''].filter(Boolean).join(' · ');
+    const srel = m && m.dir != null ? COA_CALC.seaRelative(m.dir, v.brc ? v.brc.heading : v.at) : null;
+    const sea = m ? `Sea state <b>${ds ? ds.code + ' ' + ds.name : '–'}</b> · Hs ${m.hs != null ? m.hs.toFixed(1) + ' m' : '–'} · Tm ${m.period != null ? m.period.toFixed(0) + ' s' : '–'} · waves from ${m.dir != null ? v.fmt(m.dir) + '°' : '–'}${srel ? ` · ${v.brc ? 'on BRC' : 'on COA 1'}: ${srel.name.toLowerCase()}, ${srel.motion}` : ''}${m.sst != null ? ' · SST ' + m.sst.toFixed(0) + ' °C' : ''}` : 'Sea: no data';
+    const warn = [v.glareSun ? 'APPROACH INTO SUN' : '', v.glareMoon ? 'APPROACH INTO MOON (NVG)' : ''].filter(Boolean).join(' · ');
     const lx = ASTRO.formatLux(v.light.lux);
-    const sm = `Zon <b>${v.fmt(v.sun.az)}°</b> h ${Math.round(v.sun.alt)}° · Maan <b>${v.fmt(v.moon.az)}°</b> h ${Math.round(v.moon.alt)}° ${Math.round(v.moon.fraction * 100)}% · ${e(v.phase ? v.phase.name : '')} · ${lx.value} ${lx.unit}`;
+    const sm = `Sun <b>${v.fmt(v.sun.az)}°</b> elev ${Math.round(v.sun.alt)}° · Moon <b>${v.fmt(v.moon.az)}°</b> elev ${Math.round(v.moon.alt)}° ${Math.round(v.moon.fraction * 100)}% · ${e(v.phase ? v.phase.name : '')} · ${lx.value} ${lx.unit}`;
     const conf = COA_CALC.heightConflicts(P.heights, +P.sep || 500);
     const bad = new Set(conf.flatMap((c) => [c.a.i, c.b.i]));
     const hrows = P.heights.filter((r) => r.cs || r.type || r.alt || r.role);
+    const xsec = P.heights.some((r) => COA_CALC.parseFt(r.alt) != null) ? coaHeightSvg(P.heights, +P.sep || 500, bad, Pp, { w: 300, h: 150 }) : '';
     const ht = (hrows.length ? P.heights.map((r, i) => (r.cs || r.type || r.alt || r.role ? `<tr class="${bad.has(i) ? 'bad' : ''}"><td>${e(r.cs || '')}</td><td>${e(r.type || '')}</td><td><b>${e(r.alt || '')}</b></td><td>${e(r.role || '')}</td></tr>` : '')).join('') : '') + Array.from({ length: Math.max(0, 4 - hrows.length) }, () => '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>').join('');
     return `<!doctype html><html><head><meta charset="utf-8"><style>
 @page { size: A5 portrait; margin: 0; }
@@ -822,7 +888,9 @@ td i { font-style: normal; background: #c46f00; color: #fff; border-radius: 1mm;
 td.g b { color: #1b8a3a; } td.r b { color: #c8161c; }
 .ln { margin-top: 1.2mm; font-size: 7.2pt; }
 .warn { margin-top: 1mm; background: #c8161c; color: #fff; font-weight: 800; padding: 0.8mm 1.4mm; border-radius: 1mm; letter-spacing: 0.04em; }
-.two { display: grid; grid-template-columns: 1fr; }
+.two { display: grid; grid-template-columns: 1fr 44mm; gap: 2mm; align-items: start; }
+.two table { margin-top: 1.2mm; }
+.xs svg { width: 44mm; height: auto; display: block; margin-top: 1.2mm; border: 0.4pt solid #9aa8bb; border-radius: 1mm; }
 .ft { margin-top: 1.2mm; color: #4a5a70; font-size: 5.6pt; display: flex; justify-content: space-between; }
 .ref { font-weight: 800; }
 </style></head><body><div class="pg" style="margin: ${how === 'print' ? '7mm' : '0'} auto 0">
@@ -832,18 +900,18 @@ td.g b { color: #1b8a3a; } td.r b { color: #c8161c; }
 <div><small>Boat Ref Course</small><b>${v.brc ? v.fmt(v.brc.heading) + '°' + R : '—'}</b></div>
 <div><small>Boat Speed</small><b>${Math.round(+P.bs)} kt</b></div>
 <div><small>W/V</small><b>${v.fmt(v.wd)}°${R}/${Math.round(v.ws)}${v.gust ? 'G' + Math.round(v.gust) : ''}</b></div>
-<div style="grid-column: span 2"><small>Positie schip${P.posLabel ? ' · ' + e(P.posLabel) : ''}</small><b>${e(pos)}</b></div>
-<div><small>H-uur</small><b>${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z</b></div>
-<div><small>Richtingen</small><b class="ref">°${R}${R === 'M' ? ` var ${Math.abs(v.decl).toFixed(1)}${v.decl >= 0 ? 'E' : 'W'}` : ''}</b></div>
+<div style="grid-column: span 2"><small>Ship position${P.posLabel ? ' · ' + e(P.posLabel) : ''}</small><b>${e(pos)}</b></div>
+<div><small>H-hour</small><b>${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z</b></div>
+<div><small>Reference</small><b class="ref">°${R}${R === 'M' ? ` var ${Math.abs(v.decl).toFixed(1)}${v.decl >= 0 ? 'E' : 'W'}` : ''}</b></div>
 </div>
 <div class="board">${svg}</div>
-<table><thead><tr><th>COA</th><th>Koers</th><th>Rel. wind °/kt</th><th>T.o.v. boeg</th><th>Heli op AT</th><th>Nadering</th><th>Zee</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th>COA</th><th>Ship HDG</th><th>Rel. wind °/kt</th><th>Rel. bearing</th><th>Helo on AT</th><th>Approach</th><th>Sea</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="ln">${sm}</div>
 <div class="ln">${sea}</div>
 ${warn ? `<div class="warn">${warn}</div>` : ''}
-<table><thead><tr><th style="width:24%">Callsign</th><th style="width:22%">Type</th><th style="width:18%">Hoogte ft</th><th>Taak</th></tr></thead><tbody>${ht}</tbody></table>
-${conf.length ? `<div class="warn">HOOGTECONFLICT: ${conf.slice(0, 3).map((c) => `${e(c.a.name)} ↔ ${e(c.b.name)} ${c.diff} ft`).join(' · ')} (min. ${+P.sep || 500} ft)</div>` : ''}
-<div class="ft"><span>Heli: K = kopwind, S = staartwind, Z = zijwind (R/L = van rechts/links) in kt · Rel. wind = schijnbare wind over het dek</span><span>P-ALV Dashboard · ${e(OPS.screen.name || '')} · ${zulu(Date.now())}</span></div>
+<div class="${xsec ? 'two' : ''}"><table><thead><tr><th style="width:24%">Callsign</th><th style="width:22%">Type</th><th style="width:18%">Alt ft</th><th>Task</th></tr></thead><tbody>${ht}</tbody></table>${xsec ? `<div class="xs">${xsec}</div>` : ''}</div>
+${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) => `${e(c.a.name)} ↔ ${e(c.b.name)} ${c.diff} ft`).join(' · ')} (min. ${+P.sep || 500} ft)</div>` : ''}
+<div class="ft"><span>HW/TW head-/tailwind · XW crosswind from L/R (kt) · Rel. wind = apparent wind over deck · G stbd, R port</span><span>P-ALV Dashboard · ${e(OPS.screen.name || '')} · ${zulu(Date.now())}</span></div>
 </div></body></html>`;
   }
   async function exportA5(how) {
@@ -869,16 +937,20 @@ ${conf.length ? `<div class="warn">HOOGTECONFLICT: ${conf.slice(0, 3).map((c) =>
     paintBoard();
     // While a field in the right column has the focus (typing, the on-screen keyboard on it), the column
     // is left alone and repainted once the focus leaves it.
-    if (withInfo && !info.contains(document.activeElement)) paintInfo();
-    else infoStale = true;
+    const ae = document.activeElement;
+    const typing = info.contains(ae) && ae.tagName === 'INPUT' || info.contains(ae) && ae.tagName === 'TEXTAREA';
+    if (withInfo && !typing) paintInfo();
+    else if (withInfo) infoStale = true;
   }
   let infoStale = false;
-  info.addEventListener('focusout', (e) => { if (infoStale && !info.contains(e.relatedTarget)) { infoStale = false; setTimeout(() => { if (!info.contains(document.activeElement)) paintInfo(); }, 0); } });
+  info.addEventListener('focusout', (e) => { if (infoStale && !(e.relatedTarget && info.contains(e.relatedTarget) && /^(INPUT|TEXTAREA)$/.test(e.relatedTarget.tagName))) { infoStale = false; setTimeout(() => { const ae = document.activeElement; if (!(info.contains(ae) && /^(INPUT|TEXTAREA)$/.test(ae.tagName))) paintInfo(); }, 0); } });
   const themeWatch = new MutationObserver(() => { paintBoard(); paintMarks(); });
   themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   cleanups.push(() => themeWatch.disconnect());
   // The sun and moon move on; while the tab is in view the picture follows each minute.
-  timers.push(setInterval(() => { if (onScreen(body) && P) paint({ inputs: false }); }, 60000));
+  timers.push(setInterval(() => { if (onScreen(body) && P) { paint({ inputs: false }); checkWxAge(); } }, 60000));
+  // Coming back to the tab with a warning still waiting: show it then.
+  timers.push(setInterval(() => { if (wxPending && P && onScreen(body)) checkWxAge(); }, 2000));
 
   if (ensurePlan()) { load(); }
   paint({ inputs: true });

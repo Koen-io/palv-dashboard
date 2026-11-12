@@ -4,7 +4,7 @@
    COA Planner: de tekening
    Het bord met de vier COA-kaarten en het kompas in het midden, als SVG-tekst: dezelfde tekening op het
    scherm (in de kleuren van het thema) en op de A5-kniebordkaart (in drukkleuren). Ook het generieke,
-   gedetailleerde schip (bovenaanzicht, bakboord rood, stuurboord groen, rechte spiegel) en de schaduw.
+   lege schip (bovenaanzicht, alleen bakboord rood en stuurboord groen, rechte spiegel) en de schaduw.
    ============================================================ */
 // The board is 1300 × 1000 units. COA 1 top left, 2 top right, 3 bottom right, 4 bottom left (as in
 // the original); each card has its figures on the outer side and the picture of the ship on the inner
@@ -30,70 +30,19 @@ const coaText = (x, y, s, { size = 20, weight = 600, fill, anchor = 'middle', fa
   `<text x="${coaF(x)}" y="${coaF(y)}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}" dominant-baseline="${base}" font-family="${COA_FONTS[family] || COA_FONTS.ui}" ${extra}>${coaEsc(s)}</text>`;
 
 /* ---------- the ship ---------- */
-// Bow up, centre (0, 0), 100 long and 26 wide, a straight transom at the stern. Every detail is generic:
-// no particular class of ship, but enough of a real one (bridge with wings and navigation lights, mast and
-// radar, funnel, boats in davits, windlass, hatch, crane, bollards and mooring gear) to read as a ship.
+// Bow up, centre (0, 0), 100 long and 26 wide, a straight transom at the stern. Deliberately empty: only
+// the hull, the port half red and the starboard half green, so the sides read at a glance.
 const COA_HULL = 'M0 -50C6.5 -45 13 -32 13 -14L13 45Q13 49 9.5 49L-9.5 49Q-13 49 -13 45L-13 -14C-13 -32 -6.5 -45 0 -50Z';
 const COA_HALF_S = 'M0 -50C6.5 -45 13 -32 13 -14L13 45Q13 49 9.5 49L0 49Z';
 const COA_HALF_P = 'M0 -50C-6.5 -45 -13 -32 -13 -14L-13 45Q-13 49 -9.5 49L0 49Z';
 function coaShipDefs(id, P) {
-  return `<linearGradient id="${id}-gs" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="${P.stbd}" stop-opacity="0.78"/><stop offset="0.55" stop-color="${P.stbd}"/><stop offset="1" stop-color="${P.stbd}" stop-opacity="0.92"/></linearGradient>`
-    + `<linearGradient id="${id}-gp" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${P.port}" stop-opacity="0.78"/><stop offset="0.55" stop-color="${P.port}"/><stop offset="1" stop-color="${P.port}" stop-opacity="0.92"/></linearGradient>`
-    + `<linearGradient id="${id}-sup" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1f4f8"/><stop offset="1" stop-color="#c3ccd8"/></linearGradient>`
+  return `<linearGradient id="${id}-gs" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="${P.stbd}" stop-opacity="0.82"/><stop offset="0.55" stop-color="${P.stbd}"/><stop offset="1" stop-color="${P.stbd}" stop-opacity="0.94"/></linearGradient>`
+    + `<linearGradient id="${id}-gp" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${P.port}" stop-opacity="0.82"/><stop offset="0.55" stop-color="${P.port}"/><stop offset="1" stop-color="${P.port}" stop-opacity="0.94"/></linearGradient>`
     + `<filter id="${id}-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>`;
 }
 function coaShip(id) {
-  const dk = '#16202c', st = 'stroke="#0b121c"';
-  const deckLine = 'stroke="rgba(255,255,255,0.55)" stroke-width="0.55" fill="none"';
-  const bollard = (x, y) => `<circle cx="${x}" cy="${y}" r="0.85" fill="${dk}"/><circle cx="${x}" cy="${y + 2.1}" r="0.85" fill="${dk}"/>`;
-  return [
-    // Hull: the two halves, the outline and the deck edge just inside it.
-    `<path d="${COA_HALF_P}" fill="url(#${id}-gp)"/>`,
-    `<path d="${COA_HALF_S}" fill="url(#${id}-gs)"/>`,
-    `<path d="${COA_HULL}" fill="none" ${st} stroke-width="1.5" stroke-linejoin="round"/>`,
-    `<path d="M0 -46.6C5.6 -42 11.2 -31 11.3 -14L11.3 45.6L-11.3 45.6L-11.3 -14C-11.2 -31 -5.6 -42 0 -46.6Z" ${deckLine}/>`,
-    // Bow: breakwater, windlass with the chains to the hawse pipes, the jack staff.
-    `<path d="M0 -49L0 -45.5" stroke="${dk}" stroke-width="0.8"/>`,
-    `<path d="M-3.4 -39.5L-6.4 -43.6M3.4 -39.5L6.4 -43.6" stroke="${dk}" stroke-width="0.7" stroke-dasharray="0.9 0.6"/>`,
-    `<circle cx="-3.4" cy="-39.2" r="1.7" fill="#38424f" ${st} stroke-width="0.4"/><circle cx="3.4" cy="-39.2" r="1.7" fill="#38424f" ${st} stroke-width="0.4"/>`,
-    `<rect x="-1.5" y="-40.6" width="3" height="2.8" rx="0.4" fill="#4b5664"/>`,
-    `<path d="M-8.8 -30.5L0 -35.5L8.8 -30.5" stroke="rgba(255,255,255,0.82)" stroke-width="1" fill="none" stroke-linejoin="round"/>`,
-    // Forward hatch and the mast in front of the bridge.
-    `<rect x="-5.2" y="-28" width="10.4" height="8" rx="0.6" fill="rgba(20,28,38,0.55)" stroke="rgba(255,255,255,0.5)" stroke-width="0.45"/>`,
-    `<path d="M-5.2 -25.3H5.2M-5.2 -22.6H5.2" stroke="rgba(255,255,255,0.35)" stroke-width="0.4"/>`,
-    bollard(-9.6, -27), bollard(9.6, -27),
-    // Bridge wings with the navigation lights (red to port, green to starboard), then the superstructure.
-    `<rect x="-12.6" y="-18.4" width="25.2" height="3.6" rx="0.8" fill="url(#${id}-sup)" ${st} stroke-width="0.5"/>`,
-    `<circle cx="-12" cy="-16.6" r="1.05" fill="#ff2a2a" stroke="#fff" stroke-width="0.3"/><circle cx="12" cy="-16.6" r="1.05" fill="#1eea4a" stroke="#fff" stroke-width="0.3"/>`,
-    `<path d="M-9.4 -18.2Q-9.4 -20.5 -7 -20.5H7Q9.4 -20.5 9.4 -18.2V8.6Q9.4 10.4 7.6 10.4H-7.6Q-9.4 10.4 -9.4 8.6Z" fill="url(#${id}-sup)" ${st} stroke-width="0.6"/>`,
-    // Bridge windows along the front, the compass deck on top.
-    `<path d="M-8.3 -19.2H8.3" stroke="#1d2b3a" stroke-width="1.6" stroke-linecap="round"/>`,
-    `<path d="M-6 -19.2H-5.6M-3 -19.2H-2.6M0 -19.2H0.4M3 -19.2H3.4M6 -19.2H6.4" stroke="#8fd0ff" stroke-width="1" stroke-opacity="0.65"/>`,
-    `<rect x="-6.4" y="-16.4" width="12.8" height="11" rx="1.2" fill="#e4e9f0" ${st} stroke-width="0.45"/>`,
-    // Mast with the radar scanner and a light, and the satcom domes.
-    `<circle cx="0" cy="-11.6" r="1.2" fill="#3d4754"/><rect x="-5.2" y="-12.2" width="10.4" height="1.3" rx="0.6" fill="#28313d" transform="rotate(-18 0 -11.6)"/>`,
-    `<circle cx="-4.1" cy="-7.4" r="1.45" fill="#fbfcfe" ${st} stroke-width="0.35"/><circle cx="4.1" cy="-7.4" r="1.45" fill="#fbfcfe" ${st} stroke-width="0.35"/>`,
-    // Funnel with its soot-black top.
-    `<rect x="-3.6" y="-1.6" width="7.2" height="8" rx="2.4" fill="#4a5462" ${st} stroke-width="0.5"/>`,
-    `<rect x="-2.5" y="-0.6" width="5" height="3.2" rx="1.5" fill="#11161d"/>`,
-    // Boats in their davits on both sides (orange, as on most ships), with the davit arms.
-    `<rect x="-12.4" y="-5" width="3.1" height="11" rx="1.55" fill="#ff7a1a" ${st} stroke-width="0.45"/><rect x="9.3" y="-5" width="3.1" height="11" rx="1.55" fill="#ff7a1a" ${st} stroke-width="0.45"/>`,
-    `<path d="M-9.4 -3.6H-11M-9.4 4.6H-11M9.4 -3.6H11M9.4 4.6H11" stroke="${dk}" stroke-width="0.6"/>`,
-    // Aft working deck: plating, the crane on its pedestal with the jib, a container lashed down.
-    `<rect x="-10.8" y="13" width="21.6" height="31.4" rx="0.8" fill="rgba(18,26,36,0.32)" stroke="rgba(255,255,255,0.4)" stroke-width="0.45"/>`,
-    `<path d="M-10.8 19.3H10.8M-10.8 25.6H10.8M-10.8 31.9H10.8M-10.8 38.2H10.8" stroke="rgba(255,255,255,0.16)" stroke-width="0.35"/>`,
-    `<rect x="1.8" y="15.2" width="7.4" height="11.4" rx="0.4" fill="#2f6fb5" ${st} stroke-width="0.45"/><path d="M3.6 15.2V26.6M5.5 15.2V26.6M7.4 15.2V26.6" stroke="rgba(255,255,255,0.35)" stroke-width="0.35"/>`,
-    `<path d="M-6.2 17.4L1.5 33.6" stroke="#f2c230" stroke-width="2" stroke-linecap="round"/><path d="M-6.2 17.4L1.5 33.6" stroke="#0b121c" stroke-width="0.4" stroke-dasharray="1 1.4"/>`,
-    `<circle cx="-6.2" cy="17.4" r="2.6" fill="#f2c230" ${st} stroke-width="0.5"/><circle cx="-6.2" cy="17.4" r="0.9" fill="#0b121c"/>`,
-    bollard(-9.6, 30), bollard(9.6, 30), bollard(-9.6, 40.5), bollard(9.6, 40.5),
-    // Mooring winches and the fairleads in the transom.
-    `<rect x="-6.8" y="40.2" width="4.2" height="3" rx="0.6" fill="#3a4451"/><rect x="2.6" y="40.2" width="4.2" height="3" rx="0.6" fill="#3a4451"/>`,
-    `<path d="M-9.5 49H9.5" stroke="#0b121c" stroke-width="1.6"/>`,
-    `<rect x="-8" y="47.1" width="2.6" height="1.6" rx="0.4" fill="#0b121c"/><rect x="5.4" y="47.1" width="2.6" height="1.6" rx="0.4" fill="#0b121c"/>`,
-    // The stern light and the centreline.
-    `<circle cx="0" cy="47.6" r="0.85" fill="#ffffff" stroke="#0b121c" stroke-width="0.3"/>`,
-    `<path d="M0 -35V-21M0 11V12.6" stroke="rgba(255,255,255,0.4)" stroke-width="0.4" stroke-dasharray="1.2 1"/>`,
-  ].join('');
+  return `<path d="${COA_HALF_P}" fill="url(#${id}-gp)"/><path d="${COA_HALF_S}" fill="url(#${id}-gs)"/>`
+    + `<path d="${COA_HULL}" fill="none" stroke="#0b121c" stroke-width="1.5" stroke-linejoin="round"/>`;
 }
 
 /* ---------- wind barbs ---------- */
@@ -122,6 +71,13 @@ function coaBarb(cx, cy, a, kt, len, color, w = 3) {
   if (rest >= 5) out += feather(pos === len ? len - step : pos, 0.55);
   return out;
 }
+
+/* ---------- texts ---------- */
+// The relative wind with its strength: "G045 - 15 kt"; dead calm over the deck has no bearing.
+const coaRelText = (c) => (c.rel ? `${c.rel.text} - ${Math.round(c.app.spd)} kt` : 'Calm over deck');
+// What the helicopter on the AT feels: headwind (HW) or tailwind (TW), and the crosswind (XW) with the
+// side it comes from (L/R).
+const coaHeloText = (hl) => `${hl.head >= 0 ? 'HW' : 'TW'} ${Math.abs(Math.round(hl.head))} kt · XW ${Math.abs(Math.round(hl.cross))} kt${hl.side ? ' ' + hl.side : ''}`;
 
 /* ---------- one COA card ---------- */
 function coaCard(vm, c, i, P, id) {
@@ -208,7 +164,7 @@ function coaCard(vm, c, i, P, id) {
     o.push(coaText(fx + col - 56, y + 1, 'BRC', { size: 17, weight: 800, fill: '#1a1200' }));
   }
   y += 34;
-  o.push(coaText(lx, y, strong ? `Werkelijke koers ${dd(c.heading)}` : `Koers ${dd(c.heading)}`, { size: 17, weight: 600, fill: P.muted, anchor: 'start' }));
+  o.push(coaText(lx, y, `Ship HDG ${dd(c.heading)}`, { size: 17, weight: 600, fill: P.muted, anchor: 'start' }));
   // The dial: the relative wind as a barb in a circle, the ship's bow as a tick at the top of it.
   y += 70;
   const R = 50;
@@ -224,19 +180,20 @@ function coaCard(vm, c, i, P, id) {
   y += 32;
   o.push(coaText(mx, y, `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${ref} / ${Math.round(c.app.spd)} kt`, { size: 28, weight: 800, fill: P.wind, family: 'mono' }));
   y += 34;
+  // Relative to the bow, with the knots: "G045 - 15 kt" (green, starboard) or "R120 - 8 kt" (red, port).
   const rc = c.rel ? (c.rel.side === 'G' ? P.stbd : c.rel.side === 'R' ? P.port : P.text) : P.muted;
-  o.push(coaText(mx, y, c.rel ? `${c.rel.text} · ${c.rel.sectorName}` : 'windstil over dek', { size: 26, weight: 800, fill: rc, family: 'mono' }));
-  if (c.gust) { y += 28; o.push(coaText(mx, y, `windstoot ${Math.round(c.gust.spd)} kt`, { size: 18, weight: 700, fill: P.muted })); }
+  o.push(c.rel ? coaText(mx, y, coaRelText(c), { size: 26, weight: 800, fill: rc, family: 'mono' })
+    : coaText(mx, y, 'CALM OVER DECK', { size: 18, weight: 800, fill: rc, extra: 'letter-spacing="1"' }));
+  if (c.gust) { y += 28; o.push(coaText(mx, y, `Gust ${Math.round(c.gust.spd)} kt`, { size: 18, weight: 700, fill: P.muted })); }
   y += 22;
   o.push(`<path d="M${fx + 20} ${y}H${fx + col - 20}" stroke="${P.edge}" stroke-width="1"/>`);
   y += 26;
-  const hd = c.helo.head;
-  o.push(coaText(lx, y, 'HELI OP AT', { size: 14, weight: 800, fill: P.helo, anchor: 'start', extra: 'letter-spacing="1.5"' }));
+  o.push(coaText(lx, y, 'HELO ON AT', { size: 14, weight: 800, fill: P.helo, anchor: 'start', extra: 'letter-spacing="1.5"' }));
   y += 28;
-  o.push(coaText(lx, y, `${hd >= 0 ? 'Kop' : 'Staart'} ${Math.abs(Math.round(hd))} kt · zij ${Math.abs(Math.round(c.helo.cross))}${c.helo.side ? ' v. ' + c.helo.side : ''}`, { size: 20, weight: 700, fill: P.text, anchor: 'start' }));
+  o.push(coaText(lx, y, coaHeloText(c.helo), { size: 20, weight: 700, fill: P.text, anchor: 'start' }));
   y += 28;
-  o.push(coaText(lx, y, `Nadering ${c.approach.text} ${c.approach.sectorName}`, { size: 19, weight: 600, fill: P.text, anchor: 'start' }));
-  if (c.sea) { y += 26; o.push(coaText(lx, y, `Zee: ${c.sea.name.toLowerCase()}`, { size: 19, weight: 600, fill: P.muted, anchor: 'start' })); }
+  o.push(coaText(lx, y, `Approach from ${c.approach.text}`, { size: 19, weight: 600, fill: P.text, anchor: 'start' }));
+  if (c.sea) { y += 26; o.push(coaText(lx, y, c.sea.name, { size: 19, weight: 600, fill: P.muted, anchor: 'start' })); }
   return o.join('');
 }
 
@@ -252,7 +209,13 @@ function coaCompass(vm, P) {
     const [ax, ay] = coaAt(cx, cy, R, scr(a)), [bx, by] = coaAt(cx, cy, R - (long ? 16 : mid ? 10 : 6), scr(a));
     o.push(`<path d="M${coaF(ax)} ${coaF(ay)}L${coaF(bx)} ${coaF(by)}" stroke="${P.text}" stroke-opacity="${long ? 0.8 : 0.4}" stroke-width="${long ? 2 : 1}"/>`);
   }
+  // Sun and moon (worked out first: a cardinal letter right where a body's plate goes is left out).
+  const bodies = [];
+  if (vm.sun) bodies.push({ k: 'sun', az: vm.sun.az, alt: vm.sun.alt, glare: vm.glareSun });
+  if (vm.moon) bodies.push({ k: 'moon', az: vm.moon.az, alt: vm.moon.alt, glare: vm.glareMoon, frac: vm.moon.fraction });
+  const near = (a, b, d) => Math.abs(((a - b + 540) % 360) - 180) < d;
   for (const [a, t] of [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']]) {
+    if (bodies.some((b) => near(b.az, a, 16))) continue;
     const [lx, ly] = coaAt(cx, cy, R - 30, scr(a));
     o.push(coaText(lx, ly, t, { size: t === 'N' ? 26 : 18, weight: 800, fill: t === 'N' ? P.text : P.muted, family: 'display' }));
   }
@@ -268,26 +231,30 @@ function coaCompass(vm, P) {
     const [p1x, p1y] = coaAt(bx, by, 16, scr(vm.at) + 180 + 26), [p2x, p2y] = coaAt(bx, by, 16, scr(vm.at) + 180 - 26);
     o.push(`<path d="M${coaF(bx)} ${coaF(by)}L${coaF(p1x)} ${coaF(p1y)}L${coaF(p2x)} ${coaF(p2y)}Z" fill="${P.helo}"/>`);
   }
-  // Sun and moon on the rim, with how high they stand; red when they blind on the approach.
-  const bodies = [];
-  if (vm.sun) bodies.push({ k: 'sun', az: vm.sun.az, alt: vm.sun.alt, glare: vm.glareSun });
-  if (vm.moon) bodies.push({ k: 'moon', az: vm.moon.az, alt: vm.moon.alt, glare: vm.glareMoon, frac: vm.moon.fraction });
-  // Two bodies close together: one label further in, so they never cover each other.
-  if (bodies.length === 2 && Math.abs(((bodies[0].az - bodies[1].az + 540) % 360) - 180) < 34) bodies[1].inner = true;
+  // Sun and moon on the rim, each with its height in a plate right against it (inside the rim), edged in
+  // its own colour; red when it blinds on the approach. Two bodies close together: the second plate one
+  // step further in, so they never cover each other.
+  if (bodies.length === 2 && near(bodies[0].az, bodies[1].az, 30)) bodies[1].inner = true;
   for (const b of bodies) {
-    const [bx, by] = coaAt(cx, cy, R, scr(b.az));
+    const sa = scr(b.az);
+    const [bx, by] = coaAt(cx, cy, R, sa);
     const below = b.alt < 0;
+    const rb = b.k === 'sun' ? 13 : 12;
     if (b.glare) o.push(`<circle cx="${coaF(bx)}" cy="${coaF(by)}" r="21" fill="none" stroke="${P.warn}" stroke-width="3"/>`);
-    if (b.k === 'sun') o.push(`<circle cx="${coaF(bx)}" cy="${coaF(by)}" r="13" fill="${P.sun}" stroke="${P.plate}" stroke-width="2.5" opacity="${below ? 0.45 : 1}"/>`);
+    // The plate: 54 x 24, its edge 5 units from the disc whatever the angle.
+    const pw = 54, ph = 24;
+    const ext = Math.abs(Math.sin((sa * Math.PI) / 180)) * (pw / 2) + Math.abs(Math.cos((sa * Math.PI) / 180)) * (ph / 2);
+    const [tx, ty] = coaAt(cx, cy, R - rb - 5 - ext - (b.inner ? 2 * ext + 6 : 0), sa);
+    const edge = b.glare ? P.warn : b.k === 'sun' ? P.sun : P.moon;
+    o.push(`<rect x="${coaF(tx - pw / 2)}" y="${coaF(ty - ph / 2)}" width="${pw}" height="${ph}" rx="7" fill="${P.plate}" stroke="${edge}" stroke-width="2"/>`);
+    o.push(coaText(tx, ty + 1, `${Math.round(b.alt)}°`, { size: 17, weight: 800, fill: b.glare ? P.warn : below ? P.muted : P.text, family: 'mono' }));
+    if (b.k === 'sun') o.push(`<circle cx="${coaF(bx)}" cy="${coaF(by)}" r="${rb}" fill="${P.sun}" stroke="${P.plate}" stroke-width="2.5" opacity="${below ? 0.45 : 1}"/>`);
     else {
-      o.push(`<circle cx="${coaF(bx)}" cy="${coaF(by)}" r="12" fill="${P.moon}" stroke="${P.plate}" stroke-width="2.5" opacity="${below ? 0.45 : 1}"/>`);
+      o.push(`<circle cx="${coaF(bx)}" cy="${coaF(by)}" r="${rb}" fill="${P.moon}" stroke="${P.plate}" stroke-width="2.5" opacity="${below ? 0.45 : 1}"/>`);
       // The dark part of the disc, roughly as it shows.
       const f = b.frac == null ? 1 : b.frac;
       if (f < 0.97) o.push(`<ellipse cx="${coaF(bx + (vm.moon.waxing ? -1 : 1) * 12 * f)}" cy="${coaF(by)}" rx="${coaF(Math.max(1, 12 * (1 - f)))}" ry="12" fill="${P.compass}" opacity="${below ? 0.45 : 0.9}"/>`);
     }
-    const [tx, ty] = coaAt(cx, cy, b.inner ? R - 92 : R - 56, scr(b.az));
-    o.push(`<rect x="${coaF(tx - 30)}" y="${coaF(ty - 13)}" width="60" height="26" rx="7" fill="${P.plate}"/>`);
-    o.push(coaText(tx, ty + 1, `${Math.round(b.alt)}°`, { size: 17, weight: 800, fill: b.glare ? P.warn : below ? P.muted : P.text, family: 'mono' }));
   }
   // The true wind: a red barb from the centre towards where it comes from.
   if (vm.ws != null) o.push(coaBarb(cx, cy, scr(vm.wd), vm.ws, R - 22, P.twind, 4));
@@ -309,6 +276,58 @@ function coaBoardSvg(vm, P, { id = 'coa', cls = '' } = {}) {
   vm.coas.forEach((c, i) => o.push(coaCard(vm, c, i, P, id)));
   o.push(coaCompass(vm, P));
   if (vm.night) o.push(`<rect x="0" y="0" width="${COA_W}" height="${COA_H}" fill="none"/>`);
+  o.push('</svg>');
+  return o.join('');
+}
+
+/* ---------- the height cross-section ---------- */
+// A side view of the airspace over the ship: each aircraft as a line at its height with its separation
+// band (half the minimum above and below), so two bands that overlap are a conflict (red). The sea and the
+// ship at the bottom, the height scale on the left. The same picture on the screen and on the A5 card.
+function coaHeightSvg(rows, sep, bad, P, { w = 320, h = 168 } = {}) {
+  const C = typeof COA_CALC !== 'undefined' ? COA_CALC : null;
+  const ftOf = (v) => (C ? C.parseFt(v) : Number.isFinite(+v) ? +v : null);
+  const list = (rows || []).map((r, i) => ({ i, ft: ftOf(r && r.alt), name: String((r && (r.cs || r.type)) || `Rij ${i + 1}`).trim().slice(0, 10) })).filter((r) => r.ft != null);
+  if (!list.length) return '';
+  const x0 = 42, x1 = w - 8, y0 = 10, y1 = h - 26;
+  const maxFt = Math.max(...list.map((r) => r.ft));
+  const step = maxFt + sep <= 1500 ? 250 : maxFt + sep <= 3000 ? 500 : maxFt + sep <= 8000 ? 1000 : 2000;
+  const top = Math.max(1000, Math.ceil((maxFt + sep / 2 + step / 2) / step) * step);
+  const Y = (ft) => y1 - (Math.max(0, ft) / top) * (y1 - y0);
+  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" font-family="${COA_FONTS.ui}">`];
+  o.push(`<rect x="0" y="0" width="${w}" height="${h}" rx="8" fill="${P.card}"/>`);
+  // Height scale with grid lines.
+  for (let ft = 0; ft <= top; ft += step) {
+    const y = Y(ft);
+    o.push(`<path d="M${x0} ${coaF(y)}H${x1}" stroke="${P.faint}" stroke-width="${ft ? 0.8 : 0}" ${ft ? 'stroke-dasharray="3 4"' : ''}/>`);
+    if (ft) o.push(coaText(x0 - 6, y, ft >= 1000 && ft % 1000 === 0 ? `${ft / 1000}k` : String(ft), { size: 10, weight: 700, fill: P.muted, anchor: 'end', family: 'mono' }));
+  }
+  o.push(coaText(8, y0 + 2, 'ft', { size: 10, weight: 800, fill: P.muted, anchor: 'start' }));
+  // The sea and the ship (side view, red and green halves) at the bottom.
+  o.push(`<path d="M0 ${y1}H${w}V${h - 8}Q${w} ${h} ${w - 8} ${h}H8Q0 ${h} 0 ${h - 8}Z" fill="${P.wind}" fill-opacity="0.16"/>`);
+  o.push(`<path d="M0 ${y1}H${w}" stroke="${P.wind}" stroke-width="1.6"/>`);
+  const sx = (x0 + x1) / 2;
+  o.push(`<path d="M${sx - 26} ${y1 - 7}H${sx}V${y1 + 5}H${sx - 21}Z" fill="${P.port}"/><path d="M${sx} ${y1 - 7}H${sx + 30}L${sx + 23} ${y1 + 5}H${sx}Z" fill="${P.stbd}"/>`);
+  o.push(coaText(x0, h - 12, 'SFC / ship', { size: 10, weight: 700, fill: P.muted, anchor: 'start' }));
+  o.push(coaText(x1, h - 12, `min. ${sep} ft`, { size: 10, weight: 700, fill: P.muted, anchor: 'end' }));
+  // Bands first, then the lines, then the labels (moved apart where they would overlap, with a leader).
+  const items = list.map((r) => ({ ...r, y: Y(r.ft), bad: bad && bad.has(r.i) })).sort((a, b) => a.y - b.y);
+  for (const r of items) {
+    const ya = Y(r.ft + sep / 2), yb = Y(r.ft - sep / 2);
+    o.push(`<rect x="${x0}" y="${coaF(ya)}" width="${x1 - x0}" height="${coaF(Math.max(1, yb - ya))}" fill="${r.bad ? P.warn : P.wind}" fill-opacity="${r.bad ? 0.2 : 0.1}"/>`);
+  }
+  for (const r of items) o.push(`<path d="M${x0} ${coaF(r.y)}H${x1}" stroke="${r.bad ? P.warn : P.wind}" stroke-width="2.4" stroke-linecap="round"/>`);
+  const gap = 14;
+  for (let k = 0; k < items.length; k += 1) items[k].ly = Math.max(items[k].y, k ? items[k - 1].ly + gap : y0 + 6);
+  for (let k = items.length - 1; k >= 0; k -= 1) items[k].ly = Math.min(items[k].ly, k < items.length - 1 ? items[k + 1].ly - gap : y1 - 8);
+  for (const r of items) {
+    const label = `${r.name} ${r.ft}`;
+    const lw = 12 + label.length * 6.1, lx = x0 + 6;
+    if (Math.abs(r.ly - r.y) > 1) o.push(`<path d="M${coaF(lx + lw)} ${coaF(r.ly)}L${coaF(lx + lw + 10)} ${coaF(r.y)}" stroke="${r.bad ? P.warn : P.muted}" stroke-width="1"/>`);
+    o.push(`<rect x="${coaF(lx)}" y="${coaF(r.ly - 7)}" width="${coaF(lw)}" height="14" rx="4" fill="${P.plate}" stroke="${r.bad ? P.warn : P.edge}" stroke-width="1"/>`);
+    o.push(coaText(lx + 6, r.ly + 0.5, r.name, { size: 10, weight: 800, fill: r.bad ? P.warn : P.text, anchor: 'start' }));
+    o.push(coaText(lx + lw - 5, r.ly + 0.5, String(r.ft), { size: 10, weight: 800, fill: r.bad ? P.warn : P.wind, anchor: 'end', family: 'mono' }));
+  }
   o.push('</svg>');
   return o.join('');
 }

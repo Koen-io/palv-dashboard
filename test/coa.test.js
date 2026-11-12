@@ -58,15 +58,15 @@ test('COA-venster: ±45° om de COA-koers, één COA neemt de BRC', () => {
 });
 
 test('relatieve wind: rood/groen en de sectoren BOW, MID en STERN (139 voor de AW139)', () => {
-  assert.strictEqual(C.relative(30, 0).text, 'G 030');
-  assert.strictEqual(C.relative(330, 0).text, 'R 030');
+  assert.strictEqual(C.relative(30, 0).text, 'G030');
+  assert.strictEqual(C.relative(330, 0).text, 'R030');
   assert.strictEqual(C.relative(0, 0).text, '000');
   assert.strictEqual(C.relative(180, 0).text, '180');
   assert.strictEqual(C.relative(45, 0).sector, 'bow');
   assert.strictEqual(C.relative(46, 0).sector, 'mid');
   assert.strictEqual(C.relative(138, 0).sector, 'mid');
   assert.strictEqual(C.relative(139, 0).sector, 'stern');
-  assert.strictEqual(C.relative(10, 350).text, 'G 020', 'over noord heen');
+  assert.strictEqual(C.relative(10, 350).text, 'G020', 'over noord heen');
 });
 
 test('helikopter op de AT: kopwind en zijwind van rechts of links', () => {
@@ -151,4 +151,13 @@ test('migratie 12: het tabblad COA Planner komt na Offshore, één keer, en blij
 test('gedeelde bestanden: de COA-plannen gaan mee tussen de schermen', () => {
   const store = require('../src/plan/store.js');
   assert.deepStrictEqual(store.KINDS.coa.lists, ['plans', 'marks']);
+});
+
+test('zee t.o.v. het schip en sea state in de Engelse zeemanstermen', () => {
+  assert.deepStrictEqual([0, 45, 90, 135, 180].map((a) => C.seaRelative(a, 0).name), ['Head sea', 'Sea on the bow', 'Beam sea', 'Quartering sea', 'Following sea']);
+  assert.strictEqual(C.seaRelative(0, 0).motion, 'pitching');
+  assert.strictEqual(C.seaRelative(180, 0).motion, 'yawing and surging');
+  assert.strictEqual(C.douglas(1.0).name, 'Slight');
+  assert.strictEqual(C.douglas(3.0).name, 'Rough');
+  assert.strictEqual(C.douglas(20).name, 'Phenomenal');
 });
