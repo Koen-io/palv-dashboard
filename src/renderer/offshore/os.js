@@ -91,11 +91,13 @@ function osCreate(body, w) {
     const feats = [...D.areas.zones.map((z) => ({ type: 'Feature', geometry: z.polygon || z.geometry, properties: { kind: 'zone', name: z.name } })), ...D.areas.farms.map((f) => ({ type: 'Feature', geometry: f.polygon || f.geometry, properties: { kind: 'farm', name: f.name } }))].filter((f) => f.geometry);
     D.farmLayer = L.geoJSON({ type: 'FeatureCollection', features: feats }, { renderer: ctx.vector, interactive: false, style: (f) => (f.properties.kind === 'zone' ? { color: '#7cc6ff', weight: 1, dashArray: '3 4', fillOpacity: 0, opacity: 0.7 } : { color: '#7cc6ff', weight: 1.4, fillColor: '#7cc6ff', fillOpacity: 0.07, opacity: 0.9 }) }).addTo(map);
   }
-  // AIS: every two seconds what changed, while the tab is in view.
-  async function pollAis() {
+  // AIS: what changed, while the tab is in view. The question waits in the main process until something
+  // comes in (at most 15 s), so a new position is on the map within about half a second.
+  async function pollAis(wait = 0) {
     if (!onScreen(body) || !L_.ships) return;
     try {
-      const r = await window.palv.ais.snap(D.shipsRev);
+      const r = await window.palv.ais.snap(D.shipsRev, wait);
+      if (!aisLoopOn) return;
       if (!r || !r.ok) { D.aisFail += 1; return; }
       D.aisStatus = r.status; D.lastAis = r.lastMsg || 0; D.aisFail = 0;
       for (const v of r.vessels) D.ships.set(v.mmsi, v);
@@ -109,7 +111,17 @@ function osCreate(body, w) {
       if (cfg.sideTab === 'ships' && Date.now() - lastListPaint > 10000) paintSoon();
     } catch { D.aisFail += 1; }
   }
-  let lastListPaint = 0;
+  let lastListPaint = 0, aisLoopOn = true;
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function aisLoop() {
+    while (aisLoopOn) {
+      if (!onScreen(body) || !L_.ships) { await nap(1000); continue; }
+      const t0 = Date.now();
+      await pollAis(15000);
+      await nap(Math.max(D.aisFail ? 2000 : 0, 500 - (Date.now() - t0)));
+    }
+  }
+  cleanups.push(() => { aisLoopOn = false; });
   const unwatchTraffic = watchTraffic((s) => { D.snap = s; if (L_.fleet && onScreen(body)) ctx.cv.request(); }, () => (L_.fleet && onScreen(body) && map._loaded ? (() => { const b = map.getBounds(), c = b.getCenter(); return { lat: c.lat, lon: c.lng, nm: Math.min(250, (map.distance(c, b.getNorthEast()) / 1852) * 1.1 + 5) }; })() : null));
   cleanups.push(unwatchTraffic);
   const unwatchWx = watchWx(() => { if (L_.wx) ctx.cv.request(); });
@@ -199,23 +211,33 @@ function osCreate(body, w) {
       g.stroke();
       if (z >= 9) for (const t of D.track) { if ((t[0] / 60000) % 15 > 1) continue; const q = c.P(t[1], t[2]); g.beginPath(); g.arc(q[0], q[1], 2.5, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); }
     }
+    // The chosen ship: where its last message put it (a ring) and a dashed line to where it is reckoned now.
+    if (L_.ships && sel && sel.kind === 'ship' && sel.item.lat != null) {
+      const v = sel.item, est = osNow(v, now);
+      if (est && (est[0] !== v.lat || est[1] !== v.lon)) {
+        const a = c.P(v.lat, v.lon), b = c.P(est[0], est[1]);
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 4) {
+          g.save(); g.lineWidth = 1.6; g.strokeStyle = '#ffffff'; g.setLineDash([5, 4]);
+          g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); g.setLineDash([]);
+          g.beginPath(); g.arc(a[0], a[1], 4, 0, Math.PI * 2); g.stroke(); g.restore();
+        }
+      }
+    }
     if (L_.ships) {
       const px = z < 7 ? 3.5 : z < 9 ? 5 : z < 11 ? 7 : 9;
       const labels = [];
       let n = 0;
-      // Dead reckoning only when it can be seen: below zoom 8 three minutes of sailing is under a pixel.
-      const reckon = z >= 8;
       const margin = 20 * 360 / (256 * 2 ** z); // 20 px in degrees of longitude
       for (const v of D.ships.values()) {
         if (v.lat == null || !c.near(v.lat, v.lon, margin) || !shown(v)) continue;
-        const pos = reckon ? osNow(v, now) : [v.lat, v.lon]; if (!pos) continue;
+        const pos = osNow(v, now); if (!pos) continue;
         const q = c.P(pos[0], pos[1]); if (!c.inView(q, 20)) continue;
         n += 1;
         const grp = osGroup(v), col = OS_GROUPS[grp].color;
         const moving = v.sog > 0.5 && (v.hdg != null || v.cog != null);
-        const old = now - v.posAt > 15 * 60000;
-        g.globalAlpha = old ? 0.45 : 1;
-        if (v.cls === 'aton') { g.beginPath(); g.moveTo(q[0], q[1] - px); g.lineTo(q[0] + px * 0.8, q[1] + px * 0.6); g.lineTo(q[0] - px * 0.8, q[1] + px * 0.6); g.closePath(); g.fillStyle = col; g.fill(); g.lineWidth = 1; g.strokeStyle = '#0a0f18'; g.stroke(); }
+        g.globalAlpha = osFade(v, now);
+        if (v.cls === 'base') { g.fillStyle = col; g.strokeStyle = '#0a0f18'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(q[0], q[1] - px); g.lineTo(q[0] + px * 0.7, q[1]); g.lineTo(q[0], q[1] + px); g.lineTo(q[0] - px * 0.7, q[1]); g.closePath(); g.fill(); g.stroke(); g.beginPath(); g.arc(q[0], q[1], px * 1.35, -Math.PI * 0.8, -Math.PI * 0.2); g.strokeStyle = col; g.stroke(); }
+        else if (v.cls === 'aton') { g.beginPath(); g.moveTo(q[0], q[1] - px); g.lineTo(q[0] + px * 0.8, q[1] + px * 0.6); g.lineTo(q[0] - px * 0.8, q[1] + px * 0.6); g.closePath(); g.fillStyle = col; g.fill(); g.lineWidth = 1; g.strokeStyle = '#0a0f18'; g.stroke(); }
         else {
           // The course line: where it is in 6 minutes.
           if (moving && z >= 8 && v.cog != null) { const far = PlanGeo.dest({ lat: pos[0], lon: pos[1] }, v.cog, v.sog * 1852 * 0.1); const fq = c.P(far.lat, far.lon); g.lineWidth = 1.2; g.strokeStyle = col; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(fq[0], fq[1]); g.stroke(); }
@@ -260,10 +282,9 @@ function osCreate(body, w) {
     if (!onScreen(body) || !(L_.ships || L_.fleet)) return;
     const z = map.getZoom();
     const fleetNear = L_.fleet && D.snap && D.snap.ac.some((a) => a.group && a.lat != null);
-    const every = fleetNear ? 1000 : z >= 11 ? 1000 : z >= 9 ? 2500 : 6000;
+    const every = z >= 13 ? 250 : fleetNear ? 1000 : z >= 11 ? 1000 : z >= 9 ? 2500 : 6000;
     if (Date.now() - lastTick >= every - 50) { lastTick = Date.now(); ctx.cv.request(); }
-  }, 1000));
-  timers.push(setInterval(pollAis, 2000));
+  }, 250));
   timers.push(setInterval(() => loadPlatforms(), 6 * 3600e3));
 
   /* ---------- clicks ---------- */
@@ -359,16 +380,18 @@ function osCreate(body, w) {
         country ? ['Vlag', country.name] : null,
         ['Status', osNavText(v.nav)],
         ['Snelheid', v.sog == null ? '—' : `${v.sog.toFixed(1)} kt`], ['Koers / heading', `${v.cog == null ? '—' : Math.round(v.cog) + '°'} / ${v.hdg == null ? '—' : Math.round(v.hdg) + '°'}${v.rot ? ` · ROT ${v.rot > 0 ? 'SB' : 'BB'}` : ''}`],
-        ['Positie', pos ? fmtPos(pos[0], pos[1]) : '—'], ['Laatste bericht', `${ageText(now - v.posAt)} geleden${v.src ? ' · ' + v.src : ''}`],
+        ['Positie', pos ? fmtPos(pos[0], pos[1]) + (pos[0] !== v.lat || pos[1] !== v.lon ? ' (gegist)' : '') : '—'],
+        pos && (pos[0] !== v.lat || pos[1] !== v.lon) ? ['Laatste AIS-positie', fmtPos(v.lat, v.lon)] : null,
+        ['Laatste bericht', `${ageText(Math.max(0, now - v.posAt))} geleden · ${zuluSec(v.posAt)}`], ['Bron', v.src || '—'],
         size ? ['Afmetingen', `${size.len} × ${size.beam} m`] : null, v.draught ? ['Diepgang', `${v.draught.toFixed(1)} m`] : null,
-        v.dest ? ['Bestemming', v.dest] : null, v.eta ? ['ETA', osEtaText(v.eta)] : null, ['AIS-klasse', v.cls || '—'],
+        v.dest ? ['Bestemming', v.dest] : null, v.eta ? ['ETA', osEtaText(v.eta)] : null, ['AIS-klasse', v.cls === 'base' ? 'walstation' : v.cls || '—'],
       ].filter(Boolean);
       const ph = D.photo;
       // Photos come only out of the unit's own store (ais.js): tapping a ship never asks anything outside.
       const noPhoto = !ph ? 'Foto laden…' : ph.pending ? 'Nog geen foto: het dashboard haalt op de achtergrond foto’s op van álle schepen, zodat buiten niemand ziet welk schip hier bekeken wordt.' : ph.none || 'Geen foto gevonden op Wikimedia Commons';
       const photoBox = h('div', { class: 'os-photo' }, ph && ph.img ? h('a', { href: '#', title: ph.img.title, onclick: (e) => { e.preventDefault(); } }, h('img', { src: ph.img.url, alt: '' })) : h('div', { class: 'os-photo-none' }, noPhoto));
       if (ph && ph.img) photoBox.append(h('small', {}, `${ph.img.author ? ph.img.author + ' · ' : ''}${ph.img.licence || ''} · Wikimedia Commons${ph.how ? ' (' + ph.how + ')' : ''}`));
-      extra = [country ? h('div', { class: 'os-flagrow' }, h('span', { class: 'vr-flag', style: `background-image:url("vendor/flags/${country.cc.toLowerCase()}.svg")` }), h('b', {}, country.name), h('i', {}, country.cc)) : null, photoBox, h('div', { class: 'zp-rows' }, fromRef(pos ? pos[0] : v.lat, pos ? pos[1] : v.lon))];
+      extra = [v.attr ? h('p', { class: 'zp-hint os-attr' }, v.attr) : null, country ? h('div', { class: 'os-flagrow' }, h('span', { class: 'vr-flag', style: `background-image:url("vendor/flags/${country.cc.toLowerCase()}.svg")` }), h('b', {}, country.name), h('i', {}, country.cc)) : null, photoBox, h('div', { class: 'zp-rows' }, fromRef(pos ? pos[0] : v.lat, pos ? pos[1] : v.lon))];
       const pinned = cfg.pins.includes(v.mmsi);
       actions = [
         zpBtn(follow === v.mmsi ? 'Volgt' : 'Volgen', () => { follow = follow === v.mmsi ? null : v.mmsi; paintCard(); }, { icon: 'target', cls: follow === v.mmsi ? 'on' : '' }),
@@ -440,7 +463,7 @@ function osCreate(body, w) {
     let level = 'bad', label = 'AIS: GEEN SLEUTEL', note = 'Vul de aisstream.io-sleutel in onder Instellingen › Offshore (gratis account).';
     if (!L_.ships) { level = 'warn'; label = 'AIS UIT'; note = 'Schepen staan uit onder Lagen.'; }
     else if (s && s.on) {
-      if (s.connected && now - D.lastAis < 30000) { level = 'live'; label = s.role === 'follow' ? `AIS VIA ${String(s.via || '').toUpperCase()}` : 'AIS LIVE'; note = `${s.count} schepen in het register, ${s.perMin || 0} berichten per minuut.`; }
+      if (s.connected && now - D.lastAis < 30000) { level = 'live'; label = s.role === 'follow' ? `AIS VIA ${String(s.via || '').toUpperCase()}` : 'AIS LIVE'; note = `${s.count} schepen in het register, ${s.perMin || 0} berichten per minuut.${osSourcesText(s)}`; }
       else if (s.connected) { level = 'warn'; label = 'AIS STIL'; note = 'Verbonden, maar even geen berichten.'; }
       else { level = 'bad'; label = 'AIS GEEN VERBINDING'; note = s.lastErr || 'Verbinden met aisstream.io…'; }
     } else if (s && s.role === 'follow') { level = 'warn'; label = `AIS VIA ${String(s.via || '').toUpperCase()}`; note = 'Wacht op het scherm dat de schepen ophaalt.'; }
@@ -452,6 +475,8 @@ function osCreate(body, w) {
     else report(hkey, 'AIS schepen', level === 'live', note, 3 * 60000);
   }
   timers.push(setInterval(() => { if (onScreen(body)) paintStatus(); }, 5000));
+  // The card of a chosen ship keeps its reckoned position and the age of its last message current.
+  timers.push(setInterval(() => { if (onScreen(body) && sel && sel.kind === 'ship') paintCard(); }, 5000));
 
   /* ---------- toolbar and side panel ---------- */
   const OS_TABS = [{ id: 'ships', name: 'Schepen', icon: 'globe' }, { id: 'layers', name: 'Lagen', icon: 'layers' }, { id: 'platforms', name: 'Platforms', icon: 'system' }];
@@ -511,10 +536,10 @@ function osCreate(body, w) {
         lay('places', 'Kustpunten (OpenStreetMap)'), ...Object.entries(OS_PLACE_KINDS).map(([k, d]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cfg.places[k], onchange: (e) => { cfg.places[k] = e.target.checked; save(); ctx.cv.request(); } }), h('i', { class: 'zp-dot', style: `background:${d.color}` }), d.name))),
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Live')),
         lay('ships', 'Schepen (AIS)'), lay('tracks', 'Past track van het gekozen schip'), lay('fleet', 'Eigen vloot', trafficWatch), lay('wx', 'Weerstations tegen het BOM (dag: Multi pilot, nacht: Aided)'), lay('labels', 'Namen op de kaart'),
-        h('p', { class: 'zp-hint' }, 'De AIS-sleutel staat onder Instellingen › Offshore.')),
+        h('p', { class: 'zp-hint' }, 'Bronnen: aisstream.io (sleutel onder Instellingen › Offshore) en Open Waters AIS (https://openwaters.io/ais/, zonder sleutel), per schip samengevoegd: de nieuwste positie telt. Open Waters brengt onder meer AISHub contributors, vrijwillige ontvangers en de Noorse Kystverket/BarentsWatch-data (NLOD).')),
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gegevens')),
         h('div', { class: 'zp-btnrow' }, zpBtn('Platforms opnieuw ophalen', () => loadPlatforms(true), { icon: 'refresh' }), zpBtn('Kustpunten opnieuw', () => loadPlaces(true), { icon: 'refresh' })),
-        h('p', { class: 'zp-hint' }, 'Hulpmiddel voor situationeel overzicht; geen navigatiebron. AIS-posities kunnen tot enkele minuten oud zijn en worden tussen twee berichten langs de koers doorgetrokken.')));
+        h('p', { class: 'zp-hint' }, 'Hulpmiddel voor situationeel overzicht; geen navigatiebron. De AIS-bronnen geven ongeveer één positie per schip per minuut; tussen twee berichten vaart een schip op de kaart door langs koers, snelheid en bocht (gegist, tot 10 minuten) en vervaagt het na 3 minuten zonder bericht. Bij het gekozen schip wijst een stippellijn naar de laatste echte AIS-positie.')));
   }
   function platformsPanel() {
     const q = h('input', { class: 'input zp-profq', type: 'search', placeholder: 'Zoek platform: K14-A, L9, Hollandse Kust…', value: platQ });
@@ -537,7 +562,7 @@ function osCreate(body, w) {
   bar.append(title, baseSeg, homeBtn, seaBox, h('span', { class: 'zp-spacer' }));
 
   /* ---------- start ---------- */
-  loadPlatforms(); loadPlaces(); loadDecks(); pollAis(); paintStatus(); paintSide();
+  loadPlatforms(); loadPlaces(); loadDecks(); aisLoop(); paintStatus(); paintSide();
   const unsubPriv = OPS.on('private', () => { if (sel && sel.kind === 'platform') paintCard(); });
   cleanups.push(unsubPriv);
   const ro = new ResizeObserver(() => { map.invalidateSize(false); ctx.cv.request(); });

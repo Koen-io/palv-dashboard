@@ -1,5 +1,18 @@
 # Wijzigingen
 
+## 1.52.0
+
+### AIS sneller en vollediger op de kaart
+- **Tweede bron: Open Waters AIS** (openwaters.io, gratis, zonder sleutel), naast aisstream.io. Brengt onder meer AISHub contributors, vrijwillige ontvangers (één bij Antwerpen op volle radiosnelheid) en de Noorse Kystverket/BarentsWatch-data: meer schepen, ook verder op zee en boven 55°N. Per schip samengevoegd: **de nieuwste positie telt**, welke bron ook
+- **Eerlijke tijd**: de leeftijd van een positie gaat nu uit van het moment dat het station het bericht ontving, niet van wanneer het bij ons aankwam. Een oudere positie die later binnenkomt overschrijft een nieuwere niet meer
+- **Gegist bestek tot 10 minuten** (was 3) en **met de bocht**: een draaiend schip volgt zijn draaisnelheid uit AIS (tot een kwartslag). Afgemeerd, voor anker of aan de grond blijft staan. Na 3 minuten zonder bericht vervaagt een schip geleidelijk
+- **Bij het gekozen schip** wijst een stippellijn met een ring naar de laatste echte AIS-positie; de kaart toont "(gegist)", de laatste AIS-positie, de tijd van het laatste bericht in Z en de bron
+- **Sneller op het scherm**: de kaart wacht op nieuws in plaats van elke 2 seconden te vragen, ook tussen de schermen. Een nieuwe positie staat binnen ongeveer een seconde op elk scherm. Ver ingezoomd beweegt de kaart vloeiender
+- **Grove satellietposities** (bericht 27) vervangen een precieze positie van de laatste 10 minuten niet meer
+- **Na een herstart meteen vol**: het schepenregister van het laatste uur wordt bewaard
+- **AIS-walstations** (zenders aan de wal) als eigen groep op de kaart en in het filter
+- Instellingen › Offshore toont per bron de status en het aantal berichten per minuut
+
 ## 1.51.0
 
 ### E-mail vanaf het dashboard (eerst in de COA Planner)

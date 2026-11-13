@@ -16,11 +16,13 @@ const OS_GROUPS = {
   authority: { name: 'Overheid, SAR, militair', color: '#b48cff' },
   other: { name: 'Overig en onbekend', color: '#8ea2bf' },
   aton: { name: 'Bakens (AtoN)', color: '#c9ced6' },
+  base: { name: 'AIS-walstations', color: '#f2f5f9' },
 };
 const OS_TYPE_NAMES = { 30: 'Vissersschip', 31: 'Sleepboot', 32: 'Sleepboot (lang/breed)', 33: 'Baggerschip / onderwaterwerk', 34: 'Duikwerkzaamheden', 35: 'Militair', 36: 'Zeilschip', 37: 'Plezierjacht', 50: 'Loodsboot', 51: 'Reddingboot (SAR)', 52: 'Sleepboot', 53: 'Havendienst', 54: 'Antivervuiling', 55: 'Politie / handhaving', 56: 'Lokaal vaartuig', 57: 'Lokaal vaartuig', 58: 'Medisch transport', 59: 'Niet-strijdend (RR 18)' };
 const OS_HAZ = ['', ' · gevaarlijke lading X', ' · gevaarlijke lading Y', ' · gevaarlijke lading Z', ' · gevaarlijke lading OS'];
 function osGroup(v) {
   if (v.cls === 'aton') return 'aton';
+  if (v.cls === 'base') return 'base';
   const t = v.type;
   if (t == null || t === 0) return 'other';
   if (t >= 70 && t <= 79) return 'cargo';
@@ -36,6 +38,7 @@ function osGroup(v) {
 }
 function osTypeText(v) {
   if (v.cls === 'aton') return 'Navigatiebaken (AtoN)';
+  if (v.cls === 'base') return 'AIS-walstation (zender aan de wal)';
   const t = v.type;
   if (t == null || t === 0) return 'Type onbekend';
   if (OS_TYPE_NAMES[t]) return OS_TYPE_NAMES[t];
@@ -55,14 +58,43 @@ function osCountry(mmsi) {
   try { name = (osRegion && osRegion.of(cc)) || cc; } catch { /* keep the code */ }
   return { cc, name };
 }
-// Where the vessel is now: along its course at its speed since the last position, at most 3 minutes on.
+// Where the vessel is now: along its course at its speed since the last position (dead reckoning), at most
+// 10 minutes on: aisstream.io passes about one position per ship per minute, often less, so a ship would
+// otherwise stand still on the map while it sails on. A ship that turns (rate of turn from AIS) follows
+// the bend, at most a quarter turn. Moored, anchored or aground: where it was.
+const OS_RECKON_S = 600;
+// AIS rate of turn: the raw value ±(4.733·√(°/min)); ±127 means "turning, rate unknown", -128 none.
+function osTurnRate(rot) {
+  if (rot == null || !Number.isFinite(rot) || Math.abs(rot) >= 127) return 0;
+  return (Math.sign(rot) * (rot / 4.733) ** 2) / 60; // degrees per second
+}
 function osNow(v, now) {
   if (v.lat == null) return null;
-  const dt = Math.min(180, Math.max(0, (now - v.posAt) / 1000));
-  if (!(v.sog > 0.3) || v.cog == null || dt < 2) return [v.lat, v.lon];
-  const d = v.sog * 0.514444 * dt; // metres
-  const p = PlanGeo.dest({ lat: v.lat, lon: v.lon }, v.cog, d);
+  const dt = Math.min(OS_RECKON_S, Math.max(0, (now - v.posAt) / 1000));
+  if (!(v.sog > 0.3) || v.cog == null || dt < 2 || v.nav === 1 || v.nav === 5 || v.nav === 6 || v.cls === 'aton' || v.cls === 'base') return [v.lat, v.lon];
+  const ms = v.sog * 0.514444; // metres a second
+  const w = osTurnRate(v.rot);
+  if (Math.abs(w) < 0.02) { const p = PlanGeo.dest({ lat: v.lat, lon: v.lon }, v.cog, ms * dt); return [p.lat, p.lon]; }
+  const n = Math.min(24, Math.max(2, Math.ceil(dt / 15))), step = dt / n;
+  let p = { lat: v.lat, lon: v.lon }, turned = 0;
+  for (let i = 0; i < n; i += 1) {
+    const before = turned;
+    turned = Math.max(-90, Math.min(90, turned + w * step));
+    p = PlanGeo.dest(p, (((v.cog + (before + turned) / 2) % 360) + 360) % 360, ms * step);
+  }
   return [p.lat, p.lon];
+}
+// How sure the drawn position is: full colour up to 3 minutes after the last message, then fading to
+// 0.45 at 15 minutes (and staying there).
+const osFade = (v, now) => { const m = (now - (v.posAt || 0)) / 60000; return m <= 3 ? 1 : m >= 15 ? 0.45 : 1 - ((m - 3) / 12) * 0.55; };
+// The sources behind the AIS status, as a line for its tooltip.
+function osSourcesText(s) {
+  const src = s && s.sources;
+  if (!src || s.role === 'follow') return '';
+  const one = (x, none) => (!x ? '' : x.connected ? `live, ${x.perMin || 0}/min` : x.on ? (x.lastErr || 'verbinden…') : none);
+  return `
+aisstream.io: ${one(src.aisstream, 'geen sleutel')}
+Open Waters: ${one(src.openwaters, 'uit')}`;
 }
 const osSize = (v) => (v.a != null && v.b != null && v.a + v.b > 0 ? { len: v.a + v.b, beam: (v.c || 0) + (v.d || 0) } : null);
 const osName = (v) => v.name || (v.cls === 'aton' ? `Baken ${v.mmsi}` : `MMSI ${v.mmsi}`);

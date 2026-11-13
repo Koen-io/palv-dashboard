@@ -447,7 +447,8 @@ function openSettings(startTab) {
         const info = h('div', { class: 'sys-ver' }, h('div', {}, h('span', {}, 'Laden…')));
         const paint = (st) => info.replaceChildren(
           h('div', {}, h('span', {}, 'Sleutel'), h('b', {}, st.key ? 'Ingesteld (gedeeld met de schermen van de eenheid)' : 'Niet ingesteld')),
-          h('div', {}, h('span', {}, 'Verbinding'), h('b', {}, st.connected ? (st.role === 'follow' ? `via ${st.via}` : 'live met aisstream.io') : st.lastErr || 'geen')),
+          h('div', {}, h('span', {}, 'Verbinding'), h('b', {}, st.connected ? (st.role === 'follow' ? `via ${st.via}` : 'live') : st.lastErr || 'geen')),
+          ...(st.role !== 'follow' && st.sources ? Object.values(st.sources).map((x) => h('div', { title: x.lastErr || '' }, h('span', {}, x.name), h('b', {}, x.connected ? `live · ${x.perMin || 0} berichten/min, ${x.usedMin || 0} gebruikt${x.info && x.info.role ? ' · ' + x.info.role : ''}` : x.on ? x.lastErr || 'verbinden…' : x.name === 'aisstream.io' ? 'geen sleutel' : 'uit'))) : []),
           h('div', {}, h('span', {}, 'Schepen in het register'), h('b', {}, String(st.count || 0))),
           h('div', {}, h('span', {}, 'Berichten per minuut'), h('b', {}, String(st.perMin || 0))),
           st.photos ? h('div', { title: photoDetail(st.photos) }, h('span', {}, 'Scheepsfoto’s'), h('b', {}, photoText(st.photos))) : null);
@@ -459,13 +460,13 @@ function openSettings(startTab) {
         window.palv.ais.status().then(paint).catch(() => {});
         return [
           h('h3', {}, 'Live schepen (AIS)'),
-          h('p', {}, 'Het tabblad Offshore toont alle schepen op de Noordzee live via aisstream.io. Dat is gratis: maak een account op aisstream.io, maak onder API Keys een sleutel en plak die hier. De sleutel komt in het profielbestand van de eenheid en gaat vanzelf naar de andere schermen. Eén scherm houdt de stream open; de andere schermen krijgen de schepen van dat scherm, net als het vliegverkeer.'),
+          h('p', {}, 'Het tabblad Offshore toont alle schepen op de Noordzee live uit twee bronnen, per schip samengevoegd (de nieuwste positie telt): aisstream.io en Open Waters AIS (openwaters.io, zonder sleutel; brengt onder meer AISHub contributors, vrijwillige ontvangers en de Noorse Kystverket/BarentsWatch-data onder NLOD). aisstream.io is gratis: maak een account op aisstream.io, maak onder API Keys een sleutel en plak die hier. De sleutel komt in het profielbestand van de eenheid en gaat vanzelf naar de andere schermen. Eén scherm houdt de stream open; de andere schermen krijgen de schepen van dat scherm, net als het vliegverkeer.'),
           h('div', { class: 'row' }, field('API-sleutel', key), h('div', { class: 'field', style: 'flex:0 0 auto;align-self:flex-end' }, h('button', { class: 'btn primary', onclick: async () => { const r = await window.palv.ais.setKey(key.value); if (r && r.error) return toast(r.error, true); key.value = ''; paint(r); toast('AIS-sleutel opgeslagen'); } }, icon('check'), 'Opslaan'))),
           h('div', {}, h('button', { class: 'btn danger', onclick: async () => { paint(await window.palv.ais.setKey('')); toast('AIS-sleutel verwijderd'); } }, icon('trash'), 'Sleutel verwijderen')),
           h('hr'),
           h('h3', {}, 'Status'),
           info,
-          h('p', { class: 'hint' }, 'Wat buiten niet te zien is: aisstream.io stuurt alle schepen op de Noordzee en weet niet naar welk schip gezocht of gekeken wordt; zoeken in de scheepslijst gebeurt op dit scherm. De foto’s haalt het scherm met de stroom op de achtergrond op van álle schepen (Wikimedia Commons) en bewaart ze; een aangetikt schip komt alleen uit die eigen opslag. De sea state bij een aangetikte plek wordt afgerond op een vak van ongeveer 5 km gevraagd.'),
+          h('p', { class: 'hint' }, 'Wat buiten niet te zien is: aisstream.io en Open Waters sturen alle schepen op de Noordzee en weten niet naar welk schip gezocht of gekeken wordt; zoeken in de scheepslijst gebeurt op dit scherm. De foto’s haalt het scherm met de stroom op de achtergrond op van álle schepen (Wikimedia Commons) en bewaart ze; een aangetikt schip komt alleen uit die eigen opslag. De sea state bij een aangetikte plek wordt afgerond op een vak van ongeveer 5 km gevraagd.'),
           h('hr'),
           h('h3', {}, 'Bronnen van de kaart'),
           h('p', {}, 'Platforms: NLOG (TNO), Rijkswaterstaat, Energistyrelsen/GEUS, NSTA, Sodir, BOEM, EMODnet en OpenStreetMap. Grenzen (EEZ, 12 NM): Marine Regions (VLIZ). Pijpleidingen, kabels, scheepsdichtheid, militaire gebieden en Natura 2000: EMODnet Human Activities. Zeekaart: OpenSeaMap. KNRM-stations, kustwachtposten, vuurtorens en havens: OpenStreetMap. Helidekken: openAIP (sleutel onder Zoek & Plan). Scheepsfoto\'s: Wikimedia Commons, per IMO-nummer of op naam, met fotograaf en licentie. Vlag: uit de MMSI (ITU MID-tabel).'),
@@ -523,7 +524,7 @@ function openSettings(startTab) {
           h('p', {}, 'Kaarten op de Vluchtradar: OpenStreetMap (overdag licht, in de avond vloeiend donker), satelliet Sentinel-2 cloudless van EOX (Copernicus) met de luchtfoto van PDOK boven Nederland, en de topografische kaart van PDOK (Kadaster). Luchtruim: openFlightMaps. Neerslagradar: RainViewer.'),
           h('p', {}, 'Rode melding rechts in de tabbalk: een bron levert al een tijd geen verse gegevens (ADS-B langer dan 3 minuten, weerradarbeeld ouder dan een half uur, METAR Schiphol ouder dan 75 minuten of onbereikbaar). Beweeg de muis erover voor de details.'),
           h('p', {}, 'Vliegverkeer: adsb.fi en adsb.lol, reserve OpenSky Network, routes van ADS-B Exchange. Weerradar: Windy.com.'),
-          h('p', {}, 'Timings, Mission Planning en Whiteboard delen hun inhoud met alle schermen van de eenheid: elke wijziging staat binnen een tiende seconde op de andere schermen (via de beveiligde verbinding met de eenheidssleutel). Offshore: schepen van aisstream.io (AIS), met foto\'s van Wikimedia Commons.'),
+          h('p', {}, 'Timings, Mission Planning en Whiteboard delen hun inhoud met alle schermen van de eenheid: elke wijziging staat binnen een tiende seconde op de andere schermen (via de beveiligde verbinding met de eenheidssleutel). Offshore: schepen van aisstream.io en Open Waters AIS, met foto\'s van Wikimedia Commons.'),
           h('p', {}, 'Dit dashboard is een hulpmiddel voor situationeel overzicht en vervangt geen officiële briefing- of vluchtvoorbereidingsbronnen.'),
         ];
       },

@@ -26,10 +26,30 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+//
+// Two sources, merged per MMSI (1.52): aisstream.io (with the key) and Open Waters (ais.openwaters.io, free,
+// no key, anonymous tier: 20 messages a second over at most 100 square degrees). Open Waters re-serves the
+// AISHub aggregate, volunteer receivers (one near Antwerp at the native rate), Kystverket and BarentsWatch
+// (the Norwegian sector) and aisstream itself; the aisstream part is skipped while our own aisstream runs.
+// Every message is placed at the time it was received by the station (not when it reached us), and a
+// position only counts when it is newer than the one the vessel has: the freshest wins, whatever the source.
+// A coarse long-range position (msg 27) never replaces a precise class A/B position of the last 10 minutes.
+//
+// To the renderer and the other screens: a request may wait (long-poll) until something changed, so a new
+// position is on every screen within about a second instead of after the next 2-second poll.
+// The register (positions of the last hour) goes to disk too, so the map is full right after a restart.
 const STREAM = 'wss://stream.aisstream.io/v0/stream';
+const OW_STREAM = 'wss://ais.openwaters.io/v1/stream';
 const COMMONS = 'https://commons.wikimedia.org/w/api.php';
 // The North Sea around the Netherlands, generous: Dover to the German Bight and up to the Danish sector.
 const DEFAULT_BBOX = [[50.0, -2.0], [57.5, 9.5]];
+// The same box for Open Waters ([minLat, minLon, maxLat, maxLon]): 7.5° × 11.5° = 86 square degrees.
+const OW_BBOX = [[DEFAULT_BBOX[0][0], DEFAULT_BBOX[0][1], DEFAULT_BBOX[1][0], DEFAULT_BBOX[1][1]]];
+const LR_HOLD_MS = 10 * 60000;     // a long-range position (msg 27) waits this long behind a precise one
+const FUTURE_MS = 5000;            // a station clock this far ahead is not believed: the time of arrival
+const WAIT_MAX_MS = 25000;         // the longest a request waits for something new
+const LIVE_FILE = 'ais-live.json';
+const MSG_TYPES = ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport', 'ShipStaticData', 'StaticDataReport', 'AidsToNavigationReport', 'LongRangeAisBroadcastMessage', 'BaseStationReport'];
 const KEEP_MS = 60 * 60000;        // a vessel silent this long is dropped
 const TRACK_MS = 6 * 3600e3;       // the track kept per vessel
 const TRACK_MAX = 900;             // points per vessel
@@ -47,15 +67,20 @@ const PHOTO_RETRY_MS = 15 * 60000; // a lookup that failed (network) is tried ag
 const PHOTO_FILES_MAX = 5000;      // photos kept on disk (well under 1 GB), the oldest go first
 const PHOTO_INDEX_MAX = 40000;     // found and not-found answers kept
 const PHOTO_W = 960;               // width of the stored photo, enough for the card on a 4K screen
-const FOLLOW_MS = 2000;
+const FOLLOW_MS = 700;           // at least this long between two answers from the screen this one follows
 const WATCH_MS = 20000;            // a renderer that asked this recently keeps the follower polling
 const RECONNECT_MS = [3000, 6000, 12000, 30000, 60000];
 const UA = require('./ua').APP;
 
 let dir = null, log = { info() {}, warn() {} }, screens = null, share = null, store = null, peerGet = null;
-let key = null, ws = null, connected = false, lastMsg = 0, lastErr = null, retries = 0, reconnectTimer = null, stopping = false;
-let role = 'lead', via = null, followTimer = null, followBusy = false, lastWatch = 0, followSince = 0;
-let msgCount = 0, msgWindow = [], staticDirty = false;
+let key = null, lastMsg = 0, lastErr = null, stopping = false;
+let role = 'lead', via = null, followBusy = false, lastWatch = 0, followSince = 0;
+let staticDirty = false, liveDirty = false;
+let owOn = false;            // Open Waters: on from start() (not in the tests, which never start)
+// One live stream per source: its socket, state and message rate.
+const mkSource = (id, name) => ({ id, name, ws: null, connected: false, lastMsg: 0, lastErr: null, retries: 0, timer: null, count: 0, window: [], used: 0, info: null });
+const SRC = { aisstream: mkSource('aisstream', 'aisstream.io'), openwaters: mkSource('openwaters', 'Open Waters') };
+const anyConnected = () => SRC.aisstream.connected || SRC.openwaters.connected;
 const vessels = new Map();   // mmsi -> record
 const tracks = new Map();    // mmsi -> [[t, lat, lon, sog, cog]]
 const gone = [];             // [mmsi, rev] of dropped vessels, for the followers
@@ -108,6 +133,34 @@ function savePhotos() {
     fs.renameSync(tmp, file);
   } catch (err) { log.warn('ais', 'fotolijst opslaan mislukt: ' + err.message); }
 }
+// The register itself (the last hour), so the map is full again right after a restart.
+function saveLive() {
+  if (!liveDirty || !dir) return;
+  liveDirty = false;
+  try {
+    const now = Date.now(), out = [];
+    for (const r of vessels.values()) if (r.lat != null && now - r.msgAt < KEEP_MS) out.push({ ...pub(r), lr: !!r.lr });
+    const file = path.join(dir, LIVE_FILE), tmp = file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ at: now, vessels: out }), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch (err) { log.warn('ais', 'schepenregister opslaan mislukt: ' + err.message); }
+}
+function loadLive() {
+  let saved;
+  try { saved = JSON.parse(fs.readFileSync(path.join(dir, LIVE_FILE), 'utf8')); } catch { return 0; }
+  const now = Date.now();
+  let n = 0;
+  for (const v of (saved && Array.isArray(saved.vessels) ? saved.vessels : [])) {
+    const mmsi = String((v && v.mmsi) || '').replace(/\D/g, '');
+    if (!mmsi || vessels.has(mmsi) || !(now - (+v.msgAt || 0) < KEEP_MS) || num(v.lat) == null || num(v.lon) == null) continue;
+    const r = rec(mmsi);
+    for (const k of PUB_KEYS) if (k !== 'mmsi' && v[k] !== undefined) r[k] = v[k];
+    r.lr = !!v.lr;
+    r.rev = ++rev;
+    n += 1;
+  }
+  return n;
+}
 
 /* ---------- the register ---------- */
 function rec(mmsi) {
@@ -115,12 +168,22 @@ function rec(mmsi) {
   if (!r) {
     const st = staticData[mmsi] || {};
     r = { mmsi, name: st.name || null, imo: st.imo || null, callsign: st.callsign || null, type: st.type ?? null, a: st.a ?? null, b: st.b ?? null, c: st.c ?? null, d: st.d ?? null, draught: st.draught ?? null, dest: st.dest || null, eta: st.eta || null,
-      lat: null, lon: null, sog: null, cog: null, hdg: null, rot: null, nav: null, posAt: 0, msgAt: 0, cls: null, rev: 0, src: 'aisstream' };
+      lat: null, lon: null, sog: null, cog: null, hdg: null, rot: null, nav: null, posAt: 0, msgAt: 0, cls: null, rev: 0, src: 'aisstream', attr: null, lr: false };
     vessels.set(mmsi, r);
   }
   return r;
 }
-function touch(r) { r.rev = ++rev; r.msgAt = Date.now(); }
+function touch(r) { r.rev = ++rev; r.msgAt = Date.now(); liveDirty = true; changed(); }
+
+// When a message was received by its station: aisstream's "2026-11-13 16:10:32.123456789 +0000 UTC" or
+// Open Waters' ISO time. A clock ahead of ours (or no time at all) is the moment it reached us.
+function msgTime(s, now = Date.now()) {
+  if (!s) return now;
+  const iso = String(s).trim().replace(/ \+0000 UTC$/, 'Z').replace(/^(\d{4}-\d\d-\d\d) /, '$1T').replace(/(\.\d{3})\d+/, '$1');
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t) || t > now + FUTURE_MS) return now;
+  return Math.min(t, now);
+}
 
 function addTrack(r, t) {
   let tr = tracks.get(r.mmsi);
@@ -131,14 +194,17 @@ function addTrack(r, t) {
   if (tr.length > TRACK_MAX) tr.splice(0, tr.length - TRACK_MAX);
 }
 
-// One message from aisstream.io: { MessageType, MetaData: { MMSI, ShipName, latitude, longitude, time_utc }, Message: { <type>: {...} } }
-function ingest(m) {
+// One message in aisstream.io's shape: { MessageType, MetaData: { MMSI, ShipName, latitude, longitude,
+// time_utc }, Message: { <type>: {...} } }. Open Waters events are put in that shape first (owMessage).
+// `from` names the source shown on the card ({ src, attr }); without it: aisstream.io.
+function ingest(m, from) {
   const meta = m.MetaData || {};
   const mmsi = String(meta.MMSI || '').replace(/\D/g, '');
   if (!mmsi) return;
   const body = (m.Message && m.Message[m.MessageType]) || {};
+  const t = msgTime(meta.time_utc);
+  if (Date.now() - t > KEEP_MS) return; // an hour old: of no use
   const r = rec(mmsi);
-  const t = Date.now();
   const nameMeta = str(meta.ShipName);
   if (nameMeta && !r.name) r.name = nameMeta;
   switch (m.MessageType) {
@@ -148,7 +214,19 @@ function ingest(m) {
     case 'LongRangeAisBroadcastMessage': {
       const lat = num(body.Latitude ?? meta.latitude), lon = num(body.Longitude ?? meta.longitude);
       if (lat == null || lon == null || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return;
-      r.lat = lat; r.lon = lon;
+      // The freshest position wins: one that was received earlier than the one we have is old news.
+      if (r.lat != null && t < r.posAt) return;
+      const lr = m.MessageType === 'LongRangeAisBroadcastMessage';
+      if (lr && r.lat != null && !r.lr && t - r.posAt < LR_HOLD_MS) return;
+      r.lat = lat; r.lon = lon; r.lr = lr;
+      r.src = (from && from.src) || 'aisstream'; r.attr = (from && from.attr) || null;
+      if (m.MessageType === 'ExtendedClassBPositionReport') {
+        const name = str(body.Name); if (name) r.name = name;
+        const type = num(body.Type); if (type != null && type > 0) r.type = type;
+        const d = body.Dimension || {};
+        if (num(d.A) != null && num(d.A) + num(d.B) > 0) { r.a = num(d.A); r.b = num(d.B); r.c = num(d.C); r.d = num(d.D); }
+        if (name || type) remember(r);
+      }
       const sog = num(body.Sog); r.sog = sog != null && sog < 102.3 ? sog : null;
       const cog = num(body.Cog); r.cog = cog != null && cog < 360 ? cog : null;
       const hdg = num(body.TrueHeading); r.hdg = hdg != null && hdg < 360 ? hdg : null;
@@ -193,16 +271,18 @@ function ingest(m) {
     }
     case 'AidsToNavigationReport': {
       const lat = num(body.Latitude ?? meta.latitude), lon = num(body.Longitude ?? meta.longitude);
-      if (lat == null || lon == null) return;
+      if (lat == null || lon == null || t < r.posAt) return;
       r.cls = 'aton'; r.lat = lat; r.lon = lon; r.posAt = t;
       r.name = str(body.Name) || r.name; r.type = num(body.Type) ?? r.type;
+      r.src = (from && from.src) || 'aisstream'; r.attr = (from && from.attr) || null;
       touch(r);
       break;
     }
     case 'BaseStationReport': {
       const lat = num(body.Latitude ?? meta.latitude), lon = num(body.Longitude ?? meta.longitude);
-      if (lat == null || lon == null) return;
+      if (lat == null || lon == null || t < r.posAt) return;
       r.cls = 'base'; r.lat = lat; r.lon = lon; r.posAt = t;
+      r.src = (from && from.src) || 'aisstream'; r.attr = (from && from.attr) || null;
       touch(r);
       break;
     }
@@ -224,26 +304,49 @@ function prune() {
   while (gone.length > 5000) gone.shift();
 }
 
-/* ---------- the stream ---------- */
-function connect() {
-  if (ws || !key || stopping || typeof WebSocket === 'undefined') return;
+/* ---------- the streams ---------- */
+// Open Waters event -> aisstream's shape. The aisstream part of Open Waters is skipped while our own
+// aisstream stream runs (the same messages, a little later). Returns null for anything that is no vessel news.
+const OW_NAMES = { aishub: 'AISHub', aisstream: 'aisstream.io', kystverket: 'Kystverket', barentswatch: 'BarentsWatch', digitraffic: 'Digitraffic', udp: 'ontvanger', station: 'ontvanger' };
+function owMessage(m) {
+  if (!m || m.type !== 'event' || !m.msg_type || !m.mmsi) return null;
+  const kind = String(m.source || '').split(':')[0];
+  if (kind === 'aisstream' && SRC.aisstream.connected) return null;
+  const from = { src: `Open Waters · ${OW_NAMES[kind] || kind || 'onbekend'}`, attr: str(String(m.attribution || '').slice(0, 240)) };
+  return { msg: { MessageType: m.msg_type, MetaData: { MMSI: m.mmsi, latitude: m.lat, longitude: m.lon, time_utc: m.time }, Message: { [m.msg_type]: m.message || {} } }, from };
+}
+// What each source needs to open its stream; null when it cannot (aisstream without a key).
+function opening(s) {
+  if (s.id === 'aisstream') return key ? { url: STREAM, hello: { APIKey: key, BoundingBoxes: [DEFAULT_BBOX], FilterMessageTypes: MSG_TYPES } } : null;
+  return owOn ? { url: OW_STREAM, hello: { type: 'subscribe', bbox: OW_BBOX } } : null;
+}
+function connect(s) {
+  if (s.ws || stopping || role !== 'lead' || typeof WebSocket === 'undefined') return;
+  const how = opening(s);
+  if (!how) return;
   let sock;
-  try { sock = new WebSocket(STREAM); } catch (err) { lastErr = err.message; scheduleReconnect(); return; }
-  ws = sock;
+  try { sock = new WebSocket(how.url); } catch (err) { s.lastErr = err.message; scheduleReconnect(s); return; }
+  s.ws = sock;
   const opened = Date.now();
-  sock.addEventListener('open', () => {
-    try { sock.send(JSON.stringify({ APIKey: key, BoundingBoxes: [DEFAULT_BBOX], FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ExtendedClassBPositionReport', 'ShipStaticData', 'StaticDataReport', 'AidsToNavigationReport', 'LongRangeAisBroadcastMessage'] })); } catch (err) { lastErr = err.message; }
-  });
+  sock.addEventListener('open', () => { try { sock.send(JSON.stringify(how.hello)); } catch (err) { s.lastErr = err.message; } });
   // aisstream.io sends its JSON as binary frames: taken as bytes and decoded, not as text.
   try { sock.binaryType = 'arraybuffer'; } catch { /* not every implementation */ }
   const onText = (text) => {
-    if (!connected) { connected = true; retries = 0; lastErr = null; log.info('ais', 'verbonden met aisstream.io'); }
-    lastMsg = Date.now();
-    msgCount += 1;
     let m;
     try { m = JSON.parse(text); } catch { return; }
-    if (m && m.error) { lastErr = String(m.error); log.warn('ais', 'aisstream.io: ' + lastErr); return; }
-    try { ingest(m); } catch (err) { /* one bad message */ }
+    if (!s.connected) { s.connected = true; s.retries = 0; s.lastErr = null; log.info('ais', `verbonden met ${s.name}`); }
+    s.lastMsg = Date.now(); s.count += 1;
+    if (m && m.error) { s.lastErr = String(m.error); log.warn('ais', `${s.name}: ${s.lastErr}`); return; }
+    if (s.id === 'openwaters') {
+      if (m && m.type === 'welcome') { s.info = { role: m.role || null, limits: m.limits || null }; return; }
+      if (m && (m.type === 'error' || m.type === 'notice')) { s.lastErr = String(m.message || m.reason || m.type); log.warn('ais', `Open Waters: ${s.lastErr}`); return; }
+      const got = owMessage(m);
+      if (!got) return;
+      try { ingest(got.msg, got.from); s.used += 1; } catch { /* one bad message */ }
+    } else {
+      try { ingest(m); s.used += 1; } catch { /* one bad message */ }
+    }
+    lastMsg = Math.max(lastMsg, s.lastMsg);
   };
   sock.addEventListener('message', (ev) => {
     const d = ev.data;
@@ -253,31 +356,36 @@ function connect() {
     else if (d && typeof d.text === 'function') d.text().then(onText).catch(() => {});
   });
   const down = (why) => {
-    if (ws !== sock) return;
-    ws = null;
-    const was = connected;
-    connected = false;
-    if (was || Date.now() - opened > 10000) log.warn('ais', `verbinding met aisstream.io weg (${why}); opnieuw proberen`);
-    else lastErr = lastErr || why;
-    scheduleReconnect();
+    if (s.ws !== sock) return;
+    s.ws = null;
+    const was = s.connected;
+    s.connected = false;
+    if (was || Date.now() - opened > 10000) log.warn('ais', `verbinding met ${s.name} weg (${why}); opnieuw proberen`);
+    if (!s.lastErr || !was) s.lastErr = why;
+    scheduleReconnect(s);
   };
   sock.addEventListener('close', (ev) => down(`gesloten ${ev.code || ''}${ev.reason ? ' ' + ev.reason : ''}`.trim()));
   sock.addEventListener('error', () => down('fout'));
 }
-function scheduleReconnect() {
-  clearTimeout(reconnectTimer);
-  if (stopping || !key || role !== 'lead') return;
-  const wait = RECONNECT_MS[Math.min(retries, RECONNECT_MS.length - 1)];
-  retries += 1;
-  reconnectTimer = setTimeout(connect, wait);
+function scheduleReconnect(s) {
+  clearTimeout(s.timer); s.timer = null;
+  if (stopping || role !== 'lead' || !opening(s)) return;
+  const wait = RECONNECT_MS[Math.min(s.retries, RECONNECT_MS.length - 1)];
+  s.retries += 1;
+  s.timer = setTimeout(() => { s.timer = null; connect(s); }, wait);
+  if (s.timer.unref) s.timer.unref();
 }
-function disconnect(why) {
-  clearTimeout(reconnectTimer);
-  const s = ws;
-  ws = null;
-  if (s) { try { s.close(); } catch { /* closed */ } if (connected) log.info('ais', `stream gesloten: ${why}`); }
-  connected = false;
+function disconnect(why, only) {
+  for (const s of Object.values(SRC)) {
+    if (only && s.id !== only) continue;
+    clearTimeout(s.timer); s.timer = null;
+    const w = s.ws;
+    s.ws = null;
+    if (w) { try { w.close(); } catch { /* closed */ } if (s.connected) log.info('ais', `${s.name} gesloten: ${why}`); }
+    s.connected = false;
+  }
 }
+const connectAll = () => { for (const s of Object.values(SRC)) if (!s.ws && !s.timer) connect(s); };
 
 /* ---------- following another screen ---------- */
 // The screen to take the ships from: the one this screen follows for the air traffic when it has AIS,
@@ -297,51 +405,98 @@ function evaluate() {
   if (src) {
     if (role !== 'follow' || !via || via.id !== src.id) { role = 'follow'; via = { id: src.id, name: src.name, address: src.address, port: src.port, secure: true }; followSince = 0; disconnect(`volgt ${src.name}`); }
     else via.address = src.address;
-  } else if (role !== 'lead') { role = 'lead'; via = null; followSince = 0; if (key) connect(); }
-  else if (key && !ws && !reconnectTimer && !stopping) connect();
-  if (!key && role === 'lead') disconnect('geen sleutel');
+  } else if (role !== 'lead') { role = 'lead'; via = null; followSince = 0; for (const s of Object.values(SRC)) s.retries = 0; }
+  if (role === 'lead' && !stopping) {
+    if (!key) disconnect('geen sleutel', 'aisstream');
+    connectAll();
+  }
 }
+// Asks the screen it follows for what changed; that screen answers at once when it has news, or else as
+// soon as something comes in (up to 15 s, under the 20 s socket timeout of the unit agent). A screen of before 1.52 answers at once: then once a second.
 async function followOnce() {
-  if (role !== 'follow' || !via || followBusy || Date.now() - lastWatch > WATCH_MS) return;
+  if (role !== 'follow' || !via || followBusy || Date.now() - lastWatch > WATCH_MS) return false;
   followBusy = true;
+  const from = via;
   try {
-    const got = await peerGet(via, `/api/ais/snap?since=${followSince}`, 6000);
+    const got = await peerGet(from, `/api/ais/snap?since=${followSince}&wait=15000`, 22000);
     if (!got || !Array.isArray(got.vessels)) throw new Error('geen antwoord');
+    if (via !== from) return true;
     const now = Date.now();
     for (const v of got.vessels) {
       const mmsi = String(v.mmsi || '');
       if (!mmsi) continue;
       const r = rec(mmsi);
       const moved = v.lat != null && (v.lat !== r.lat || v.lon !== r.lon);
-      Object.assign(r, v, { rev: 0, src: `via ${via.name}` });
+      Object.assign(r, v, { rev: 0, src: v.src ? `${String(v.src).replace(/ (via .*)$/, '')} (via ${from.name})` : `via ${from.name}` });
       r.msgAt = now;
       if (moved && r.lat != null) addTrack(r, v.posAt || now);
       touch(r);
     }
-    for (const mmsi of got.gone || []) if (vessels.delete(String(mmsi))) { tracks.delete(String(mmsi)); gone.push([String(mmsi), ++rev]); }
+    for (const mmsi of got.gone || []) if (vessels.delete(String(mmsi))) { tracks.delete(String(mmsi)); gone.push([String(mmsi), ++rev]); changed(); }
     followSince = got.rev || followSince;
     lastMsg = got.lastMsg || now;
     lastErr = null;
-  } catch (err) { lastErr = `${via.name}: ${err.message}`; followSince = 0; }
+    return true;
+  } catch (err) { lastErr = `${from.name}: ${err.message}`; followSince = 0; return false; }
   finally { followBusy = false; }
+}
+const sleep = (ms) => new Promise((r) => { const t = setTimeout(r, ms); if (t.unref) t.unref(); });
+async function followLoop() {
+  while (!stopping) {
+    if (role !== 'follow' || !via || Date.now() - lastWatch > WATCH_MS) { await sleep(500); continue; }
+    const t0 = Date.now();
+    const ok = await followOnce();
+    // At least FOLLOW_MS between two answers (a screen that answers at once is not asked in a tight loop).
+    await sleep(Math.max(0, (ok ? FOLLOW_MS : 3000) - (Date.now() - t0)));
+  }
 }
 
 /* ---------- what the dashboard and the other screens get ---------- */
-const pub = (r) => ({ mmsi: r.mmsi, name: r.name, imo: r.imo, callsign: r.callsign, type: r.type, a: r.a, b: r.b, c: r.c, d: r.d, draught: r.draught, dest: r.dest, eta: r.eta, lat: r.lat, lon: r.lon, sog: r.sog, cog: r.cog, hdg: r.hdg, rot: r.rot, nav: r.nav, posAt: r.posAt, msgAt: r.msgAt, cls: r.cls, src: r.src });
+const PUB_KEYS = ['mmsi', 'name', 'imo', 'callsign', 'type', 'a', 'b', 'c', 'd', 'draught', 'dest', 'eta', 'lat', 'lon', 'sog', 'cog', 'hdg', 'rot', 'nav', 'posAt', 'msgAt', 'cls', 'src', 'attr'];
+function pub(r) { const o = {}; for (const k of PUB_KEYS) o[k] = r[k] === undefined ? null : r[k]; return o; }
 function snapshot(since = 0) {
   lastWatch = Date.now();
   const out = [];
   for (const r of vessels.values()) if (r.rev > since && r.lat != null) out.push(pub(r));
   return { ok: true, now: Date.now(), rev, since, vessels: out, gone: gone.filter((g) => g[1] > since).map((g) => g[0]), total: vessels.size, lastMsg, status: status() };
 }
+// Waiting for news: whoever asks with a stand that is already current gets an answer as soon as something
+// changes (gathered for 60 ms, so a burst of messages goes in one answer), or after waitMs with nothing.
+const waiters = new Set();
+let changeTimer = null;
+function changed() {
+  if (!waiters.size || changeTimer) return;
+  changeTimer = setTimeout(() => { changeTimer = null; const all = [...waiters]; waiters.clear(); for (const f of all) f(); }, 60);
+}
+function snapWait(since = 0, waitMs = 0) {
+  lastWatch = Date.now();
+  const ms = Math.min(WAIT_MAX_MS, Math.max(0, +waitMs || 0));
+  if (!ms || rev > since || stopping) return Promise.resolve(snapshot(since));
+  return new Promise((resolve) => {
+    let t = null;
+    const done = () => { clearTimeout(t); waiters.delete(done); resolve(snapshot(since)); };
+    t = setTimeout(done, ms);
+    waiters.add(done);
+  });
+}
 function track(mmsi) { return (tracks.get(String(mmsi)) || []).slice(); }
+function srcStatus(s, now) {
+  s.window = s.window.filter((x) => now - x[0] < 60000);
+  const perMin = s.window.reduce((n, x) => n + x[1], 0), usedMin = s.window.reduce((n, x) => n + x[2], 0);
+  return { name: s.name, on: !!opening(s) && role === 'lead', connected: s.connected, lastMsg: s.lastMsg, lastErr: s.lastErr, perMin, usedMin, info: s.info };
+}
 function status() {
   const now = Date.now();
-  msgWindow = msgWindow.filter((t) => now - t < 60000);
-  return { on: !!key || !!via, key: !!key, connected: role === 'lead' ? connected : !!via, role, via: via ? via.name : null, count: vessels.size, lastMsg, lastErr, perMin: msgWindow.length };
+  const sources = { aisstream: srcStatus(SRC.aisstream, now), openwaters: srcStatus(SRC.openwaters, now) };
+  const lead = role === 'lead';
+  const live = lead ? anyConnected() : !!via;
+  const err = lead ? (anyConnected() ? null : (key && SRC.aisstream.lastErr) || SRC.openwaters.lastErr || lastErr) : lastErr;
+  return { on: !!key || !!via || (lead && owOn), key: !!key, connected: live, role, via: via ? via.name : null, count: vessels.size, lastMsg, lastErr: err,
+    perMin: sources.aisstream.perMin + sources.openwaters.perMin, sources };
 }
-// Per minute message rate, for the settings page.
-setInterval(() => { if (msgCount) { for (let i = 0; i < Math.min(msgCount, 5000); i += 1) msgWindow.push(Date.now()); msgCount = 0; } }, 5000).unref();
+// Per minute message rate per source, for the settings page and the status on the map.
+const rateTimer = setInterval(() => { const now = Date.now(); for (const s of Object.values(SRC)) { if (s.count || s.used) s.window.push([now, s.count, s.used]); s.count = 0; s.used = 0; } }, 5000);
+if (rateTimer.unref) rateTimer.unref();
 
 /* ---------- photos ---------- */
 async function commons(params) {
@@ -456,7 +611,7 @@ async function photoTick() {
   photoTimer = null;
   if (stopping) return;
   let wait = PHOTO_GAP_MS;
-  const r = role === 'lead' && key && connected && Date.now() >= photoPauseUntil ? nextForPhoto() : null;
+  const r = role === 'lead' && anyConnected() && Date.now() >= photoPauseUntil ? nextForPhoto() : null;
   if (!r) wait = PHOTO_IDLE_MS;
   else {
     try { await fetchPhoto(r); photoErr = null; } catch (err) {
@@ -520,7 +675,7 @@ async function photo({ imo, name } = {}) {
 function photoStatus() {
   let found = 0, none = 0;
   for (const v of Object.values(photos)) { if (v.img) found += 1; else none += 1; }
-  const fetching = role === 'lead' && !!key;
+  const fetching = role === 'lead' && anyConnected();
   return { found, none, queue: fetching ? photoQueue() : null, fetching, paused: Date.now() < photoPauseUntil ? photoPauseUntil : null, lastErr: photoErr };
 }
 
@@ -529,8 +684,8 @@ function setKey(k) {
   const next = String(k || '').trim() || null;
   if (next === key) return status();
   key = next;
-  retries = 0;
-  disconnect(key ? 'nieuwe sleutel' : 'sleutel verwijderd');
+  SRC.aisstream.retries = 0; SRC.aisstream.lastErr = null;
+  disconnect(key ? 'nieuwe sleutel' : 'sleutel verwijderd', 'aisstream');
   evaluate();
   return status();
 }
@@ -544,29 +699,40 @@ const routes = {
     const u = new URL(req.url, 'http://x');
     if (!caller || !caller.secure) return respond(res, 403, 'text/plain', 'Niet toegestaan');
     if (role !== 'lead') return respond(res, 409, 'text/plain; charset=utf-8', 'Dit scherm haalt de schepen zelf niet op');
-    respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(snapshot(Math.max(0, +u.searchParams.get('since') || 0))));
+    // With ?wait=ms the answer comes when something changed (long-poll), at the latest after that time.
+    let open = true;
+    req.on('close', () => { open = false; });
+    snapWait(Math.max(0, +u.searchParams.get('since') || 0), +u.searchParams.get('wait') || 0).then((snap) => {
+      if (open && !res.writableEnded && !res.destroyed) respond(res, 200, 'application/json; charset=utf-8', JSON.stringify(snap));
+    });
   },
 };
 
 function start(opts) {
   ({ dir, screens, share, store, peerGet } = opts);
   if (opts.log) log = opts.log;
+  owOn = opts.openWaters !== false;
   loadFiles();
+  const restored = loadLive();
+  if (restored) log.info('ais', `${restored} schepen uit het register van vóór de herstart`);
   const readKey = () => { const k = store.get('private').keys.aisstream; setKey(k && k.value); };
   readKey();
   store.onChange((kind) => { if (kind === 'private') readKey(); });
   const t1 = setInterval(() => { evaluate(); prune(); }, 5000);
-  const t2 = setInterval(followOnce, FOLLOW_MS);
-  const t3 = setInterval(() => { saveStatic(); savePhotos(); }, 2 * 60000);
-  for (const t of [t1, t2, t3]) if (t.unref) t.unref();
+  followLoop();
+  const t3 = setInterval(() => { saveStatic(); savePhotos(); saveLive(); }, 2 * 60000);
+  for (const t of [t1, t3]) if (t.unref) t.unref();
+  evaluate();
   // A stream that goes quiet without closing: a fresh one after two minutes without a message.
-  const t4 = setInterval(() => { if (role === 'lead' && ws && connected && Date.now() - lastMsg > 120000) { disconnect('stil'); scheduleReconnect(); } }, 30000);
+  const t4 = setInterval(() => {
+    for (const s of Object.values(SRC)) if (role === 'lead' && s.ws && s.connected && Date.now() - s.lastMsg > 120000) { disconnect('stil', s.id); scheduleReconnect(s); }
+  }, 30000);
   if (t4.unref) t4.unref();
   // The photo round starts a while after the stream, when the first static messages are in.
   photoTimer = setTimeout(photoTick, opts.photoDelayMs ?? 90000);
   if (photoTimer.unref) photoTimer.unref();
   return { routes };
 }
-function stop() { stopping = true; disconnect('stop'); clearInterval(followTimer); clearTimeout(photoTimer); saveStatic(); savePhotos(); }
+function stop() { stopping = true; disconnect('stop'); clearTimeout(photoTimer); for (const f of [...waiters]) f(); saveStatic(); savePhotos(); liveDirty = true; saveLive(); }
 
-module.exports = { start, stop, status, snapshot, track, photo, photoStatus, setKey, routes, vessels: () => vessels, _ingest: ingest, _photo: { photoKey, nextForPhoto, fetchPhoto, photoForPeer, photos: () => photos, setDir: (d) => { dir = d; loadFiles(); }, setRole: (r, v, g) => { role = r; via = v || null; if (g) peerGet = g; } } };
+module.exports = { start, stop, status, snapshot, snapWait, track, photo, photoStatus, setKey, routes, vessels: () => vessels, _ingest: ingest, _ow: owMessage, _msgTime: msgTime, _live: { save: () => { liveDirty = true; saveLive(); }, load: () => loadLive(), clear: () => { vessels.clear(); tracks.clear(); } }, _photo: { photoKey, nextForPhoto, fetchPhoto, photoForPeer, photos: () => photos, setDir: (d) => { dir = d; loadFiles(); }, setRole: (r, v, g) => { role = r; via = v || null; if (g) peerGet = g; } } };

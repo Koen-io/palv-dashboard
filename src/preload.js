@@ -142,7 +142,7 @@ contextBridge.exposeInMainWorld('palv', {
     printA5: (q) => ipcRenderer.invoke('plan:printA5', q),
   },
   ais: {
-    snap: (since) => ipcRenderer.invoke('ais:snap', since),
+    snap: (since, wait) => ipcRenderer.invoke('ais:snap', since, wait),
     status: () => ipcRenderer.invoke('ais:status'),
     track: (mmsi) => ipcRenderer.invoke('ais:track', mmsi),
     photo: (q) => ipcRenderer.invoke('ais:photo', q),

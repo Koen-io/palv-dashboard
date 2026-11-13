@@ -67,7 +67,8 @@ function start(opts) {
   load();
   const safe = (fn) => async (...a) => { try { return await fn(...a); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; } };
   ipcMain.handle('offshore:places', safe((_e, force) => places(!!force)));
-  ipcMain.handle('ais:snap', (_e, since) => ais.snapshot(Math.max(0, +since || 0)));
+  // With a wait (ms) the answer comes as soon as something changed: the map follows within a second.
+  ipcMain.handle('ais:snap', (_e, since, wait) => ais.snapWait(Math.max(0, +since || 0), Math.max(0, +wait || 0)));
   ipcMain.handle('ais:status', () => ({ ...ais.status(), photos: ais.photoStatus() }));
   ipcMain.handle('ais:track', (_e, mmsi) => ais.track(String(mmsi || '')));
   ipcMain.handle('ais:photo', safe((_e, q) => ais.photo(q && typeof q === 'object' ? q : {})));

@@ -601,7 +601,7 @@ function coaCreate(body, w) {
         const { g } = c;
         const t = now();
         for (const v of ships.values()) {
-          if (v.cls === 'aton') continue;
+          if (v.cls === 'aton' || v.cls === 'base') continue;
           const p = where(v); if (!p || !c.near(p[0], p[1], 0.2)) continue;
           const q2 = c.P(p[0], p[1]); if (!c.inView(q2, 20)) continue;
           const chosen = pick && pick.kind === 'ship' && pick.mmsi === v.mmsi;
@@ -634,7 +634,7 @@ function coaCreate(body, w) {
       ro = new ResizeObserver(() => map && map.invalidateSize(false));
       ro.observe(mapEl);
       pollAis();
-      aisTimer = setInterval(pollAis, 2000);
+      aisTimer = setInterval(pollAis, 1000);
     }, 30);
   }
 
