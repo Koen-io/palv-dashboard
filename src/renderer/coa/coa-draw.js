@@ -44,7 +44,10 @@ function coaDrawLayer(o) {
   let marks = [], selId = null, drawing = null, drag = null, hold = null, pending = null, queued = false;
   let lastSel = null; // the selection just before the first finger came down (it may have tapped beside it)
   const pointers = new Map();
-  const undo = [], redo = [];
+  // Undo and redo per plan (drawkit.js); the buttons in the panel and the floating pair on the surface.
+  const undoBars = new Set();
+  const hist = dkHistory(() => { for (const b of undoBars) { if (b.isConnected) b.paint(); else if (b.dataset.seen) undoBars.delete(b); else b.dataset.seen = '1'; } });
+  const histKey = () => (o.plan() || {}).id || '-';
   const marksOf = () => { const p = o.plan(); return p ? OPS.list('coa', o.list).filter((m) => m.plan === p.id).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : []; };
   const selEl = () => (selId && marks.find((m) => m.id === selId)) || null;
   const svg = () => svgHost.firstElementChild;
@@ -62,6 +65,8 @@ function coaDrawLayer(o) {
     const Pp = o.pal();
     svgHost.innerHTML = `<svg viewBox="0 0 ${o.W} ${o.H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, Pp)).join('')}${drawing ? coaMarkSvg(drawing, Pp) : ''}</svg>`;
     selUi.paint(o.on() ? selEl() : null);
+    floatBar.hidden = !o.on();
+    floatBar.paint();
     if (o.onChange) o.onChange(marks.length);
   }
   // The marks of the list as they are now, with the one being moved or turned in its new place.
@@ -102,23 +107,28 @@ function coaDrawLayer(o) {
     const id = e.id || OPS.uid();
     e.id = id; e.plan = p.id; e.by = OPS.screen.name;
     if (e.z == null) e.z = marks.length ? Math.max(...marks.map((m) => m.z || 0)) + 1 : 1;
-    undo.push({ id, before: before ? cleanMark(before) : null, after: cleanMark(e) });
-    if (undo.length > 100) undo.shift();
-    redo.length = 0;
+    hist.push(p.id, [{ id, before: before ? cleanMark(before) : null, after: cleanMark(e) }]);
     OPS.put('coa', o.list, id, cleanMark(e));
   }
-  function removeMark(e) { undo.push({ id: e.id, before: cleanMark(e), after: null }); redo.length = 0; OPS.put('coa', o.list, e.id, null); if (selId === e.id) selId = null; }
-  function doUndo(fromRedo) {
-    const stack = fromRedo ? redo : undo, other = fromRedo ? undo : redo;
-    const op = stack.pop(); if (!op) return;
-    const to = fromRedo ? op.after : op.before;
+  function removeMark(e) { hist.push(histKey(), [{ id: e.id, before: cleanMark(e), after: null }]); OPS.put('coa', o.list, e.id, null); if (selId === e.id) selId = null; }
+  // One step back (or forward with `forward`): whatever that step changed, in one write.
+  function doUndo(forward) {
     const p = o.plan();
-    OPS.put('coa', o.list, op.id, to && p ? { ...to, plan: p.id } : null);
-    other.push(op); selId = null; paintNow(); if (o.on()) paintTools();
+    if (!p) return;
+    const items = hist.take(p.id, forward);
+    if (!items) return;
+    OPS.putMany('coa', items.map(({ id, item }) => ({ list: o.list, id, item: item ? { ...item, plan: p.id } : null })));
+    // What came back is shown selected (one drawing), so it is clear what changed.
+    const back = items.filter((x) => x.item);
+    selId = back.length === 1 ? back[0].id : null;
+    paintNow(); if (o.on()) paintTools();
   }
+  const undoBar = (opt = {}) => { const b = dkUndoButtons({ undo: () => doUndo(false), redo: () => doUndo(true), count: () => hist.count(histKey()), ...opt }); undoBars.add(b); return b; };
+  const floatBar = undoBar({ big: true });
+  o.el.append(floatBar);
   function clearAll() {
     if (!marks.length) return;
-    confirmDialog('Tekening wissen', `Alle ${marks.length} tekeningen ${o.list === 'shipmarks' ? 'op het schip' : 'op dit plan'} wissen, ook op de andere schermen?`, 'Wissen', () => { OPS.putMany('coa', marks.map((m) => ({ list: o.list, id: m.id, item: null }))); undo.length = 0; redo.length = 0; selId = null; paintNow(); paintTools(); });
+    confirmDialog('Tekening wissen', `Alle ${marks.length} tekeningen ${o.list === 'shipmarks' ? 'op het schip' : 'op dit plan'} wissen, ook op de andere schermen?`, 'Wissen', () => { hist.push(histKey(), marks.map((m) => ({ id: m.id, before: cleanMark(m), after: null }))); OPS.putMany('coa', marks.map((m) => ({ list: o.list, id: m.id, item: null }))); selId = null; paintNow(); paintTools(); toast('Tekening gewist · Ongedaan maken zet alles terug'); });
   }
 
   /* ---------- text and labels ---------- */
@@ -358,9 +368,8 @@ function coaDrawLayer(o) {
             h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => { const c = DK.copy(s); delete c.id; delete c.updatedAt; delete c.z; DK.moveBy(c, 24, 24); commitMark(c); selId = c.id; paintNow(); paintTools(); } }, icon('history'), 'Kopie'),
             h('button', { class: 'btn zp-btn danger', onclick: () => { removeMark(s); paintNow(); paintTools(); } }, icon('trash'), 'Verwijderen'))) : null,
         h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Tekening')),
+          h('div', { class: 'dk-urrow' }, undoBar({ labels: true })),
           h('div', { class: 'zp-btnrow' },
-            h('button', { class: 'btn zp-btn', title: 'Ongedaan maken (Ctrl+Z)', onclick: () => doUndo(false), disabled: !undo.length || null }, icon('left'), 'Ongedaan'),
-            h('button', { class: 'btn zp-btn', title: 'Opnieuw (Ctrl+Y)', onclick: () => doUndo(true), disabled: !redo.length || null }, icon('right'), 'Opnieuw'),
             h('button', { class: 'btn zp-btn danger', onclick: clearAll }, icon('trash'), 'Alles wissen')),
           h('p', { class: 'zp-hint' }, o.hint || 'Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken; pijltjes verplaatsen. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
     }

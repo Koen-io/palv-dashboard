@@ -12,6 +12,7 @@
 - **Snel bovenaan** in elk iconenpaneel (Whiteboard, COA-tekenlaag, Teken Schip): het tactische schip van de COA Planner (rood/groen met 45/90/139°), de scheepssectoren, de COA-symbolen en alle helikopters
 
 ### Tekenen overal: verplaatsen en draaien zonder Selecteren
+- **Ongedaan maken en Opnieuw overal**: gebogen pijlen terug en vooruit, zwevend rechtsboven op elk tekenvlak (groot genoeg voor een vinger), in de werkbalk van het Whiteboard en in het tekenpaneel; ook Ctrl+Z / Ctrl+Y. Tot 1000 stappen per bord of plan, ook verslepen, draaien, schalen, kleur, verwijderen en Leegmaken / Alles wissen (in één stap terug te zetten). Wisselen van bord en terug houdt de geschiedenis; wat terugkomt wordt even geselecteerd
 - **Vrije pijl** (nieuw gereedschap, sneltoets F op het Whiteboard): teken uit de vrije hand zoals met de pen; aan het eind komt vanzelf een pijlpunt in de richting waarin je eindigde
 - **Prullenbak bij de selectie**: onder elk geselecteerd object staat een kleine rode prullenbak om het meteen te verwijderen (tegenover de draaigreep, zodat ze elkaar nooit raken)
 - **Raster op het Whiteboard**: kies Geen, Stippen of **Lijnen** (ruitjes elke 50, dikker elke 250 eenheden)

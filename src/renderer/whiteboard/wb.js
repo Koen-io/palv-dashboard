@@ -116,7 +116,9 @@ function wbCreate(body, w) {
   const pointers = new Map(); // active pointers for pinch
   let pinch = null;
   const remote = new Map();   // screen id -> { name, cur, at, stroke, color }
-  const undo = [], redo = [];
+  // Undo and redo, per board (drawkit.js), with every button that shows them.
+  const undoBars = new Set();
+  const hist = dkHistory(() => paintUndo());
   let textBox = null;
   let thumbTimer = null, presenceTimer = null;
   const board = () => (cfg.boardId ? OPS.get('boards', 'boards', cfg.boardId) : null);
@@ -179,29 +181,32 @@ function wbCreate(body, w) {
     const fresh = !e.id;
     e.id = id; e.board = cfg.boardId; e.by = OPS.screen.name;
     if (e.z === 0 && fresh) e.z = lowZ(); else if (e.z == null) e.z = nextZ();
-    undo.push({ id, before: before ? clean(before) : null, after: clean(e) });
-    if (undo.length > 100) undo.shift();
-    redo.length = 0;
+    hist.push(cfg.boardId, [{ id, before: before ? clean(before) : null, after: clean(e) }]);
     OPS.put('boards', 'elements', id, clean(e));
     scheduleThumb();
   }
   function remove(e) {
-    undo.push({ id: e.id, before: clean(e), after: null });
-    redo.length = 0;
+    hist.push(cfg.boardId, [{ id: e.id, before: clean(e), after: null }]);
     OPS.put('boards', 'elements', e.id, null);
     if (sel === e.id) sel = null;
     scheduleThumb();
   }
-  function doUndo(fromRedo) {
-    const stack = fromRedo ? redo : undo, other = fromRedo ? undo : redo;
-    const op = stack.pop();
-    if (!op) return;
-    const to = fromRedo ? op.after : op.before;
-    OPS.put('boards', 'elements', op.id, to ? { ...to, board: cfg.boardId } : null);
-    other.push(op);
-    sel = null;
+  // One step back (or forward with `forward`): whatever that step changed, in one write.
+  function doUndo(forward) {
+    if (!cfg.boardId || lockedOut()) return;
+    if (textBox) commitText();
+    const items = hist.take(cfg.boardId, forward);
+    if (!items) return;
+    OPS.putMany('boards', items.map(({ id, item }) => ({ list: 'elements', id, item: item ? { ...item, board: cfg.boardId } : null })));
+    // What came back is shown selected (one element), so it is clear what changed.
+    const back = items.filter((x) => x.item);
+    sel = back.length === 1 ? back[0].id : null;
+    request();
+    if (cfg.sideTab === 'draw') paintSide();
     scheduleThumb();
   }
+  const undoBar = (opt = {}) => { const b = dkUndoButtons({ undo: () => doUndo(false), redo: () => doUndo(true), count: () => (cfg.boardId ? hist.count(cfg.boardId) : { undo: 0, redo: 0 }), ...opt }); undoBars.add(b); return b; };
+  function paintUndo() { for (const b of undoBars) { if (b.isConnected) b.paint(); else if (b.dataset.seen) undoBars.delete(b); else b.dataset.seen = '1'; } }
   // A small picture of the board for the list, after a change (2.5 s of quiet).
   function scheduleThumb() { clearTimeout(thumbTimer); thumbTimer = setTimeout(makeThumb, 2500); }
   function makeThumb() {
@@ -410,6 +415,7 @@ function wbCreate(body, w) {
   const presence = h('div', { class: 'wb-presence' });
   const modeHint = h('div', { class: 'wb-modehint' });
   const coordLbl = h('div', { class: 'wb-coord', hidden: true });
+  hud.append(undoBar({ big: true }));
   hud.append(h('div', { class: 'wb-hud-tl' }, modeHint, presence), h('div', { class: 'wb-hud-bl' }, coordLbl), h('div', { class: 'wb-hud-br' },
     h('button', { class: 'wb-hbtn', title: 'Uitzoomen (-)', onclick: () => zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 1 / 1.25) }, '−'),
     zoomLbl,
@@ -837,13 +843,11 @@ function wbCreate(body, w) {
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Bord')),
         field('Achtergrond', h('div', { class: 'wb-bgs' }, Object.entries(WB_BG).map(([k, d]) => h('button', { class: 'wb-bg' + (cur === k ? ' on' : ''), style: `--c:${d.fill}`, title: d.name, onclick: () => setBg(k) }, h('i'), h('span', {}, d.name))))),
         field('Raster', segmented([{ value: 'off', label: 'Geen' }, { value: 'dots', label: 'Stippen' }, { value: 'lines', label: 'Lijnen' }], gridMode(), (v) => { cfg.grid = v; save(); request(); })),
-        h('div', { class: 'zp-btnrow' },
-          h('button', { class: 'btn zp-btn', title: 'Ongedaan maken (Ctrl+Z)', onclick: () => doUndo(false), disabled: !undo.length || null }, icon('left'), 'Ongedaan'),
-          h('button', { class: 'btn zp-btn', title: 'Opnieuw (Ctrl+Y)', onclick: () => doUndo(true), disabled: !redo.length || null }, icon('right'), 'Opnieuw'),
-          h('button', { class: 'btn zp-btn', title: 'Alles in beeld (0)', onclick: () => fitAll() }, icon('target'), 'Alles in beeld')),
+        h('div', { class: 'dk-urrow' }, undoBar({ labels: true })),
+        h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', title: 'Alles in beeld (0)', onclick: () => fitAll() }, icon('target'), 'Alles in beeld')),
         h('div', { class: 'zp-btnrow' },
           h('button', { class: 'btn zp-btn', onclick: exportPng }, icon('download'), 'Als PNG'),
-          h('button', { class: 'btn zp-btn danger', onclick: () => { if (!els.length) return; confirmDialog('Bord leegmaken', `Alle ${els.length} elementen van dit bord verwijderen, ook op de andere schermen?`, 'Leegmaken', () => { OPS.putMany('boards', els.map((e) => ({ list: 'elements', id: e.id, item: null }))); undo.length = 0; redo.length = 0; scheduleThumb(); }); } }, icon('trash'), 'Leegmaken')),
+          h('button', { class: 'btn zp-btn danger', onclick: () => { if (!els.length) return; confirmDialog('Bord leegmaken', `Alle ${els.length} elementen van dit bord verwijderen, ook op de andere schermen?`, 'Leegmaken', () => { hist.push(cfg.boardId, els.map((e) => ({ id: e.id, before: clean(e), after: null }))); OPS.putMany('boards', els.map((e) => ({ list: 'elements', id: e.id, item: null }))); sel = null; scheduleThumb(); toast('Bord leeggemaakt · Ongedaan maken zet alles terug'); }); } }, icon('trash'), 'Leegmaken')),
         h('p', { class: 'zp-hint' }, 'Vrije pijl (F): teken als met de pen, de punt komt vanzelf aan het eind. De rode prullenbak onder een selectie verwijdert haar. Verplaatsen zonder te wisselen: sleep een icoon of tekst direct, of druk even op een lijn, pijl of vorm en sleep. Draaien aan de ronde greep boven de selectie, met twee vingers of met [ en ]; schalen aan de hoeken. Sneltoetsen: V selecteren, H verschuiven, P pen, M markeerstift, L lijn, A pijl, R rechthoek, E ellips, T tekst, I icoon, X gum, K kaart; + − 0 zoomen; pijltjes verplaatsen de selectie; Delete verwijdert haar; Shift houdt lijnen op 45° en vormen vierkant. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
   }
   function turnSel(d) { const e = selEl(); if (!e) return; const before = DK.copy(e); Object.assign(e, DK.transform(e, { drot: d }, measure)); commit(e, before); request(); paintSide(); }
@@ -1011,9 +1015,9 @@ function wbCreate(body, w) {
   }
   function openBoard(id) {
     if (textBox) commitText();
-    cfg.boardId = id; sel = null; undo.length = 0; redo.length = 0; remote.clear();
+    cfg.boardId = id; sel = null; remote.clear();
     save();
-    loadView(); reload(); fitPen(); paintBar(); paintSide();
+    loadView(); reload(); fitPen(); paintBar(); paintSide(); paintUndo();
     if (id) liveSend({ cur: null });
   }
   function exportPng() {
@@ -1034,8 +1038,7 @@ function wbCreate(body, w) {
     quick.replaceChildren(...['select', 'pan', 'pen', 'farrow', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => setTool(k) }, icon(WB_TOOLS[k].icon))),
       h('span', { class: 'wb-swatch', style: `--c:${cfg.color}`, title: 'Huidige kleur (kies in het paneel Tekenen)', onclick: () => showTab('draw') }),
       h('span', { class: 'wb-sep' }),
-      h('button', { class: 'btn zp-btn wb-qbtn', title: 'Ongedaan maken (Ctrl+Z)', onclick: () => doUndo(false) }, icon('left')),
-      h('button', { class: 'btn zp-btn wb-qbtn', title: 'Opnieuw (Ctrl+Y)', onclick: () => doUndo(true) }, icon('right')));
+      undoBar());
   }
   const mapBtn = h('button', { class: 'btn zp-btn', title: 'Een stuk kaart op het bord zetten (K)', onclick: mapDialog }, icon('globe'), 'Kaart');
   const boardsBtn = h('button', { class: 'btn zp-btn', title: 'Borden: openen, nieuw, beheren', onclick: () => showTab('boards') }, icon('folder'), 'Borden');

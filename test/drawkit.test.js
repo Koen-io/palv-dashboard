@@ -110,3 +110,23 @@ test('tekenkit: de punt van een vrije pijl wijst in de laatste tekenrichting', (
   assert.strictEqual(DK.pathHead([[5, 5]], 4), null);
   assert.ok(DK.selectAfter({ type: 'path', arrow: 'end' }) && !DK.selectAfter({ type: 'path' }));
 });
+
+test('tekenkit: ongedaan maken en opnieuw, per bord, tot 1000 stappen', () => {
+  const H = run('dkHistory()');
+  H.push('b1', [{ id: 'a', before: null, after: { x: 1 } }]);
+  H.push('b1', [{ id: 'a', before: { x: 1 }, after: { x: 2 } }]);
+  H.push('b2', [{ id: 'z', before: null, after: { x: 9 } }]);
+  assert.strictEqual(H.count('b1').undo, 2);
+  assert.strictEqual(JSON.stringify(H.take('b1', false)), JSON.stringify([{ id: 'a', item: { x: 1 } }]));
+  assert.strictEqual(JSON.stringify(H.take('b1', false)), JSON.stringify([{ id: 'a', item: null }]));
+  assert.strictEqual(H.take('b1', false), null, 'niets meer terug');
+  assert.strictEqual(JSON.stringify(H.take('b1', true)), JSON.stringify([{ id: 'a', item: { x: 1 } }]));
+  assert.strictEqual(H.count('b2').undo, 1, 'een ander bord houdt zijn eigen geschiedenis');
+  H.push('b1', [{ id: 'q', before: null, after: {} }]);
+  assert.strictEqual(H.count('b1').redo, 0, 'een nieuwe stap wist het opnieuw-doen');
+  // Clearing a board is one step for all its elements.
+  H.push('b1', [{ id: 'a', before: { x: 1 }, after: null }, { id: 'q', before: {}, after: null }]);
+  assert.strictEqual(H.take('b1', false).length, 2);
+  for (let i = 0; i < 1200; i += 1) H.push('big', [{ id: String(i), before: null, after: {} }]);
+  assert.strictEqual(H.count('big').undo, 1000);
+});

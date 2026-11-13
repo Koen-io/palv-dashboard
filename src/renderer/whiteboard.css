@@ -156,3 +156,22 @@ body.touch .dk-rot svg { width: 24px; height: 24px; }
 .dk-sel.busy .dk-del { display: none; }
 body.touch .dk-del { width: 38px; height: 38px; transform: translate(-50%, 16px); }
 body.touch .dk-del svg { width: 20px; height: 20px; }
+
+/* undo / redo (drawkit.js) */
+.dk-urbar { display: inline-flex; gap: 0.25rem; }
+.dk-ur { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; height: 2rem; min-width: 2.2rem; padding: 0 0.45rem; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: 700 0.72rem var(--font-ui); cursor: pointer; touch-action: manipulation; }
+.dk-ur.lab { flex: 1; }
+.dk-ur:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.dk-ur:active:not(:disabled) { transform: translateY(1px); }
+.dk-ur:disabled { opacity: 0.38; cursor: default; }
+.dk-ur-ic { display: grid; place-items: center; }
+.dk-ur-ic svg { width: 1.05rem; height: 1.05rem; }
+.dk-urbar.big { position: absolute; z-index: 6; top: 0.6rem; right: 0.6rem; padding: 0.25rem; gap: 0.3rem; border-radius: 99px; background: rgba(7, 13, 24, 0.88); border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); pointer-events: auto; }
+.dk-urbar.big .dk-ur { width: 2.6rem; height: 2.6rem; padding: 0; border-radius: 50%; border: 0; background: transparent; color: #e9eff8; }
+.dk-urbar.big .dk-ur:hover:not(:disabled) { background: #1f3050; color: #ffd21f; }
+.dk-urbar.big .dk-ur-ic svg { width: 1.35rem; height: 1.35rem; }
+.dk-urbar.big .dk-ur:disabled { opacity: 0.3; }
+body.touch .dk-urbar.big .dk-ur { width: 3.2rem; height: 3.2rem; }
+body.touch .dk-urbar.big .dk-ur-ic svg { width: 1.6rem; height: 1.6rem; }
+.dk-urrow { display: flex; gap: 0.3rem; }
+.dk-urbar[hidden] { display: none; }

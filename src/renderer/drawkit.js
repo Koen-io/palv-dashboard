@@ -382,3 +382,53 @@ function dkIconPanel(o) {
   paint();
   return h('div', { class: 'zp-panel dk-iconpanel' }, h('div', { class: 'zp-profsearch' }, icon('search'), q), quickSec, cats, count, grid, o.extra || null);
 }
+
+/* ---------- undo and redo ---------- */
+// Every step on a drawing surface can be taken back and done again: drawing, moving, turning, scaling,
+// colours, deleting and clearing (one step for the lot). Kept per board or plan (`key`), so switching to
+// another board and back keeps its history, the last DK_HISTORY steps each (hours of work).
+const DK_HISTORY = 1000;
+const DK_UNDO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>';
+const DK_REDO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>';
+// A step is a list of { id, before, after } (null = not there). `onChange` after every change, for the buttons.
+function dkHistory(onChange) {
+  const all = new Map();
+  const of = (key) => { if (!all.has(key)) all.set(key, { undo: [], redo: [] }); return all.get(key); };
+  const changed = () => { if (onChange) onChange(); };
+  return {
+    push(key, items) {
+      if (!items.length) return;
+      const s = of(key);
+      s.undo.push(items);
+      if (s.undo.length > DK_HISTORY) s.undo.shift();
+      s.redo.length = 0;
+      changed();
+    },
+    // The items to write for one step back (or forward): [{ id, item }] with item null for a removal.
+    take(key, forward) {
+      const s = of(key), from = forward ? s.redo : s.undo, to = forward ? s.undo : s.redo;
+      const step = from.pop();
+      if (!step) return null;
+      to.push(step);
+      changed();
+      return step.map((x) => ({ id: x.id, item: forward ? x.after : x.before }));
+    },
+    count(key) { const s = of(key); return { undo: s.undo.length, redo: s.redo.length }; },
+  };
+}
+// The two buttons (a bent arrow back, a bent arrow forward). `big` for the floating pair on the surface.
+function dkUndoButtons({ undo, redo, count, big = false, labels = false }) {
+  const mk = (svg, label, title, fn) => h('button', { class: 'dk-ur' + (big ? ' big' : '') + (labels ? ' lab' : ''), type: 'button', title, onclick: (ev) => { ev.stopPropagation(); fn(); } }, h('span', { class: 'dk-ur-ic', html: svg }), labels ? h('span', {}, label) : null);
+  const u = mk(DK_UNDO_SVG, 'Ongedaan', 'Ongedaan maken (Ctrl+Z)', undo);
+  const r = mk(DK_REDO_SVG, 'Opnieuw', 'Opnieuw (Ctrl+Y)', redo);
+  const el = h('div', { class: 'dk-urbar' + (big ? ' big' : '') }, u, r);
+  el.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+  el.paint = () => {
+    const c = count();
+    u.disabled = !c.undo; r.disabled = !c.redo;
+    u.title = c.undo ? `Ongedaan maken (Ctrl+Z) · nog ${c.undo} ${c.undo === 1 ? 'stap' : 'stappen'} terug` : 'Niets om ongedaan te maken';
+    r.title = c.redo ? `Opnieuw (Ctrl+Y) · ${c.redo} ${c.redo === 1 ? 'stap' : 'stappen'} vooruit` : 'Niets om opnieuw te doen';
+  };
+  el.paint();
+  return el;
+}
