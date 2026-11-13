@@ -148,6 +148,13 @@ contextBridge.exposeInMainWorld('palv', {
     photo: (q) => ipcRenderer.invoke('ais:photo', q),
     setKey: (k) => ipcRenderer.invoke('ais:setKey', k),
   },
+  // 1.51: e-mail from PALV-Dashboard@outlook.com (src/main/mail.js).
+  mail: {
+    status: () => ipcRenderer.invoke('mail:status'),
+    send: (job) => ipcRenderer.invoke('mail:send', job),
+    preview: (content) => ipcRenderer.invoke('mail:preview', content),
+    forgetRecent: (addr) => ipcRenderer.invoke('mail:forgetRecent', addr),
+  },
   docs: {
     pick: (slot) => ipcRenderer.invoke('docs:pick', slot),
     remove: (slot) => ipcRenderer.invoke('docs:remove', slot),

@@ -14,6 +14,7 @@ const plan = require('./main/plan');
 const ais = require('./ais');
 const offshore = require('./offshore');
 const docs = require('./main/docs');
+const mail = require('./main/mail');
 const privBrowser = require('./main/privbrowser');
 const screenlock = require('./main/screenlock');
 require('./main/tiles');
@@ -435,6 +436,7 @@ app.whenReady().then(() => {
   const aisOut = ais.start({ dir: app.getPath('userData'), screens, share, store: planStore, peerGet: plan.peerGet, request: screens.request, log: lg });
   offshore.start({ dir: app.getPath('userData'), fetchText: plan.fetchText, log: lg, ais, store: planStore, poke: plan.pokePeers });
   docs.start({ store: planStore, getWin: () => win, poke: plan.pokePeers });
+  mail.start({ store: planStore, poke: plan.pokePeers, log: lg, screenName: () => screens.name(), test: !!shotPath });
   // Screenshots leave updates and the screens overview out, unless asked for (--shot-full).
   if (shotPath && !process.argv.includes('--shot-full')) return;
   if (!shotPath) updater.start({ repository: UPDATE_REPO, onStatus: (s) => send('update:status', s) });

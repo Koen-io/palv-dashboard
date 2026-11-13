@@ -111,6 +111,10 @@ async function bundleEntries(arch, icns) {
     { name: `${appDir}/assets`, type: 'dir', mode: 0o755 }, ...walk(path.join(root, 'assets'), `${appDir}/assets`),
     { name: `${appDir}/build`, type: 'dir', mode: 0o755 },
     { name: `${appDir}/build/icon.png`, type: 'file', mode: 0o644, data: fs.readFileSync(path.join(root, 'build', 'icon.png')) },
+    // 1.51: the mail module needs nodemailer (no dependencies of its own). The Windows-only packages
+    // (adblocker, tldts for the private browser) stay out.
+    { name: `${appDir}/node_modules`, type: 'dir', mode: 0o755 },
+    { name: `${appDir}/node_modules/nodemailer`, type: 'dir', mode: 0o755 }, ...walk(path.join(root, 'node_modules', 'nodemailer'), `${appDir}/node_modules/nodemailer`),
   );
   return { entries, minimumSystem };
 }

@@ -1,7 +1,7 @@
 {
   "name": "p-alv-dashboard",
   "productName": "P-ALV Dashboard",
-  "version": "1.50.0",
+  "version": "1.51.0",
   "description": "Aanpasbaar operationeel dashboard voor de Police Air Support Unit",
   "author": "P-ALV",
   "license": "UNLICENSED",
@@ -70,6 +70,7 @@
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.20.3",
+    "nodemailer": "^7.0.13",
     "tldts": "^7.4.19"
   }
 }

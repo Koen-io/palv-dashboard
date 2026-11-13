@@ -224,6 +224,8 @@ onChange(resetAgents);
 
 module.exports = {
   load, generate, pair, code, parseCode, handout, adopt, fetchFrom, request, connect, serverOptions, securePort, status, onChange,
-  has: () => !!st.key, fp: () => fpr, createdAt: () => st.createdAt, IDENTITY, TLS,
+  has: () => !!st.key, fp: () => fpr,
+  // A key of its own for something the unit keeps sealed in its shared files (1.51: the mail account).
+  derive: (info) => (st.key ? hkdf(st.key, String(info)) : null), createdAt: () => st.createdAt, IDENTITY, TLS,
   _set: (key, createdAt = Date.now()) => set(key, createdAt, 'test'),
 };

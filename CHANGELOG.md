@@ -1,5 +1,15 @@
 # Wijzigingen
 
+## 1.51.0
+
+### E-mail vanaf het dashboard (eerst in de COA Planner)
+- **Knop E-mail** in de COA Planner: verstuur de COA-planning vanaf het dashboardadres **palvdashboard@gmail.com**, op elk scherm, zonder iets per scherm in te stellen
+- **Verzend-pop-up**: ontvangers als blokjes met controle op het adres, recente adressen met één tik, CC, onderwerp, een eigen toelichting, "Verstuurd door" (onthouden per scherm) en rechts een **live voorbeeld** van het bericht
+- **Formaat kiezen**: alleen wat bij de inhoud past. Voor de COA Planner **PDF** (A5-kniebordkaart) en/of **Afbeelding (PNG)**; het overzicht van de vier COA's staat altijd ook in de e-mail zelf. Welke formaten later bij routes, missies, whiteboard en timings horen, ligt al vast
+- **Huisstijl-e-mail**: kop met het uilembleem en de amber lijn, de melding dat het een **automatisch bericht** is waarop niet geantwoord kan worden, het COA-overzicht met tabel, waarschuwingen (approach into sun, hoogteconflict), de bijlagen, een **handtekening** met wie het verstuurde, vanaf welk scherm en de DTG, en onderaan een **disclaimer** (vertrouwelijk, alleen voor de geadresseerde, verwijderen bij onjuiste ontvangst) in het Nederlands en Engels
+- **Animatie**: tijdens het verzenden vliegt een papieren vliegtuigje langs een gestippelde baan met radarringen; daarna tekent een groene ring zich met een vinkje, met de tijd in Z, het aantal ontvangers en de bijlagen. Lukt het niet, dan zegt het dashboard in gewone woorden waarom, met Opnieuw proberen
+- Het app-wachtwoord van het dashboardadres staat versleuteld met de eenheidssleutel in de gedeelde bestanden van de eenheid: nooit leesbaar op schijf, nooit in de code. Koppelen of vervangen met `node scripts/mail-wachtwoord.js`
+
 ## 1.50.0
 
 ### COA Planner en tekenen op het touchscreen

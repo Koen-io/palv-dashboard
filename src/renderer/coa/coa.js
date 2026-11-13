@@ -11,6 +11,7 @@
 // on the large ship of Teken Schip goes in 'shipmarks' the same way (1.49).
 // Directions are stored true (°T); the plan's `ref` only says how they are shown and typed.
 const COA_SEPS = [200, 300, 500, 1000];
+const COA_MAIL_DTG = (d) => `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z ${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
 
 function coaCfg(w) {
   const c = w.cfg;
@@ -154,8 +155,9 @@ function coaCreate(body, w) {
   const missionBtn = h('button', { class: 'btn zp-btn', title: 'W/V, zon en maan en de ingress naar een missie in Mission Planning', onclick: () => missionDialog() }, icon('shield'), 'Naar missie');
   const pdfBtn = h('button', { class: 'btn zp-btn', title: 'De kniebordkaart als PDF (A5 staand)', onclick: () => exportA5('pdf') }, icon('download'), 'PDF A5');
   const printBtn = h('button', { class: 'btn zp-btn primary', title: 'Afdrukken op A5 staand, voor het kniebord', onclick: () => exportA5('print') }, icon('note'), 'Afdrukken A5');
+  const mailBtn = h('button', { class: 'btn zp-btn', title: 'Deze COA-planning e-mailen vanaf het dashboardadres (PDF en/of afbeelding)', onclick: () => mailPlan() }, icon('mail'), 'E-mail');
   bar.append(h('span', { class: 'mp-title coa-title' }, icon('target'), 'COA PLANNER'), sel, newBtn, renBtn, delBtn,
-    h('span', { class: 'coa-barsep' }), refSeg, upSeg, shadowSw, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, pdfBtn, printBtn);
+    h('span', { class: 'coa-barsep' }), refSeg, upSeg, shadowSw, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, mailBtn, pdfBtn, printBtn);
   function paintBar() {
     const list = coaPlans();
     sel.replaceChildren(...list.map((p) => h('option', { value: p.id, selected: p.id === cfg.planId || null }, p.name)));
@@ -827,6 +829,61 @@ ${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) =
       if (r && r.ok) toast(how === 'print' ? 'Naar de printer gestuurd (A5 staand)' : 'Kniebordkaart opgeslagen (A5 staand)');
       else if (r && r.error) toast(r.error, true);
     } catch (err) { toast(String(err.message || err), true); }
+  }
+
+  /* ---------- e-mail (1.51) ---------- */
+  // The mail carries the summary of the plan itself (readable on any phone without opening anything) and
+  // the kneeboard card as PDF and/or PNG; which formats fit a COA plan is laid down in mail-ui.js.
+  function mailContent() {
+    const v = vm, R = v.refText;
+    const strip = (s) => String(s).replace(/<[^>]+>/g, '');
+    const d = new Date(P.hhour || Date.now());
+    const pos = v.pos ? `${PlanCoords.fmt(v.pos.lat, v.pos.lon, 'ddm')}${v.pos.dr ? ' (DR at H)' : ''}` : '—';
+    const heloShort = (hl) => `${hl.head >= 0 ? 'HW' : 'TW'}${Math.abs(Math.round(hl.head))} XW${Math.abs(Math.round(hl.cross))}${hl.side}`;
+    const rows = v.coas.map((c) => [
+      { v: `COA ${c.n}`, badge: c.brc ? 'BRC' : '' }, `${v.fmt(c.heading)}°`,
+      `${c.app.dir == null ? '---' : v.fmt(c.app.dir)}° / ${Math.round(c.app.spd)}${c.gust ? ` G${Math.round(c.gust.spd)}` : ''}`,
+      { v: coaRelText(c), tone: c.rel && c.rel.side === 'G' ? 'g' : c.rel && c.rel.side === 'R' ? 'r' : '' },
+      heloShort(c.helo), c.approach.text, c.sea ? c.sea.name : '—']);
+    const m = P._sea && P._sea.model, ds = m && m.hs != null ? COA_CALC.douglas(m.hs) : null;
+    const sea = m ? `Sea state ${ds ? ds.code + ' ' + ds.name : '–'} · Hs ${m.hs != null ? m.hs.toFixed(1) + ' m' : '–'} · Tm ${m.period != null ? m.period.toFixed(0) + ' s' : '–'} · waves from ${m.dir != null ? v.fmt(m.dir) + '°' : '–'}${m.sst != null ? ' · SST ' + m.sst.toFixed(0) + ' °C' : ''}` : '';
+    const lx = ASTRO.formatLux(v.light.lux);
+    const sm = `Sun ${v.fmt(v.sun.az)}° elev ${Math.round(v.sun.alt)}° · Moon ${v.fmt(v.moon.az)}° elev ${Math.round(v.moon.alt)}° ${Math.round(v.moon.fraction * 100)}%${v.phase ? ' · ' + v.phase.name : ''} · ${lx.value} ${lx.unit}`;
+    const conf = COA_CALC.heightConflicts(P.heights, +P.sep || 500);
+    const hrows = P.heights.filter((r) => r.cs || r.type || r.alt || r.role);
+    return {
+      module: 'COA PLANNER',
+      kicker: 'COA-planning',
+      title: P.name,
+      subtitle: `H-hour ${COA_MAIL_DTG(d)}`,
+      intro: 'Hierbij de COA-planning met de wind over het dek voor de vier Courses of Approach. Het overzicht staat hieronder; de volledige kniebordkaart (A5) zit als bijlage bij dit bericht.',
+      sections: [
+        { heading: 'Overzicht', rows: [
+          ['Assault Track', `${v.fmt(v.at)}°${R}`], ['Boat Ref Course', v.brc ? `${v.fmt(v.brc.heading)}°${R}` : '—'],
+          ['Boat speed', `${Math.round(+P.bs)} kt`], ['W/V', `${v.fmt(v.wd)}°${R} / ${Math.round(v.ws)}${v.gust ? ' G' + Math.round(v.gust) : ''} kt`],
+          [`Ship position${P.posLabel ? ' · ' + P.posLabel : ''}`, pos, true],
+          ['H-hour', `${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z`], ['Reference', `°${R}${R === 'M' ? ` · var ${Math.abs(v.decl).toFixed(1)}${v.decl >= 0 ? 'E' : 'W'}` : ''}`],
+        ] },
+        hrows.length ? { heading: 'Hoogtes · deconflictie', rows: hrows.map((r) => [[r.cs, r.type].filter(Boolean).join(' · ') || '—', [r.alt ? `${r.alt} ft` : '', r.role].filter(Boolean).join(' · ') || '—']) } : null,
+      ].filter(Boolean),
+      table: { heading: 'Courses of Approach', cols: ['COA', 'Ship HDG', 'Rel. wind °/kt', 'Rel. bearing', 'Helo on AT', 'Approach', 'Sea'], rows, nowrap: [0, 1, 2, 3, 4], highlight: v.coas.map((c, i) => (c.brc ? i : -1)).filter((i) => i >= 0), note: 'HW/TW head-/tailwind · XW crosswind from L/R (kt) · Rel. wind = apparent wind over deck · G stbd, R port' },
+      lines: [strip(sm), sea],
+      warnings: [v.glareSun ? 'APPROACH INTO SUN' : '', v.glareMoon ? 'APPROACH INTO MOON (NVG)' : '', conf.length ? `HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) => `${c.a.name} ↔ ${c.b.name} ${c.diff} ft`).join(' · ')} (min. ${+P.sep || 500} ft)` : ''],
+    };
+  }
+  function mailPlan() {
+    if (!P || !vm) return;
+    flush();
+    const name = (/coa/i.test(P.name) ? P.name : `COA ${P.name}`).replace(/[\\/:*?"<>|]+/g, ' ').trim();
+    openMailDialog({
+      kind: 'coa',
+      subject: `${/coa/i.test(P.name) ? P.name : `COA-planning ${P.name}`} · H-hour ${COA_MAIL_DTG(new Date(P.hhour || Date.now()))}`,
+      content: mailContent(),
+      files: {
+        pdf: () => ({ html: a5Html('pdf'), pageSize: 'A5', name, label: 'Kniebordkaart A5 staand' }),
+        png: () => ({ html: a5Html('pdf'), width: 560, name, label: 'Kniebordkaart als afbeelding' }),
+      },
+    }).catch((err) => toast(String(err.message || err), true));
   }
 
   /* ---------- painting ---------- */
