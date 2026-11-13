@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 1.50.0
+
+### COA Planner en tekenen op het touchscreen
+- **Tekenpaneel compacter en in breedte aan te passen**: kleinere knoppen voor wie recht voor het scherm staat, alles past (geen knoppen meer buiten beeld, geen schuifbalk opzij). Aan de rechterrand van het paneel zit een **greep**: sleep hem voor een breder of smaller paneel (meer ruimte geeft meer kolommen), dubbeltik voor de standaardbreedte. Werkt ook in Teken Schip; de breedte wordt per scherm onthouden
+- **Draai- en prullenbakgreep kleiner** op het touchscreen; het aanraakvlak eromheen blijft ruim
+- **Stippellijn** in elk tekenpaneel (Whiteboard, COA-tekenlaag, Teken Schip): kies Doorgetrokken of Stippellijn onder Kleur en dikte, voor pen, vrije pijl, lijn, pijl, rechthoek en ellips; met een selectie zet je die meteen om. Ook op de A5-afdruk en de PNG
+- **Knop Icoon weg uit het gereedschap**: een icoon kies je onder het tabblad Iconen (dat zet het plaatsen vanzelf aan)
+- **Schuif Schaduw** in de COA-balk, naast Tekenen: de schaduw van het schip (zon of maan) naast elk schip aan of uit, voor het hele plan, op alle schermen en op de A5-kaart
+- **Knop Nacht verwijderd**
+- Whiteboard: de tabbladen **Tekenen, Iconen, Kaart en Borden** lager, met icoon en naam naast elkaar, alle vier in beeld; in de COA-tekenlaag staan Tekenen en Iconen voluit onder de titel
+
 ## 1.49.0
 
 ### COA Planner: Teken Schip

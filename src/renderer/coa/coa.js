@@ -14,7 +14,8 @@ const COA_SEPS = [200, 300, 500, 1000];
 
 function coaCfg(w) {
   const c = w.cfg;
-  for (const [k, v] of Object.entries({ planId: null, draw: false, tool: 'pen', color: '#ff4b55', width: 5, fill: false, fontSize: 30, iconSize: 90, iconId: 'aw139', night: false, toolTab: 'draw' })) if (c[k] === undefined) c[k] = v;
+  for (const [k, v] of Object.entries({ planId: null, draw: false, tool: 'pen', color: '#ff4b55', width: 5, fill: false, fontSize: 30, iconSize: 90, iconId: 'aw139', toolTab: 'draw', dash: false })) if (c[k] === undefined) c[k] = v;
+  delete c.night; // the night button is gone (1.50)
   return c;
 }
 const coaPlans = () => OPS.list('coa', 'plans').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -59,7 +60,7 @@ function coaModel(p, offMin = 0) {
   return {
     p, base, pos, lat, lon, at, wd, ws, gust, decl, ref, refText: ref, up: p.up === 'n' ? 0 : at,
     fmt: (t) => C.deg3(disp(t)), disp, coas, brc, sun, moon, light, phase: C.lightPhase(sun.alt), dark,
-    glareSun: !!(glareSun && glareSun.on), glareMoon: !!(glareMoon && glareMoon.on), shadow, tAstro, offMin, sea,
+    glareSun: !!(glareSun && glareSun.on), glareMoon: !!(glareMoon && glareMoon.on), shadow, showShadow: p.shadow !== false, tAstro, offMin, sea,
     // What was drawn on the ship in Teken Schip: it goes along on the ship of all four COAs.
     shipMarks: p.id ? OPS.list('coa', 'shipmarks').filter((m) => m.plan === p.id).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : [],
   };
@@ -76,7 +77,9 @@ function coaCreate(body, w) {
   const drawEl = h('div', { class: 'coa-draw' });
   const stage = h('div', { class: 'coa-stage' }, boardEl, drawEl);
   const info = h('aside', { class: 'coa-info' });
-  root.append(bar, h('div', { class: 'coa-body' }, tools, input, stage, info));
+  // The tools are as wide as the screen wants them: drag the grip on their right edge (kept per screen).
+  const toolsGrip = dkPanelGrip(tools, { get: () => cfg.toolsW, set: (w) => { cfg.toolsW = w || undefined; save(); } });
+  root.append(bar, h('div', { class: 'coa-body' }, tools, toolsGrip, input, stage, info));
   body.append(root);
   const timers = [], cleanups = [];
   let P = null;                 // working copy of the open plan
@@ -131,7 +134,8 @@ function coaCreate(body, w) {
   const sel = h('select', { class: 'input zp-sel coa-sel', title: 'Plan kiezen', onchange: () => { flush(); cfg.planId = sel.value || null; save(); layer.clearSel(); load(); paint({ inputs: true }); fetchSoon(true); } });
   const refSeg = segmented([{ value: 'T', label: '°T', title: 'Ware graden (true)' }, { value: 'M', label: '°M', title: 'Magnetische graden: met de variatie op de positie (WMM2025)' }], 'T', (v) => set({ ref: v }));
   const upSeg = segmented([{ value: 'at', label: 'AT boven', title: 'De Assault Track wijst omhoog: de heli komt van onderen' }, { value: 'n', label: 'N boven', title: 'Noord boven' }], 'at', (v) => set({ up: v }));
-  const nightBtn = h('button', { class: 'btn zp-btn', title: 'Nachtstand: gedimd en rood, voor de cockpit en onder NVG', onclick: () => { cfg.night = !cfg.night; save(); root.classList.toggle('night', cfg.night); nightBtn.classList.toggle('on', cfg.night); } }, icon('moon'), 'Nacht');
+  // The shadow of the ship (sun or moon) beside each ship: part of the plan, so every screen and the A5 card follow.
+  const shadowSw = switchTool('Schaduw', 'De schaduw van het schip (zon of maan) naast elk schip aan of uit, ook op de A5-afdruk', () => !P || P.shadow !== false, () => set({ shadow: !(P && P.shadow !== false) }, { repaintInputs: false }));
   const drawSw = switchTool('Tekenen', 'Tekenen op de COA-planning aan of uit: de tekengereedschappen staan dan links', () => cfg.draw, () => { cfg.draw = !cfg.draw; save(); paintMode(); });
   const newBtn = h('button', { class: 'btn zp-btn primary', title: 'Een nieuw plan', onclick: () => {
     const n = coaPlans().length + 1;
@@ -151,20 +155,19 @@ function coaCreate(body, w) {
   const pdfBtn = h('button', { class: 'btn zp-btn', title: 'De kniebordkaart als PDF (A5 staand)', onclick: () => exportA5('pdf') }, icon('download'), 'PDF A5');
   const printBtn = h('button', { class: 'btn zp-btn primary', title: 'Afdrukken op A5 staand, voor het kniebord', onclick: () => exportA5('print') }, icon('note'), 'Afdrukken A5');
   bar.append(h('span', { class: 'mp-title coa-title' }, icon('target'), 'COA PLANNER'), sel, newBtn, renBtn, delBtn,
-    h('span', { class: 'coa-barsep' }), refSeg, upSeg, nightBtn, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, pdfBtn, printBtn);
+    h('span', { class: 'coa-barsep' }), refSeg, upSeg, shadowSw, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, pdfBtn, printBtn);
   function paintBar() {
     const list = coaPlans();
     sel.replaceChildren(...list.map((p) => h('option', { value: p.id, selected: p.id === cfg.planId || null }, p.name)));
     sel.value = cfg.planId || '';
     if (P) { refSeg.setValue(P.ref === 'M' ? 'M' : 'T'); upSeg.setValue(P.up === 'n' ? 'n' : 'at'); }
-    nightBtn.classList.toggle('on', !!cfg.night);
+    shadowSw.paint();
     drawSw.paint();
     // How many drawings the ship of this plan has.
     const n = P ? OPS.list('coa', 'shipmarks').filter((m) => m.plan === P.id).length : 0;
     const badge = shipBtn.querySelector('.coa-shipn');
     badge.hidden = !n; badge.textContent = String(n);
   }
-  root.classList.toggle('night', !!cfg.night);
 
   /* ---------- inputs ---------- */
   // A stepper: − value +, large enough for a finger; holding a button repeats, the value can be typed.
@@ -355,7 +358,7 @@ function coaCreate(body, w) {
         h('div', { class: 'coa-body2 coa-b-moon' + (m.alt < 0 ? ' coa-down' : '') }, h('i', { style: `--f:${m.fraction.toFixed(2)}` }), h('div', {}, h('small', {}, 'MOON'), h('b', {}, `${vm.fmt(m.az)}°${vm.refText}`), h('span', {}, `elev ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`))),
         h('div', { class: 'coa-body2 coa-b-lux' }, h('i'), h('div', {}, h('small', {}, 'LIGHT'), h('b', {}, `${lx.value} ${lx.unit}`), h('span', {}, m.phaseName)))),
       ...warn,
-      vm.shadow ? h('p', { class: 'coa-hint' }, `Schaduw ${vm.shadow.moon ? 'van de maan ' : ''}valt naar ${vm.fmt(vm.shadow.dir)}°${vm.refText}, ${vm.shadow.len < 1 ? 'kort' : vm.shadow.len < 2.5 ? 'middellang' : 'lang'} (getekend naast elk schip).`) : null,
+      vm.shadow ? h('p', { class: 'coa-hint' }, `Schaduw ${vm.shadow.moon ? 'van de maan ' : ''}valt naar ${vm.fmt(vm.shadow.dir)}°${vm.refText}, ${vm.shadow.len < 1 ? 'kort' : vm.shadow.len < 2.5 ? 'middellang' : 'lang'}${vm.showShadow ? ' (getekend naast elk schip)' : ' (niet getekend: Schaduw staat uit)'}.`) : null,
       h('p', { class: 'coa-hint' }, `${offMin ? 'Tijdschuif ' : ''}${zulu(vm.tAstro)} · ${vm.ref === 'M' ? `variatie ${Math.abs(vm.decl).toFixed(1).replace('.', ',')}°${vm.decl >= 0 ? 'E' : 'W'} · ` : ''}${vm.pos ? 'op de positie van het schip' : 'voor ' + vm.base.name}`));
   }
   // The heights card. Typing in it never repaints the whole column (the focus would be lost); a change
@@ -671,7 +674,8 @@ function coaCreate(body, w) {
     const paintPic = () => { picEl.innerHTML = coaShipSheetSvg(pal(), { guides, id: 'ship-' + w.id }); };
     paintPic();
     let shipLayer = null, backdrop = null, boardTimer = null;
-    const close = openModal({ title: 'Teken Schip', wide: true, cls: 'coa-shipmodal', bare: true, body: h('div', { class: 'coa-shipbody' }, sideEl, h('div', { class: 'coa-shipmain' }, head, stageEl)) });
+    const sideGrip = dkPanelGrip(sideEl, { get: () => cfg.shipToolsW, set: (w) => { cfg.shipToolsW = w || undefined; save(); } });
+    const close = openModal({ title: 'Teken Schip', wide: true, cls: 'coa-shipmodal', bare: true, body: h('div', { class: 'coa-shipbody' }, sideEl, sideGrip, h('div', { class: 'coa-shipmain' }, head, stageEl)) });
     backdrop = sideEl.closest('.modal-backdrop');
     shipLayer = coaDrawLayer({
       el: drawLayerEl, tools: sideEl, cfg, save, list: 'shipmarks', plan: () => P, W: SHIP_W, H: SHIP_H, pal,

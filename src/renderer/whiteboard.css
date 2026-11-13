@@ -17,6 +17,10 @@
 .wb.side-off .wb-side { margin-left: calc(-1 * min(23rem, 40%)); }
 .wb.side-off .zp-side-toggle svg { transform: rotate(180deg); }
 .wb-tabs { grid-template-columns: repeat(4, 1fr); }
+/* Tekenen, Iconen, Kaart, Borden: icon and name side by side in one low row, all four in view. */
+.wb-tabs .zp-tab, body.touch .wb-tabs .zp-tab { flex-direction: row; justify-content: center; gap: 0.3rem; min-width: 0; padding: 0.5rem 0.15rem 0.45rem; font-size: 0.7rem; white-space: nowrap; }
+.wb-tabs .zp-tab span { overflow: hidden; text-overflow: ellipsis; }
+.wb-tabs .zp-tab svg, body.touch .wb-tabs .zp-tab svg { width: 0.95rem; height: 0.95rem; flex: none; }
 .wb-stage { flex: 1; min-width: 0; position: relative; overflow: hidden; }
 .wb-canvas { position: absolute; inset: 0; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
 .wb-hud { position: absolute; inset: 0; pointer-events: none; }
@@ -133,10 +137,12 @@ body.touch .wb-hbtn { width: 2.4rem; height: 2.4rem; }
 .dk-rot:hover { background: #ffe25c; }
 .dk-sel.busy .dk-rot { cursor: grabbing; background: #fff; }
 .dk-badge { position: absolute; z-index: 5; transform: translate(-50%, -50%); padding: 0.15rem 0.5rem; border-radius: 99px; background: rgba(7, 13, 24, 0.92); border: 1px solid #ffd21f; color: #fff; font: 700 0.78rem var(--font-mono); pointer-events: none; white-space: nowrap; }
-body.touch .dk-h { width: 20px; height: 20px; margin: -11px 0 0 -11px; }
-body.touch .dk-stem { top: -30px; height: 30px; }
-body.touch .dk-rot { top: -30px; width: 44px; height: 44px; }
-body.touch .dk-rot svg { width: 24px; height: 24px; }
+body.touch .dk-h { width: 16px; height: 16px; margin: -9px 0 0 -9px; }
+body.touch .dk-h::after { inset: -12px; }
+body.touch .dk-stem { top: -24px; height: 24px; }
+body.touch .dk-rot { top: -24px; width: 32px; height: 32px; }
+body.touch .dk-rot::after { inset: -12px; }
+body.touch .dk-rot svg { width: 18px; height: 18px; }
 .dk-sel.dk-pulse .dk-frame { animation: dk-pulse-frame 0.32s ease-out; }
 @keyframes dk-pulse-frame { 0% { box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.38), 0 0 0 0 rgba(255, 210, 31, 0.75); } 100% { box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.38), 0 0 0 14px rgba(255, 210, 31, 0); } }
 
@@ -154,8 +160,9 @@ body.touch .dk-rot svg { width: 24px; height: 24px; }
 .dk-del svg { width: 15px; height: 15px; }
 .dk-del:hover { background: #ff4b55; }
 .dk-sel.busy .dk-del { display: none; }
-body.touch .dk-del { width: 38px; height: 38px; transform: translate(-50%, 16px); }
-body.touch .dk-del svg { width: 20px; height: 20px; }
+body.touch .dk-del { width: 28px; height: 28px; transform: translate(-50%, 12px); }
+body.touch .dk-del::after { inset: -11px; }
+body.touch .dk-del svg { width: 15px; height: 15px; }
 
 /* undo / redo (drawkit.js) */
 .dk-urbar { display: inline-flex; gap: 0.25rem; }
@@ -175,3 +182,18 @@ body.touch .dk-urbar.big .dk-ur { width: 3.2rem; height: 3.2rem; }
 body.touch .dk-urbar.big .dk-ur-ic svg { width: 1.6rem; height: 1.6rem; }
 .dk-urrow { display: flex; gap: 0.3rem; }
 .dk-urbar[hidden] { display: none; }
+
+/* Solid or dashed (dkDashPicker): two buttons with a picture of the line. */
+.dk-dashes .dk-dash { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; height: auto; min-height: 2.3rem; padding: 0.25rem 0.3rem; color: var(--text); }
+.dk-dash > span { display: block; width: 80%; height: 0.5rem; }
+.dk-dash svg { display: block; width: 100%; height: 100%; }
+.dk-dash small { font-size: 0.6rem; font-weight: 700; color: var(--muted); line-height: 1; }
+.dk-dash.on small { color: var(--text); }
+.coa-tools .dk-dashes .dk-dash { min-height: 2.1rem; }
+
+/* The grip on the edge of a side panel (dkPanelGrip): drag for the width. */
+.dk-grip { flex: none; position: relative; z-index: 6; width: 14px; margin: 0 -7px; place-items: center; cursor: col-resize; touch-action: none; user-select: none; display: grid; }
+.dk-grip i { display: block; width: 10px; height: 3rem; border-radius: 99px; background-color: var(--surface-2); border: 1px solid var(--border-strong); box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3); background-image: linear-gradient(var(--muted), var(--muted)), linear-gradient(var(--muted), var(--muted)); background-size: 1.5px 45%; background-position: 2.5px center, 4.5px center; background-repeat: no-repeat; transition: border-color 0.12s, height 0.12s; }
+.dk-grip:hover i, .dk-grip.busy i { border-color: var(--accent); background-color: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); height: 3.8rem; }
+body.touch .dk-grip { width: 22px; margin: 0 -11px; }
+body.touch .dk-grip i { width: 12px; height: 3.6rem; background-position: 3px center, 6px center; }

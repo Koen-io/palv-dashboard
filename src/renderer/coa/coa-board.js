@@ -140,7 +140,7 @@ function coaCard(vm, c, i, P, id) {
     o.push(coaText(lx, ly + 1, `${vm.fmt(c.heading)}°`, { size: 21, weight: 800, fill: P.text, family: 'mono' }));
   }
   // The shadow of the ship (sun by day, a full enough moon at night), beside it and under it.
-  if (vm.shadow) {
+  if (vm.shadow && vm.showShadow !== false) {
     const L = Math.min(34, 6 + vm.shadow.len * 9);
     const [sx, sy] = coaAt(0, 0, L, scr(vm.shadow.dir));
     o.push(`<g transform="translate(${coaF(cx + sx)} ${coaF(cy + sy)}) rotate(${coaF(hdg)}) scale(${COA_SHIP_K})" opacity="${vm.shadow.moon ? 0.22 : 0.5}"><path d="${COA_HULL}" fill="#000" filter="url(#${id}-blur)"/></g>`);
@@ -407,6 +407,7 @@ const coaMarkLabel = (e, P) => (e.label ? `<text x="${coaF(e.x)}" y="${coaF(e.y 
 function coaMarkBody(e, P) {
   const col = e.color || P.text, wd = e.width || 4;
   const ff = COA_FONTS.ui;
+  const dash = e.dash && !e.marker ? ` stroke-dasharray="${wd * 2} ${wd * 3}"` : '';
   if (e.type === 'path') {
     const pts = e.pts || [];
     if (!pts.length) return '';
@@ -416,10 +417,10 @@ function coaMarkBody(e, P) {
     // A free arrow: the head at the end, in the direction the stroke ended.
     const hd = e.arrow && !e.marker && typeof DK !== 'undefined' ? DK.pathHead(pts, wd) : null;
     const head = hd ? `<path d="M${coaF(hd.x + Math.cos(hd.a) * wd * 0.6)} ${coaF(hd.y + Math.sin(hd.a) * wd * 0.6)}L${coaF(hd.x - hd.L * Math.cos(hd.a - 0.45))} ${coaF(hd.y - hd.L * Math.sin(hd.a - 0.45))}L${coaF(hd.x - hd.L * Math.cos(hd.a + 0.45))} ${coaF(hd.y - hd.L * Math.sin(hd.a + 0.45))}Z" fill="${col}"/>` : '';
-    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"/>${head}`;
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"${dash}/>${head}`;
   }
   if (e.type === 'line') {
-    let out = `<path d="M${coaF(e.x1)} ${coaF(e.y1)}L${coaF(e.x2)} ${coaF(e.y2)}" stroke="${col}" stroke-width="${wd}" stroke-linecap="round" ${e.dash ? `stroke-dasharray="${wd * 3} ${wd * 2}"` : ''}/>`;
+    let out = `<path d="M${coaF(e.x1)} ${coaF(e.y1)}L${coaF(e.x2)} ${coaF(e.y2)}" stroke="${col}" stroke-width="${wd}" stroke-linecap="round"${dash}/>`;
     const head = (fx, fy, tx, ty) => { const a = Math.atan2(ty - fy, tx - fx), L = Math.max(14, wd * 3.6); return `<path d="M${coaF(tx)} ${coaF(ty)}L${coaF(tx - L * Math.cos(a - 0.45))} ${coaF(ty - L * Math.sin(a - 0.45))}L${coaF(tx - L * Math.cos(a + 0.45))} ${coaF(ty - L * Math.sin(a + 0.45))}Z" fill="${col}"/>`; };
     if (e.arrow === 'end' || e.arrow === 'both') out += head(e.x1, e.y1, e.x2, e.y2);
     if (e.arrow === 'both') out += head(e.x2, e.y2, e.x1, e.y1);
@@ -428,8 +429,8 @@ function coaMarkBody(e, P) {
   if (e.type === 'rect' || e.type === 'ellipse') {
     const x = Math.min(e.x, e.x + e.w), y = Math.min(e.y, e.y + e.h), w = Math.abs(e.w), hh = Math.abs(e.h);
     const fill = e.fill ? `fill="${col}" fill-opacity="0.25"` : 'fill="none"';
-    return e.type === 'rect' ? `<rect x="${coaF(x)}" y="${coaF(y)}" width="${coaF(w)}" height="${coaF(hh)}" rx="6" ${fill} stroke="${col}" stroke-width="${wd}"/>`
-      : `<ellipse cx="${coaF(x + w / 2)}" cy="${coaF(y + hh / 2)}" rx="${coaF(w / 2)}" ry="${coaF(hh / 2)}" ${fill} stroke="${col}" stroke-width="${wd}"/>`;
+    return e.type === 'rect' ? `<rect x="${coaF(x)}" y="${coaF(y)}" width="${coaF(w)}" height="${coaF(hh)}" rx="6" ${fill} stroke="${col}" stroke-width="${wd}" stroke-linecap="round"${dash}/>`
+      : `<ellipse cx="${coaF(x + w / 2)}" cy="${coaF(y + hh / 2)}" rx="${coaF(w / 2)}" ry="${coaF(hh / 2)}" ${fill} stroke="${col}" stroke-width="${wd}" stroke-linecap="round"${dash}/>`;
   }
   if (e.type === 'text') {
     const lines = String(e.text || '').split('\n');

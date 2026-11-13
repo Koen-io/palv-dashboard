@@ -212,7 +212,7 @@ function coaDrawLayer(o) {
       paintLive();
       return;
     }
-    const base = { color: cfg.color, width: cfg.width };
+    const base = { color: cfg.color, width: cfg.width, ...(cfg.dash && tool !== 'marker' ? { dash: true } : {}) };
     if (tool === 'pen' || tool === 'marker' || tool === 'farrow') drawing = { type: 'path', pts: [[x, y]], marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), ...base };
     else if (tool === 'line' || tool === 'arrow') drawing = { type: 'line', x1: x, y1: y, x2: x, y2: y, arrow: tool === 'arrow' ? 'end' : 'none', ...base };
     else drawing = { type: tool, x, y, w: 0, h: 0, fill: !!cfg.fill, rot: 0, ...base };
@@ -346,11 +346,13 @@ function coaDrawLayer(o) {
     } else {
       content = h('div', { class: 'zp-panel' },
         h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gereedschap')),
-          h('div', { class: 'wb-tools coa-toolgrid' }, Object.entries(COA_TOOLS).map(([key, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === key ? ' on' : ''), title: `${t.name} — ${t.hint}`, onclick: () => setTool(key) }, icon(t.icon), h('span', {}, t.name)))),
+          // The icon tool has no button: picking an icon under Iconen switches to it.
+          h('div', { class: 'wb-tools coa-toolgrid' }, Object.entries(COA_TOOLS).filter(([key]) => key !== 'icon').map(([key, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === key ? ' on' : ''), title: `${t.name} — ${t.hint}`, onclick: () => setTool(key) }, icon(t.icon), h('span', {}, t.name)))),
           h('p', { class: 'zp-hint' }, (COA_TOOLS[cfg.tool] || COA_TOOLS.pen).hint)),
         h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Kleur en dikte')),
           h('div', { class: 'wb-colors' }, COA_COLORS.map((c) => h('button', { class: 'wb-color' + (cfg.color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => { cfg.color = c; o.save(); if (s) patchSel({ color: c }); else paintTools(); } }))),
           h('div', { class: 'wb-widths' }, COA_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd}`, onclick: () => { cfg.width = wd; o.save(); if (s && (s.type === 'path' || s.type === 'line' || s.type === 'rect' || s.type === 'ellipse')) patchSel({ width: wd }); else paintTools(); } }, h('i', { style: `height:${Math.min(12, wd)}px` })))),
+          dkDashPicker(DK.canDash(s) ? !!s.dash : cfg.dash, (v) => { cfg.dash = v; o.save(); if (DK.canDash(s)) patchSel({ dash: v || undefined }); else paintTools(); }),
           checkbox('Vormen vullen', !!cfg.fill, (v) => { cfg.fill = v; o.save(); if (s && (s.type === 'rect' || s.type === 'ellipse')) patchSel({ fill: v }); }),
           h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([20, 26, 30, 40, 54].map((v) => ({ value: v, label: `${v}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; o.save(); if (s && s.type === 'text') patchSel({ size: +v }); })))),
         s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: s.arrow ? 'vrije pijl' : 'streek', line: s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon' }[s.type] || s.type)),
@@ -361,7 +363,6 @@ function coaDrawLayer(o) {
           h('div', { class: 'zp-btnrow' },
             s.type === 'icon' ? h('button', { class: 'btn zp-btn', onclick: () => labelDialog(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…') : null,
             s.type === 'text' ? h('button', { class: 'btn zp-btn', onclick: () => textDialog(null, s) }, icon('edit'), 'Bewerken') : null,
-            s.type === 'line' ? h('button', { class: 'btn zp-btn', onclick: () => patchSel({ dash: !s.dash }) }, s.dash ? 'Doorgetrokken' : 'Gestippeld') : null,
             s.type === 'line' ? h('button', { class: 'btn zp-btn', title: 'Pijlpunt wisselen', onclick: () => patchSel({ arrow: s.arrow === 'end' ? 'both' : s.arrow === 'both' ? 'none' : 'end' }) }, s.arrow === 'end' ? 'Pijl: beide' : s.arrow === 'both' ? 'Geen pijl' : 'Pijlpunt') : null,
             h('button', { class: 'btn zp-btn', title: 'Bovenop leggen', onclick: () => patchSel({ z: marks.length ? Math.max(...marks.map((m) => m.z || 0)) + 1 : 1 }) }, icon('arrowUp'), 'Voor'),
             h('button', { class: 'btn zp-btn', title: 'Onderop leggen', onclick: () => patchSel({ z: marks.length ? Math.min(...marks.map((m) => m.z || 0)) - 1 : 0 }) }, icon('arrowDown'), 'Achter'),

@@ -130,3 +130,11 @@ test('tekenkit: ongedaan maken en opnieuw, per bord, tot 1000 stappen', () => {
   for (let i = 0; i < 1200; i += 1) H.push('big', [{ id: String(i), before: null, after: {} }]);
   assert.strictEqual(H.count('big').undo, 1000);
 });
+
+test('tekenkit: stippellijn voor streken, lijnen en vormen, nooit voor de markeerstift', () => {
+  assert.ok(DK.canDash({ type: 'path', pts: [] }));
+  assert.ok(!DK.canDash({ type: 'path', marker: true, pts: [] }), 'markeerstift niet');
+  for (const type of ['line', 'rect', 'ellipse']) assert.ok(DK.canDash({ type }), type);
+  for (const type of ['text', 'icon', 'map']) assert.ok(!DK.canDash({ type }), type);
+  assert.strictEqual(JSON.stringify(DK.dashArray(4)), '[8,12]');
+});

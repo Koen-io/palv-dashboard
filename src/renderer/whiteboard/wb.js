@@ -317,14 +317,16 @@ function wbCreate(body, w) {
     } else if (e.type === 'path') {
       gg.lineWidth = e.marker ? lw * 3 : lw;
       if (e.marker) gg.globalAlpha *= 0.4;
+      else if (e.dash) gg.setLineDash(DK.dashArray(lw));
       strokePath(gg, e.pts, v);
+      gg.setLineDash([]);
       // A free arrow: the head at the end, in the direction the stroke ended.
       const hd = e.arrow && !e.marker && DK.pathHead(e.pts, e.width || 4);
       if (hd) { const tx = hd.x * v.k + v.x, ty = hd.y * v.k + v.y, L = Math.max(10, hd.L * v.k); gg.beginPath(); gg.moveTo(tx + Math.cos(hd.a) * lw * 0.6, ty + Math.sin(hd.a) * lw * 0.6); gg.lineTo(tx - L * Math.cos(hd.a - 0.45), ty - L * Math.sin(hd.a - 0.45)); gg.lineTo(tx - L * Math.cos(hd.a + 0.45), ty - L * Math.sin(hd.a + 0.45)); gg.closePath(); gg.fill(); }
     } else if (e.type === 'line') {
       const a = [e.x1 * v.k + v.x, e.y1 * v.k + v.y], b = [e.x2 * v.k + v.x, e.y2 * v.k + v.y];
       gg.lineWidth = lw;
-      if (e.dash) gg.setLineDash([lw * 3, lw * 2]);
+      if (e.dash) gg.setLineDash(DK.dashArray(lw));
       gg.beginPath(); gg.moveTo(a[0], a[1]); gg.lineTo(b[0], b[1]); gg.stroke();
       gg.setLineDash([]);
       const head = (from, to) => { const ang = Math.atan2(to[1] - from[1], to[0] - from[0]), L = Math.max(10, lw * 3.5); gg.beginPath(); gg.moveTo(to[0], to[1]); gg.lineTo(to[0] - L * Math.cos(ang - 0.45), to[1] - L * Math.sin(ang - 0.45)); gg.lineTo(to[0] - L * Math.cos(ang + 0.45), to[1] - L * Math.sin(ang + 0.45)); gg.closePath(); gg.fill(); };
@@ -336,7 +338,9 @@ function wbCreate(body, w) {
       gg.beginPath();
       if (e.type === 'rect') gg.roundRect(x, y, wd, hg, Math.min(6 * v.k, wd / 4, hg / 4)); else gg.ellipse(x + wd / 2, y + hg / 2, Math.max(1, wd / 2), Math.max(1, hg / 2), 0, 0, Math.PI * 2);
       if (e.fill) { gg.globalAlpha *= 0.28; gg.fill(); gg.globalAlpha = (e.opacity != null ? e.opacity : 1) * (ghost ? 0.7 : 1); }
+      if (e.dash) gg.setLineDash(DK.dashArray(lw));
       gg.stroke();
+      gg.setLineDash([]);
     } else if (e.type === 'text') {
       const px = e.size * v.k;
       gg.font = `600 ${px}px ${getComputedStyle(document.body).fontFamily}`;
@@ -597,7 +601,7 @@ function wbCreate(body, w) {
       request();
       return;
     }
-    const base = { color: cfg.color, width: cfg.width };
+    const base = { color: cfg.color, width: cfg.width, ...(cfg.dash && tool !== 'marker' ? { dash: true } : {}) };
     if (tool === 'pen' || tool === 'marker' || tool === 'farrow') drawing = { e: { type: 'path', ...base, marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), pts: [[wx, wy]] }, last: [wx, wy], sent: 0 };
     else if (tool === 'line' || tool === 'arrow') drawing = { e: { type: 'line', ...base, x1: wx, y1: wy, x2: wx, y2: wy, arrow: tool === 'arrow' ? 'end' : 'none' } };
     else if (tool === 'rect' || tool === 'ellipse') drawing = { e: { type: tool, ...base, x: wx, y: wy, w: 0, h: 0, fill: !!cfg.fill, rot: 0 } };
@@ -819,11 +823,13 @@ function wbCreate(body, w) {
     const s = sel && els.find((e) => e.id === sel);
     return h('div', { class: 'zp-panel' },
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gereedschap')),
-        h('div', { class: 'wb-tools' }, Object.entries(WB_TOOLS).map(([k, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === k ? ' on' : ''), title: `${t.name} (${t.key}) — ${t.hint}`, onclick: () => setTool(k) }, icon(t.icon), h('span', {}, t.name)))),
+        // The icon tool has no button: picking an icon under Iconen switches to it.
+        h('div', { class: 'wb-tools' }, Object.entries(WB_TOOLS).filter(([k]) => k !== 'icon').map(([k, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === k ? ' on' : ''), title: `${t.name} (${t.key}) — ${t.hint}`, onclick: () => setTool(k) }, icon(t.icon), h('span', {}, t.name)))),
         h('p', { class: 'zp-hint' }, (WB_TOOLS[cfg.tool] || WB_TOOLS.pen).hint)),
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Kleur en dikte')),
         h('div', { class: 'wb-colors' }, WB_COLORS.map((c) => h('button', { class: 'wb-color' + (cfg.color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => { cfg.color = c; save(); applyToSel({ color: c }); paintSide(); paintBar(); } }))),
         h('div', { class: 'wb-widths' }, WB_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd} px`, onclick: () => { cfg.width = wd; save(); applyToSel({ width: wd }); paintSide(); } }, h('i', { style: `height:${wd}px` })))),
+        dkDashPicker(DK.canDash(s) ? !!s.dash : cfg.dash, (v) => { cfg.dash = v; save(); if (DK.canDash(s)) applyToSel({ dash: v || undefined }); paintSide(); }),
         chk('Vormen vullen', () => cfg.fill, (v) => { cfg.fill = v; save(); applyToSel({ fill: v }); }),
         h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([12, 14, 18, 24, 32, 48, 64].map((sz) => ({ value: sz, label: `${sz}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; save(); applyToSel({ size: +v }, 'text'); })), field('Icoongrootte', zpSelect([40, 60, 80, 110, 150, 200].map((sz) => ({ value: sz, label: `${sz}` })), cfg.iconSize, (v) => { cfg.iconSize = +v; save(); applyToSel({ size: +v }, 'icon'); })))),
       s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: s.arrow ? 'vrije pijl' : 'streek', line: s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon', map: 'kaart' }[s.type] || s.type)),
@@ -832,7 +838,7 @@ function wbCreate(body, w) {
           h('button', { class: 'btn zp-btn', title: 'Naar achteren', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.z = lowZ(); commit(s, b); } }, icon('arrowDown'), 'Naar achteren'),
           h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => { const c = JSON.parse(JSON.stringify(s)); delete c.id; delete c.updatedAt; delete c.z; moveBy(c, 30 / view.k, 30 / view.k); commit(c); sel = c.id; request(); paintSide(); } }, icon('history'), 'Kopie'),
           h('button', { class: 'btn zp-btn danger', onclick: () => { remove(s); request(); paintSide(); } }, icon('trash'), 'Verwijderen')),
-        s.type === 'line' ? h('div', { class: 'row' }, field('Pijlpunt', zpSelect([['none', 'Geen'], ['end', 'Aan het eind'], ['both', 'Beide kanten']].map(([v, l]) => ({ value: v, label: l })), s.arrow || 'none', (v) => applyToSel({ arrow: v }))), field('Lijnstijl', zpSelect([['solid', 'Doorgetrokken'], ['dash', 'Gestippeld']].map(([v, l]) => ({ value: v, label: l })), s.dash ? 'dash' : 'solid', (v) => applyToSel({ dash: v === 'dash' })))) : null,
+        s.type === 'line' ? h('div', { class: 'row' }, field('Pijlpunt', zpSelect([['none', 'Geen'], ['end', 'Aan het eind'], ['both', 'Beide kanten']].map(([v, l]) => ({ value: v, label: l })), s.arrow || 'none', (v) => applyToSel({ arrow: v })))) : null,
         DK.canRotate(s) ? h('div', { class: 'zp-btnrow dk-turnrow' },
           h('button', { class: 'btn zp-btn', title: '15° linksom ([)', onclick: () => turnSel(-15) }, '↺ 15°'),
           DK.ownRot(s) ? h('button', { class: 'btn zp-btn', title: 'Recht zetten (0°)', disabled: !s.rot || null, onclick: () => applyToSel({ rot: 0 }) }, icon('refresh'), s.rot ? `Recht (nu ${Math.round(s.rot)}°)` : 'Recht') : null,
@@ -1035,7 +1041,8 @@ function wbCreate(body, w) {
     const b = board();
     title.replaceChildren(icon(b && b.lock ? 'lock' : 'note'), h('b', {}, b ? b.name : 'Whiteboard'), h('small', {}, !b ? 'bord wordt geopend…' : b.lock ? (b.lockOpen ? 'vergrendeld · zichtbaar op dit scherm' : 'vergrendeld · pincode nodig') : 'live op alle schermen'));
     lockBtn.paint();
-    quick.replaceChildren(...['select', 'pan', 'pen', 'farrow', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => setTool(k) }, icon(WB_TOOLS[k].icon))),
+    // The star opens Iconen (an icon is chosen there, which switches to placing it).
+    quick.replaceChildren(...['select', 'pan', 'pen', 'farrow', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: k === 'icon' ? 'Iconen: kies een icoon om te plaatsen (I)' : `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => (k === 'icon' ? showTab('icons') : setTool(k)) }, icon(WB_TOOLS[k].icon))),
       h('span', { class: 'wb-swatch', style: `--c:${cfg.color}`, title: 'Huidige kleur (kies in het paneel Tekenen)', onclick: () => showTab('draw') }),
       h('span', { class: 'wb-sep' }),
       undoBar());

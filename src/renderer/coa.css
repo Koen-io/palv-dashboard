@@ -75,8 +75,35 @@
 .coa-toolhead { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; padding: 0.5rem 0.6rem 0.3rem; position: sticky; top: 0; background: var(--surface); z-index: 2; }
 .coa-toolhead b { font: 800 0.66rem var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
 .coa-toolhead .seg button { height: 1.8rem; font-size: 0.72rem; padding: 0 0.6rem; }
-.coa-toolgrid { grid-template-columns: repeat(2, 1fr) !important; }
-.coa-icons { grid-template-columns: repeat(3, 1fr) !important; }
+.coa-toolhead { flex-wrap: wrap; row-gap: 0.3rem; }
+.coa-toolhead .seg { flex: 1 1 10rem; display: flex; }
+.coa-toolhead .seg button { flex: 1; justify-content: center; }
+.coa-icons { grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr)) !important; }
+/* The tool panel (COA board and Teken Schip): compact, the users stand right at the screen. Everything
+   flows with the width of the panel (drag the grip on its edge): more room gives more columns. */
+.coa-tools .zp-panel { padding: 0.45rem; gap: 0.45rem; }
+.coa-tools .zp-sec { padding: 0.45rem 0.5rem; gap: 0.4rem; }
+.coa-tools .zp-sec-head h3 { font-size: 0.8rem; }
+.coa-tools .zp-hint { font-size: 0.68rem; line-height: 1.4; }
+.coa-tools .wb-tools.coa-toolgrid { grid-template-columns: repeat(auto-fill, minmax(4.7rem, 1fr)); gap: 0.25rem; }
+.coa-tools .wb-toolbtn, body.touch .coa-tools .wb-toolbtn { gap: 0.15rem; min-width: 0; padding: 0.32rem 0.15rem 0.28rem; font-size: 0.62rem; white-space: nowrap; }
+.coa-tools .wb-toolbtn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.coa-tools .wb-toolbtn svg, body.touch .coa-tools .wb-toolbtn svg { width: 1rem; height: 1rem; flex: none; }
+.coa-tools .wb-colors { grid-template-columns: repeat(auto-fill, minmax(1.7rem, 1fr)); gap: 0.3rem; }
+.coa-tools .wb-color, body.touch .coa-tools .wb-color { width: 100%; max-width: 2rem; height: auto; aspect-ratio: 1; justify-self: center; }
+.coa-tools .wb-width { height: 1.8rem; min-width: 0; }
+.coa-tools .zp-btn, body.touch .coa-tools .zp-btn { height: 2rem; padding: 0 0.55rem; font-size: 0.72rem; }
+.coa-tools .zp-btnrow { gap: 0.25rem; }
+.coa-tools .input, body.touch .coa-tools .input { height: 2rem; font-size: 0.78rem; }
+.coa-tools .check { font-size: 0.74rem; }
+.coa-tools { overflow-x: hidden; }
+.coa-tools .dk-urrow .dk-urbar { flex: 1; min-width: 0; }
+.coa-tools .dk-ur, body.touch .coa-tools .dk-ur { height: 2rem; min-width: 0; }
+.coa-tools .coa-toolhead .seg button, body.touch .coa-tools .coa-toolhead .seg button { height: 1.9rem; padding: 0 0.5rem; }
+.coa-tools .wb-cat, body.touch .coa-tools .wb-cat { height: 1.7rem; padding: 0 0.5rem; }
+/* the grip on the right edge of the tools: drag for the width */
+.coa-body > .dk-grip { display: none; }
+.coa.drawing .coa-body > .dk-grip { display: grid; }
 
 /* ---------- right: data ---------- */
 .coa-info { flex: none; width: 21rem; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--border); padding: 0.45rem; display: flex; flex-direction: column; gap: 0.45rem; scrollbar-width: thin; }
@@ -149,9 +176,6 @@ html[data-theme="light"] .coa-warn b { color: #c8161c; }
 .coa-oldwarn b { font-size: 0.95rem; }.coa-btnrow { display: flex; gap: 0.3rem; }
 .coa-btnrow .btn { height: 1.8rem; font-size: 0.7rem; }
 .coa-conf { display: flex; flex-direction: column; gap: 0.25rem; }
-
-/* ---------- night (NVG): dim and red ---------- */
-.coa.night { filter: brightness(0.62) sepia(1) hue-rotate(-38deg) saturate(3.2) contrast(1.05); }
 
 /* ---------- the map to choose the ship's position ---------- */
 .modal.coa-mapmodal { width: min(84rem, 96vw); max-height: 96vh; }

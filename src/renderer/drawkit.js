@@ -161,6 +161,10 @@ const DK = {
     };
   },
   // Tools after which the new element is selected, so it can be moved and turned straight away.
+  // A dashed line (`dash`): strokes, lines, arrows and the outline of shapes; never the marker.
+  canDash: (e) => !!e && ((e.type === 'path' && !e.marker) || e.type === 'line' || e.type === 'rect' || e.type === 'ellipse'),
+  // The dash pattern for a stroke this wide (round caps make the dashes a width longer and the gaps shorter).
+  dashArray: (wd) => [wd * 2, wd * 3],
   selectAfter: (e) => !!e && (e.type === 'line' || e.type === 'rect' || e.type === 'ellipse' || e.type === 'icon' || e.type === 'text' || (e.type === 'path' && !!e.arrow)),
   // The head of a free arrow (a stroke with `arrow`): at its last point, pointing the way the stroke went at
   // the end. The direction is taken over the last stretch of at least a few line widths, so the jitter of
@@ -431,4 +435,36 @@ function dkUndoButtons({ undo, redo, count, big = false, labels = false }) {
   };
   el.paint();
   return el;
+}
+
+// Solid or dashed, as two buttons with a picture of the line (like the widths). `cur` true = dashed.
+function dkDashPicker(cur, onPick) {
+  const mk = (dash, title) => h('button', { class: 'wb-width dk-dash' + (!!cur === dash ? ' on' : ''), type: 'button', title, onclick: () => onPick(dash) },
+    h('span', { html: `<svg viewBox="0 0 60 8" preserveAspectRatio="none"><path d="M4 4H56" stroke="currentColor" stroke-width="4" stroke-linecap="round" ${dash ? 'stroke-dasharray="7 9"' : ''}/></svg>` }), h('small', {}, dash ? 'Stippellijn' : 'Doorgetrokken'));
+  return h('div', { class: 'wb-widths dk-dashes' }, mk(false, 'Doorgetrokken lijn'), mk(true, 'Stippellijn: voor pen, vrije pijl, lijn, pijl, rechthoek en ellips'));
+}
+
+// A grip on the right edge of a side panel: drag it to make the panel wider or narrower (the width is kept
+// by `set`), double-tap for the standard width again. It goes in the flex row right after the panel.
+function dkPanelGrip(panel, { get, set, min = 170, max = 460 }) {
+  const grip = h('div', { class: 'dk-grip', role: 'separator', 'aria-orientation': 'vertical', title: 'Sleep om het paneel breder of smaller te maken · dubbeltik: standaardbreedte' }, h('i'));
+  const apply = (w) => { panel.style.width = w ? `${w}px` : ''; };
+  apply(get());
+  let st = null;
+  grip.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    grip.setPointerCapture(ev.pointerId);
+    st = { x: ev.clientX, w: panel.getBoundingClientRect().width, cur: null };
+    grip.classList.add('busy');
+  });
+  grip.addEventListener('pointermove', (ev) => {
+    if (!st) return;
+    st.cur = Math.round(Math.max(min, Math.min(max, window.innerWidth * 0.45, st.w + ev.clientX - st.x)));
+    apply(st.cur);
+  });
+  const end = () => { if (!st) return; if (st.cur) set(st.cur); st = null; grip.classList.remove('busy'); };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  grip.addEventListener('dblclick', () => { set(null); apply(null); });
+  return grip;
 }
