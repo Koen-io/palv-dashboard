@@ -1,5 +1,27 @@
 # Wijzigingen
 
+## 1.49.0
+
+### COA Planner: Teken Schip
+- **Nieuwe knop Teken Schip**: opent het schip groot en haarscherp (vector), van bovenaf en liggend: boeg rechts, achterschip links, bakboord rood boven, stuurboord groen onder. Links staat de hele tekenset (pen, markeerstift, lijn, pijl, rechthoek, ellips, tekst, iconen, gum, kleuren, diktes, ongedaan maken)
+- **Eén keer tekenen, vier keer mee**: wat je op en direct rond de romp tekent (brug, dekhuis, helidek, kraan …) gaat als miniatuur mee op het schip in **alle vier de COA's** en op de A5-kniebordkaart, en draait mee met de koers per COA. Pijlen en helikopters verder van het schip blijven alleen op het tekenblad
+- Hulplijnen aan/uit (peilingen 45°, 90° en 139° vanaf de boeg en de hartlijn), het aantal tekeningen op de knop, en het tekenblad los af te drukken of als PDF op **A5 liggend**. De tekening hoort bij het plan en staat direct op alle schermen
+
+### COA-symbolen uit de TACSOP
+- De 14 symbolen van **TACSOP 4.6.4.1 COA form symbology** als scherpe vectoriconen: assault helo en sniper helo, met fastrope en sniper links, rechts of aan beide kanten. In de kleur van de pen, op elke grootte scherp en te draaien
+- **Snel bovenaan** in elk iconenpaneel (Whiteboard, COA-tekenlaag, Teken Schip): het tactische schip van de COA Planner (rood/groen met 45/90/139°), de scheepssectoren, de COA-symbolen en alle helikopters
+
+### Tekenen overal: verplaatsen en draaien zonder Selecteren
+- **Vrije pijl** (nieuw gereedschap, sneltoets F op het Whiteboard): teken uit de vrije hand zoals met de pen; aan het eind komt vanzelf een pijlpunt in de richting waarin je eindigde
+- **Prullenbak bij de selectie**: onder elk geselecteerd object staat een kleine rode prullenbak om het meteen te verwijderen (tegenover de draaigreep, zodat ze elkaar nooit raken)
+- **Raster op het Whiteboard**: kies Geen, Stippen of **Lijnen** (ruitjes elke 50, dikker elke 250 eenheden)
+- **Direct vastpakken**: een icoon of tekst sleep je meteen weg met het icoon- of tekstgereedschap; een nieuwe lijn, pijl of vorm is meteen geselecteerd; en met elk gereedschap pak je een object op door er **even op te drukken en vast te houden** (een snelle streek tekent gewoon). Een ondergrond (het schip, een kaart) blijft liggen zolang je erop tekent
+- **Draaigreep**: een ronde greep met draai-icoon direct boven het selectiekader, met de hoek erbij tijdens het draaien; valt op veelvouden van 45° en met Shift in stappen van 15°; dubbeltik zet het recht. Schalen aan de hoeken
+- **Twee vingers op een touchscreen**: twee vingers op of om een object draaien, schalen en verplaatsen het (schalen pas na een kleine marge, zodat draaien niet per ongeluk ook schaalt). Landt een vinger op een greep, dan neemt de tweede vinger het gewoon over. Twee vingers naast een object zoomen het whiteboard zoals altijd
+- Een icoon kun je ook op zijn plek **slepen** tijdens het plaatsen; labels onder iconen blijven rechtop
+- Toetsen: pijltjes verplaatsen de selectie, **[** en **]** draaien 15°, Alt + muiswiel draait 5°; knoppen ↺ 15° / Recht / ↻ 15° in het paneel
+- Overal hetzelfde: Whiteboard (tabblad en widget), de tekenlaag van de COA Planner en Teken Schip delen één tekenkit
+
 ## 1.48.0
 
 ### COA Planner: strakker en in de Engelse termen

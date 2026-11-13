@@ -19,8 +19,9 @@ const KINDS = {
   ops: { file: 'palv-timings.json', mode: 0o644, lists: ['timers', 'presets'] },
   boards: { file: 'palv-whiteboards.json', mode: 0o644, lists: ['boards', 'elements'] },
   missions: { file: 'palv-missies.json', mode: 0o644, lists: ['missions', 'fields'] },
-  // 1.45: the COA plans (one item per plan) and what is drawn on them (one item per drawing).
-  coa: { file: 'palv-coa.json', mode: 0o644, lists: ['plans', 'marks'] },
+  // 1.45: the COA plans (one item per plan) and what is drawn on them (one item per drawing); 1.49: what is
+  // drawn on the large ship of Teken Schip, the same way.
+  coa: { file: 'palv-coa.json', mode: 0o644, lists: ['plans', 'marks', 'shipmarks'] },
 };
 const TOMBSTONE_DAYS = 60;
 

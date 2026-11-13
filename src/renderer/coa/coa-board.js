@@ -38,11 +38,21 @@ const COA_HALF_P = 'M0 -50C-6.5 -45 -13 -32 -13 -14L-13 45Q-13 49 -9.5 49L0 49Z'
 function coaShipDefs(id, P) {
   return `<linearGradient id="${id}-gs" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="${P.stbd}" stop-opacity="0.82"/><stop offset="0.55" stop-color="${P.stbd}"/><stop offset="1" stop-color="${P.stbd}" stop-opacity="0.94"/></linearGradient>`
     + `<linearGradient id="${id}-gp" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${P.port}" stop-opacity="0.82"/><stop offset="0.55" stop-color="${P.port}"/><stop offset="1" stop-color="${P.port}" stop-opacity="0.94"/></linearGradient>`
-    + `<filter id="${id}-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>`;
+    + `<filter id="${id}-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>`
+    + `<clipPath id="${id}-hc"><path d="${COA_HULL}" transform="scale(1.14 1.06)"/></clipPath>`;
 }
-function coaShip(id) {
-  return `<path d="${COA_HALF_P}" fill="url(#${id}-gp)"/><path d="${COA_HALF_S}" fill="url(#${id}-gs)"/>`
+function coaShip(id, inner = '') {
+  return `<path d="${COA_HALF_P}" fill="url(#${id}-gp)"/><path d="${COA_HALF_S}" fill="url(#${id}-gs)"/>${inner}`
     + `<path d="${COA_HULL}" fill="none" stroke="#0b121c" stroke-width="1.5" stroke-linejoin="round"/>`;
+}
+// What was drawn in Teken Schip (1.49), on the hull of the board: the sheet is 1600 x 900 with the ship in
+// the middle lying down at COA_SHEET.k units per hull unit, so one transform brings the drawing onto the
+// hull (bow up) and it turns with the ship in every COA. Clipped to just around the hull: the superstructure
+// and what hangs over the side show, the arrows and helicopters drawn around the ship stay off the cards.
+function coaShipInner(id, marks, P) {
+  if (!marks || !marks.length) return '';
+  const k = typeof COA_SHEET !== 'undefined' ? COA_SHEET.k : 10;
+  return `<g clip-path="url(#${id}-hc)"><g transform="rotate(-90) scale(${coaF(1 / k)}) translate(-800 -450)">${marks.map((m) => coaMarkSvg(m, P)).join('')}</g></g>`;
 }
 
 /* ---------- wind barbs ---------- */
@@ -135,7 +145,7 @@ function coaCard(vm, c, i, P, id) {
     const [sx, sy] = coaAt(0, 0, L, scr(vm.shadow.dir));
     o.push(`<g transform="translate(${coaF(cx + sx)} ${coaF(cy + sy)}) rotate(${coaF(hdg)}) scale(${COA_SHIP_K})" opacity="${vm.shadow.moon ? 0.22 : 0.5}"><path d="${COA_HULL}" fill="#000" filter="url(#${id}-blur)"/></g>`);
   }
-  o.push(`<g transform="translate(${coaF(cx)} ${coaF(cy)}) rotate(${coaF(hdg)}) scale(${COA_SHIP_K})">${coaShip(id)}</g>`);
+  o.push(`<g transform="translate(${coaF(cx)} ${coaF(cy)}) rotate(${coaF(hdg)}) scale(${COA_SHIP_K})">${coaShip(id, coaShipInner(id, vm.shipMarks, P))}</g>`);
   // The helicopter on the assault track, outside the ring where it comes from, flying towards the ship.
   {
     const a = scr(vm.at + 180);
@@ -280,6 +290,55 @@ function coaBoardSvg(vm, P, { id = 'coa', cls = '' } = {}) {
   return o.join('');
 }
 
+/* ---------- Teken Schip: the ship large, lying down ---------- */
+// The ship of the board in 1600 x 900 units: bow right, stern left, port (red) on top, starboard (green)
+// below, as large as fits with room around it to draw. Vector, so sharp at any size. With `guides`: the
+// relative bearings 45, 90 and 139 degrees from the bow on both sides and the centre line, as on the board.
+const COA_SHEET = { w: 1600, h: 900, k: 10 };
+function coaShipSheetSvg(P, { guides = true, id = 'ship', print = false } = {}) {
+  const { w: W, h: H, k: K } = COA_SHEET, cx = W / 2, cy = H / 2;
+  const m = 26; // margin of the sea panel
+  const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`];
+  o.push(`<defs>${coaShipDefs(id, P)}<filter id="${id}-shadow" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="1.2"/></filter></defs>`);
+  o.push(`<rect x="${m}" y="${m}" width="${W - 2 * m}" height="${H - 2 * m}" rx="26" fill="${print ? '#ffffff' : P.sea}" stroke="${P.edge}" stroke-width="2"/>`);
+  // A faint grid every 50 units, stronger every 200, measured from the centre of the ship.
+  let grid = '';
+  for (let x = cx % 50; x < W - m; x += 50) if (x > m) grid += `M${coaF(x)} ${m}V${H - m}`;
+  for (let y = cy % 50; y < H - m; y += 50) if (y > m) grid += `M${m} ${coaF(y)}H${W - m}`;
+  let major = '';
+  for (let x = cx % 200; x < W - m; x += 200) if (x > m) major += `M${coaF(x)} ${m}V${H - m}`;
+  for (let y = cy % 200; y < H - m; y += 200) if (y > m) major += `M${m} ${coaF(y)}H${W - m}`;
+  o.push(`<path d="${grid}" stroke="${P.faint}" stroke-opacity="${print ? 0.25 : 0.32}" stroke-width="1"/><path d="${major}" stroke="${P.faint}" stroke-opacity="${print ? 0.45 : 0.6}" stroke-width="1.2"/>`);
+  const half = 50 * K, beam = 26 * K;
+  if (guides) {
+    // Where a ray from the centre leaves the sea panel.
+    const edge = (dx, dy) => { const t = Math.min(dx ? (dx > 0 ? W - m - 14 - cx : m + 14 - cx) / dx : Infinity, dy ? (dy > 0 ? H - m - 14 - cy : m + 14 - cy) / dy : Infinity); return t; };
+    for (const rel of [45, 90, 139]) for (const side of [1, -1]) {
+      const a = (rel * Math.PI) / 180, dx = Math.cos(a), dy = side * Math.sin(a), col = side > 0 ? P.stbd : P.port;
+      const t = edge(dx, dy);
+      o.push(`<path d="M${cx} ${cy}L${coaF(cx + dx * t)} ${coaF(cy + dy * t)}" stroke="${col}" stroke-width="2.6" stroke-opacity="0.8" stroke-dasharray="14 9"/>`);
+      const tl = t - 46, lx = cx + dx * tl, ly = cy + dy * tl;
+      o.push(`<rect x="${coaF(lx - 34)}" y="${coaF(ly - 17)}" width="68" height="34" rx="10" fill="${P.plate}" stroke="${col}" stroke-width="2"/>`);
+      o.push(coaText(lx, ly + 1, `${rel}°`, { size: 21, weight: 800, fill: col, family: 'mono' }));
+    }
+    // The centre line, bow to stern, with 0 ahead and 180 astern.
+    o.push(`<path d="M${m + 14} ${cy}H${W - m - 14}" stroke="${P.text}" stroke-opacity="0.55" stroke-width="2.4" stroke-dasharray="18 10"/>`);
+    for (const [x, t] of [[W - m - 58, '0°'], [m + 58, '180°']]) {
+      o.push(`<rect x="${x - 40}" y="${cy - 19}" width="80" height="38" rx="11" fill="${P.plate}" stroke="${P.edge}" stroke-width="2"/>`);
+      o.push(coaText(x, cy + 1, t, { size: 22, weight: 800, fill: P.text, family: 'mono' }));
+    }
+  }
+  // The shadow, then the hull: red port half up, green starboard half down, a crisp edge and a faint bevel.
+  o.push(`<g transform="translate(${cx + 9} ${cy + 13}) rotate(90) scale(${K})" opacity="${print ? 0.16 : 0.42}"><path d="${COA_HULL}" fill="#000" filter="url(#${id}-shadow)"/></g>`);
+  o.push(`<g transform="translate(${cx} ${cy}) rotate(90) scale(${K})">${coaShip(id).replace('stroke-width="1.5"', 'stroke-width="0.24"')}<path d="${COA_HULL}" transform="scale(0.955 0.975)" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="0.14"/></g>`);
+  // Names around the ship.
+  const lbl = (x, y, t, fill, anchor = 'middle') => coaText(x, y, t, { size: 26, weight: 800, fill, anchor, family: 'display', extra: `letter-spacing="4" stroke="${P.plate}" stroke-width="5" paint-order="stroke"` });
+  o.push(lbl(cx, cy - beam / 2 - 38, 'PORT', P.port), lbl(cx, cy + beam / 2 + 40, 'STARBOARD', P.stbd));
+  o.push(lbl(cx + half + 26, cy - 40, 'BOW', P.text, 'start'), lbl(cx - half - 26, cy - 40, 'STERN', P.text, 'end'));
+  o.push('</svg>');
+  return o.join('');
+}
+
 /* ---------- the height cross-section ---------- */
 // A side view of the airspace over the ship: each aircraft as a line at its height with its separation
 // band (half the minimum above and below), so two bands that overlap are a conflict (red). The sea and the
@@ -336,6 +395,16 @@ function coaHeightSvg(rows, sep, bad, P, { w = 320, h = 168 } = {}) {
 // The elements drawn on top (see the drawing layer in coa.js), as SVG: path (pts, color, width, marker),
 // line (x1 y1 x2 y2, arrow, dash), rect and ellipse (x y w h, fill), text (x y text size), icon (x y icon size).
 function coaMarkSvg(e, P) {
+  const body = coaMarkBody(e, P);
+  if (!body || !e.rot || e.type === 'path' || e.type === 'line') return body + (e.type === 'icon' ? coaMarkLabel(e, P) : '');
+  // Turned about the centre of its box (the same box the selection and the hit test use).
+  const b = typeof DK !== 'undefined' ? DK.box(e, typeof coaMeasure === 'function' ? coaMeasure : undefined) : null;
+  const cx = b ? b.x + b.w / 2 : e.x, cy = b ? b.y + b.h / 2 : e.y;
+  // The label of an icon stays upright under it.
+  return `<g transform="rotate(${coaF(e.rot)} ${coaF(cx)} ${coaF(cy)})">${body}</g>` + (e.type === 'icon' ? coaMarkLabel(e, P) : '');
+}
+const coaMarkLabel = (e, P) => (e.label ? `<text x="${coaF(e.x)}" y="${coaF(e.y + (e.size || 80) / 2 + 18)}" font-size="18" font-weight="800" text-anchor="middle" font-family="${COA_FONTS.ui}" fill="${e.color || P.text}" stroke="${P.plate}" stroke-width="3" paint-order="stroke">${coaEsc(e.label)}</text>` : '');
+function coaMarkBody(e, P) {
   const col = e.color || P.text, wd = e.width || 4;
   const ff = COA_FONTS.ui;
   if (e.type === 'path') {
@@ -344,7 +413,10 @@ function coaMarkSvg(e, P) {
     let d = `M${coaF(pts[0][0])} ${coaF(pts[0][1])}`;
     if (pts.length < 3) d += pts.slice(1).map((p) => `L${coaF(p[0])} ${coaF(p[1])}`).join('') + (pts.length === 1 ? `l0.1 0` : '');
     else { for (let i = 1; i < pts.length - 1; i += 1) { const a = pts[i], b = pts[i + 1]; d += `Q${coaF(a[0])} ${coaF(a[1])} ${coaF((a[0] + b[0]) / 2)} ${coaF((a[1] + b[1]) / 2)}`; } const l = pts[pts.length - 1]; d += `L${coaF(l[0])} ${coaF(l[1])}`; }
-    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // A free arrow: the head at the end, in the direction the stroke ended.
+    const hd = e.arrow && !e.marker && typeof DK !== 'undefined' ? DK.pathHead(pts, wd) : null;
+    const head = hd ? `<path d="M${coaF(hd.x + Math.cos(hd.a) * wd * 0.6)} ${coaF(hd.y + Math.sin(hd.a) * wd * 0.6)}L${coaF(hd.x - hd.L * Math.cos(hd.a - 0.45))} ${coaF(hd.y - hd.L * Math.sin(hd.a - 0.45))}L${coaF(hd.x - hd.L * Math.cos(hd.a + 0.45))} ${coaF(hd.y - hd.L * Math.sin(hd.a + 0.45))}Z" fill="${col}"/>` : '';
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"/>${head}`;
   }
   if (e.type === 'line') {
     let out = `<path d="M${coaF(e.x1)} ${coaF(e.y1)}L${coaF(e.x2)} ${coaF(e.y2)}" stroke="${col}" stroke-width="${wd}" stroke-linecap="round" ${e.dash ? `stroke-dasharray="${wd * 3} ${wd * 2}"` : ''}/>`;
@@ -367,8 +439,7 @@ function coaMarkSvg(e, P) {
     const ic = wbIconById(e.icon);
     if (!ic) return '';
     const s = e.size || 80;
-    return `<g${e.rot ? ` transform="rotate(${coaF(e.rot)} ${coaF(e.x)} ${coaF(e.y)})"` : ''} color="${col}" style="color:${col}"><svg x="${coaF(e.x - s / 2)}" y="${coaF(e.y - s / 2)}" width="${s}" height="${s}" viewBox="0 0 64 64" overflow="visible">${ic.svg}</svg></g>`
-      + (e.label ? `<text x="${coaF(e.x)}" y="${coaF(e.y + s / 2 + 18)}" font-size="18" font-weight="800" text-anchor="middle" font-family="${ff}" fill="${col}" stroke="${P.plate}" stroke-width="3" paint-order="stroke">${coaEsc(e.label)}</text>` : '');
+    return `<g color="${col}" style="color:${col}"><svg x="${coaF(e.x - s / 2)}" y="${coaF(e.y - s / 2)}" width="${s}" height="${s}" viewBox="0 0 64 64" overflow="visible">${ic.svg}</svg></g>`;
   }
   return '';
 }

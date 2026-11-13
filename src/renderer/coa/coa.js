@@ -7,22 +7,9 @@
    op alle schermen; erop tekenen kan met de schuif Tekenen; afdrukken en delen altijd op A5 staand.
    ============================================================ */
 // A plan is one item (OPS kind 'coa', list 'plans'); every drawing on it is an item of its own in
-// 'marks' ({ plan, type, ... } in board units), so two screens can draw on one plan at once.
+// 'marks' ({ plan, type, ... } in board units), so two screens can draw on one plan at once; what is drawn
+// on the large ship of Teken Schip goes in 'shipmarks' the same way (1.49).
 // Directions are stored true (°T); the plan's `ref` only says how they are shown and typed.
-const COA_TOOLS = {
-  select: { name: 'Selecteren', icon: 'target', hint: 'Tik op een tekening om haar te kiezen; sleep om te verplaatsen.' },
-  pen: { name: 'Pen', icon: 'edit', hint: 'Tekenen uit de vrije hand.' },
-  marker: { name: 'Markeerstift', icon: 'note', hint: 'Brede, doorzichtige streek.' },
-  line: { name: 'Lijn', icon: 'min', hint: 'Sleep van A naar B.' },
-  arrow: { name: 'Pijl', icon: 'arrowUp', hint: 'Sleep van A naar B: de punt komt bij B.' },
-  rect: { name: 'Rechthoek', icon: 'max', hint: 'Sleep een rechthoek.' },
-  ellipse: { name: 'Ellips', icon: 'globe', hint: 'Sleep een ellips of cirkel.' },
-  text: { name: 'Tekst', icon: 'keyboard', hint: 'Tik waar de tekst moet komen.' },
-  icon: { name: 'Icoon', icon: 'star', hint: 'Kies een icoon onder Iconen en tik waar het moet komen.' },
-  eraser: { name: 'Gum', icon: 'trash', hint: 'Tik of veeg over een tekening om haar te wissen.' },
-};
-const COA_COLORS = ['#ff4b55', '#ff9f1c', '#ffe14d', '#3ecf6e', '#3d9bff', '#b48cff', '#ff6fd8', '#ffffff', '#0a0f18', '#00c2c7'];
-const COA_WIDTHS = [3, 5, 8, 13];
 const COA_SEPS = [200, 300, 500, 1000];
 
 function coaCfg(w) {
@@ -73,6 +60,8 @@ function coaModel(p, offMin = 0) {
     p, base, pos, lat, lon, at, wd, ws, gust, decl, ref, refText: ref, up: p.up === 'n' ? 0 : at,
     fmt: (t) => C.deg3(disp(t)), disp, coas, brc, sun, moon, light, phase: C.lightPhase(sun.alt), dark,
     glareSun: !!(glareSun && glareSun.on), glareMoon: !!(glareMoon && glareMoon.on), shadow, tAstro, offMin, sea,
+    // What was drawn on the ship in Teken Schip: it goes along on the ship of all four COAs.
+    shipMarks: p.id ? OPS.list('coa', 'shipmarks').filter((m) => m.plan === p.id).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : [],
   };
 }
 
@@ -139,7 +128,7 @@ function coaCreate(body, w) {
   cleanups.push(unsub);
 
   /* ---------- toolbar ---------- */
-  const sel = h('select', { class: 'input zp-sel coa-sel', title: 'Plan kiezen', onchange: () => { flush(); cfg.planId = sel.value || null; save(); selMark = null; load(); paint({ inputs: true }); fetchSoon(true); } });
+  const sel = h('select', { class: 'input zp-sel coa-sel', title: 'Plan kiezen', onchange: () => { flush(); cfg.planId = sel.value || null; save(); layer.clearSel(); load(); paint({ inputs: true }); fetchSoon(true); } });
   const refSeg = segmented([{ value: 'T', label: '°T', title: 'Ware graden (true)' }, { value: 'M', label: '°M', title: 'Magnetische graden: met de variatie op de positie (WMM2025)' }], 'T', (v) => set({ ref: v }));
   const upSeg = segmented([{ value: 'at', label: 'AT boven', title: 'De Assault Track wijst omhoog: de heli komt van onderen' }, { value: 'n', label: 'N boven', title: 'Noord boven' }], 'at', (v) => set({ up: v }));
   const nightBtn = h('button', { class: 'btn zp-btn', title: 'Nachtstand: gedimd en rood, voor de cockpit en onder NVG', onclick: () => { cfg.night = !cfg.night; save(); root.classList.toggle('night', cfg.night); nightBtn.classList.toggle('on', cfg.night); } }, icon('moon'), 'Nacht');
@@ -153,15 +142,16 @@ function coaCreate(body, w) {
     if (!P) return;
     confirmDialog('Plan verwijderen', `"${P.name}" met alle tekeningen verwijderen, ook op de andere schermen?`, 'Verwijderen', () => {
       const id = P.id;
-      OPS.putMany('coa', [{ list: 'plans', id, item: null }, ...OPS.list('coa', 'marks').filter((m) => m.plan === id).map((m) => ({ list: 'marks', id: m.id, item: null }))]);
+      OPS.putMany('coa', [{ list: 'plans', id, item: null }, ...['marks', 'shipmarks'].flatMap((l) => OPS.list('coa', l).filter((m) => m.plan === id).map((m) => ({ list: l, id: m.id, item: null })))]);
       cfg.planId = null; save(); P = null; ensurePlan(); load(); paint({ inputs: true });
     });
   } }, icon('trash'));
+  const shipBtn = h('button', { class: 'btn zp-btn coa-shipbtn', title: 'Teken Schip: teken het schip één keer groot (opbouw, dek …); het gaat als miniatuur mee in alle vier de COA’s', onclick: () => shipDialog() }, icon('edit'), 'Teken Schip', h('span', { class: 'coa-shipn', hidden: true }));
   const missionBtn = h('button', { class: 'btn zp-btn', title: 'W/V, zon en maan en de ingress naar een missie in Mission Planning', onclick: () => missionDialog() }, icon('shield'), 'Naar missie');
   const pdfBtn = h('button', { class: 'btn zp-btn', title: 'De kniebordkaart als PDF (A5 staand)', onclick: () => exportA5('pdf') }, icon('download'), 'PDF A5');
   const printBtn = h('button', { class: 'btn zp-btn primary', title: 'Afdrukken op A5 staand, voor het kniebord', onclick: () => exportA5('print') }, icon('note'), 'Afdrukken A5');
   bar.append(h('span', { class: 'mp-title coa-title' }, icon('target'), 'COA PLANNER'), sel, newBtn, renBtn, delBtn,
-    h('span', { class: 'coa-barsep' }), refSeg, upSeg, nightBtn, drawSw, h('span', { class: 'zp-spacer' }), missionBtn, pdfBtn, printBtn);
+    h('span', { class: 'coa-barsep' }), refSeg, upSeg, nightBtn, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, pdfBtn, printBtn);
   function paintBar() {
     const list = coaPlans();
     sel.replaceChildren(...list.map((p) => h('option', { value: p.id, selected: p.id === cfg.planId || null }, p.name)));
@@ -169,6 +159,10 @@ function coaCreate(body, w) {
     if (P) { refSeg.setValue(P.ref === 'M' ? 'M' : 'T'); upSeg.setValue(P.up === 'n' ? 'n' : 'at'); }
     nightBtn.classList.toggle('on', !!cfg.night);
     drawSw.paint();
+    // How many drawings the ship of this plan has.
+    const n = P ? OPS.list('coa', 'shipmarks').filter((m) => m.plan === P.id).length : 0;
+    const badge = shipBtn.querySelector('.coa-shipn');
+    badge.hidden = !n; badge.textContent = String(n);
   }
   root.classList.toggle('night', !!cfg.night);
 
@@ -639,181 +633,86 @@ function coaCreate(body, w) {
     }, 30);
   }
 
-  /* ---------- drawing on the plan ---------- */
-  let marks = [], selMark = null, drawing = null, drag = null;
-  const undo = [], redo = [];
-  const drawSvg = () => drawEl.querySelector('svg');
-  const marksOf = () => (P ? OPS.list('coa', 'marks').filter((m) => m.plan === P.id).sort((a, b) => (a.z || 0) - (b.z || 0) || a.updatedAt - b.updatedAt) : []);
-  function paintMarks() {
-    marks = marksOf();
-    if (selMark && !marks.some((m) => m.id === selMark)) selMark = null;
-    const Pp = pal();
-    const sel2 = selMark && marks.find((m) => m.id === selMark);
-    let selBox = '';
-    if (sel2) { const b = markBox(sel2); selBox = `<rect x="${b.x - 8}" y="${b.y - 8}" width="${b.w + 16}" height="${b.h + 16}" fill="none" stroke="#ffd21f" stroke-width="2.5" stroke-dasharray="8 6" rx="6"/>`; }
-    drawEl.innerHTML = `<svg viewBox="0 0 ${COA_W} ${COA_H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, Pp)).join('')}${drawing ? coaMarkSvg(drawing, Pp) : ''}${selBox}</svg>`;
-    if (cfg.draw) paintTools();
-  }
-  function markBox(e) {
-    if (e.type === 'path') { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of e.pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; }
-    if (e.type === 'line') return { x: Math.min(e.x1, e.x2), y: Math.min(e.y1, e.y2), w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
-    if (e.type === 'icon') return { x: e.x - e.size / 2, y: e.y - e.size / 2, w: e.size, h: e.size };
-    if (e.type === 'text') { const l = String(e.text || '').split('\n'); return { x: e.x, y: e.y, w: Math.max(...l.map((s) => s.length)) * e.size * 0.56, h: l.length * e.size * 1.25 }; }
-    return { x: Math.min(e.x, e.x + e.w), y: Math.min(e.y, e.y + e.h), w: Math.abs(e.w), h: Math.abs(e.h) };
-  }
-  const segDist = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0; return Math.hypot(px - (ax + t * dx), py - (ay + t * dy)); };
-  function hitMark(x, y) {
-    const tol = 14;
-    for (let i = marks.length - 1; i >= 0; i -= 1) {
-      const e = marks[i], b = markBox(e);
-      if (x < b.x - tol || y < b.y - tol || x > b.x + b.w + tol || y > b.y + b.h + tol) continue;
-      if (e.type === 'path') { const r = (e.width || 4) * (e.marker ? 1.5 : 0.5) + tol; for (let j = 1; j < e.pts.length; j += 1) if (segDist(x, y, ...e.pts[j - 1], ...e.pts[j]) <= r) return e; if (e.pts.length === 1) return e; continue; }
-      if (e.type === 'line') { if (segDist(x, y, e.x1, e.y1, e.x2, e.y2) <= (e.width || 4) / 2 + tol) return e; continue; }
-      return e;
-    }
-    return null;
-  }
-  const cleanMark = (e) => { const o = { ...e }; delete o.id; delete o.updatedAt; if (o.type === 'path') o.pts = o.pts.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]); return o; };
-  function commitMark(e, before) {
-    if (!P) return;
-    const id = e.id || OPS.uid();
-    e.id = id; e.plan = P.id; e.by = OPS.screen.name;
-    if (e.z == null) e.z = marks.length ? Math.max(...marks.map((m) => m.z || 0)) + 1 : 1;
-    undo.push({ id, before: before ? cleanMark(before) : null, after: cleanMark(e) });
-    if (undo.length > 100) undo.shift();
-    redo.length = 0;
-    OPS.put('coa', 'marks', id, cleanMark(e));
-  }
-  function removeMark(e) { undo.push({ id: e.id, before: cleanMark(e), after: null }); redo.length = 0; OPS.put('coa', 'marks', e.id, null); if (selMark === e.id) selMark = null; }
-  function doUndo(fromRedo) {
-    const stack = fromRedo ? redo : undo, other = fromRedo ? undo : redo;
-    const op = stack.pop(); if (!op) return;
-    const to = fromRedo ? op.after : op.before;
-    OPS.put('coa', 'marks', op.id, to ? { ...to, plan: P.id } : null);
-    other.push(op); selMark = null; paintMarks();
-  }
-  function textDialog(at, e0) {
-    const ta = h('textarea', { class: 'input', rows: 3, value: e0 ? e0.text : '', placeholder: 'bv. LZ, FRIES 1, holding' });
-    openModal({ title: e0 ? 'Tekst bewerken' : 'Tekst plaatsen', body: [field('Tekst', ta)], actions: [{ label: 'Annuleren' }, { label: 'Plaatsen', primary: true, onClick: () => {
-      const t = ta.value.trim();
-      if (e0) { const b = JSON.parse(JSON.stringify(e0)); if (!t) removeMark(e0); else { e0.text = t; commitMark(e0, b); } }
-      else if (t) commitMark({ type: 'text', x: at.x, y: at.y, text: t, size: cfg.fontSize, color: cfg.color });
-      paintMarks();
-    } }] });
-  }
-  function labelDialog(e) {
-    const inp = textInput(e.label || '', { maxlength: 16, placeholder: 'bv. LION01' });
-    openModal({ title: 'Label bij het icoon', body: [field('Label', inp)], actions: [{ label: 'Annuleren' }, { label: 'Opslaan', primary: true, onClick: () => { const b = JSON.parse(JSON.stringify(e)); e.label = inp.value.trim() || undefined; commitMark(e, b); paintMarks(); } }] });
-  }
-  drawEl.addEventListener('pointerdown', (ev) => {
-    if (!cfg.draw || !P) return;
-    const svg = drawSvg(); const pt = svgPoint(svg, ev); if (!pt) return;
-    ev.preventDefault();
-    drawEl.setPointerCapture(ev.pointerId);
-    const x = pt.x, y = pt.y, tool = cfg.tool;
-    if (tool === 'select') {
-      const e = hitMark(x, y);
-      selMark = e ? e.id : null;
-      if (e) drag = { e, before: JSON.parse(JSON.stringify(e)), x, y, moved: false };
-      paintMarks(); return;
-    }
-    if (tool === 'eraser') { drag = { erase: true }; const e = hitMark(x, y); if (e) { removeMark(e); paintMarks(); } return; }
-    if (tool === 'text') { const e = hitMark(x, y); textDialog({ x, y }, e && e.type === 'text' ? e : null); return; }
-    if (tool === 'icon') { commitMark({ type: 'icon', x, y, icon: cfg.iconId, size: cfg.iconSize, color: cfg.color }); paintMarks(); return; }
-    const base = { color: cfg.color, width: cfg.width };
-    if (tool === 'pen' || tool === 'marker') drawing = { type: 'path', pts: [[x, y]], marker: tool === 'marker', ...base };
-    else if (tool === 'line' || tool === 'arrow') drawing = { type: 'line', x1: x, y1: y, x2: x, y2: y, arrow: tool === 'arrow' ? 'end' : 'none', ...base };
-    else drawing = { type: tool, x, y, w: 0, h: 0, fill: !!cfg.fill, ...base };
-    paintMarks();
+  /* ---------- drawing on the plan (coa-draw.js) ---------- */
+  const layer = coaDrawLayer({
+    el: drawEl, tools, cfg, save, list: 'marks', plan: () => P, W: COA_W, H: COA_H, pal,
+    on: () => !!cfg.draw, keys: () => onScreen(body) && !modalOpen(), iconMax: 300, title: 'Tekenlaag',
+    hint: 'De tekening hoort bij dit plan, staat op alle schermen en komt mee op de A5-afdruk. Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken.',
   });
-  drawEl.addEventListener('pointermove', (ev) => {
-    if (!cfg.draw) return;
-    const pt = svgPoint(drawSvg(), ev); if (!pt) return;
-    if (drag && drag.erase) { const e = hitMark(pt.x, pt.y); if (e) { removeMark(e); paintMarks(); } return; }
-    if (drag && drag.e) {
-      const dx = pt.x - drag.x, dy = pt.y - drag.y; drag.x = pt.x; drag.y = pt.y; drag.moved = true;
-      const e = drag.e;
-      if (e.type === 'path') e.pts = e.pts.map(([a, b]) => [a + dx, b + dy]); else if (e.type === 'line') { e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; } else { e.x += dx; e.y += dy; }
-      const i = marks.findIndex((m) => m.id === e.id); if (i >= 0) marks[i] = e;
-      drawEl.innerHTML = `<svg viewBox="0 0 ${COA_W} ${COA_H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, pal())).join('')}</svg>`;
-      return;
-    }
-    if (!drawing) return;
-    if (drawing.type === 'path') { const l = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(pt.x - l[0], pt.y - l[1]) >= 2.5) drawing.pts.push([pt.x, pt.y]); }
-    else if (drawing.type === 'line') { drawing.x2 = pt.x; drawing.y2 = pt.y; }
-    else { drawing.w = pt.x - drawing.x; drawing.h = pt.y - drawing.y; }
-    paintMarks();
-  });
-  const endDraw = () => {
-    if (drag && drag.e && drag.moved) commitMark(drag.e, drag.before);
-    drag = null;
-    if (drawing) {
-      const d = drawing; drawing = null;
-      const tiny = (d.type === 'line' && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < 6) || ((d.type === 'rect' || d.type === 'ellipse') && (Math.abs(d.w) < 6 || Math.abs(d.h) < 6));
-      if (!tiny) commitMark(d);
-    }
-    paintMarks();
-  };
-  drawEl.addEventListener('pointerup', endDraw);
-  drawEl.addEventListener('pointercancel', endDraw);
-  drawEl.addEventListener('dblclick', (ev) => {
-    if (!cfg.draw) return;
-    const pt = svgPoint(drawSvg(), ev); if (!pt) return;
-    const e = hitMark(pt.x, pt.y);
-    if (e && e.type === 'text') textDialog(null, e); else if (e && e.type === 'icon') labelDialog(e);
-  });
-  let iconQuery = '', iconCat = 'all';
-  function paintTools() {
-    const scroll = tools.scrollTop;
-    const tabs = segmented([{ value: 'draw', label: 'Tekenen' }, { value: 'icons', label: 'Iconen' }], cfg.toolTab, (v) => { cfg.toolTab = v; save(); paintTools(); });
-    const s = selMark && marks.find((m) => m.id === selMark);
-    let content;
-    if (cfg.toolTab === 'icons') {
-      const q = h('input', { class: 'input zp-profq', type: 'search', placeholder: 'Zoek: AW139, boot, RHIB, sniper…', value: iconQuery });
-      const grid = h('div', { class: 'wb-icons coa-icons' });
-      const cats = h('div', { class: 'wb-cats' });
-      const paintGrid = () => {
-        const words = iconQuery.toLowerCase().split(/\s+/).filter(Boolean);
-        const list = WB_ICONS.filter((ic) => (iconCat === 'all' || ic.cat === iconCat) && words.every((wd) => ic.kw.includes(wd)));
-        grid.replaceChildren(...list.map((ic) => h('button', { class: 'wb-iconbtn' + (cfg.iconId === ic.id && cfg.tool === 'icon' ? ' on' : ''), title: ic.name, onclick: () => { cfg.iconId = ic.id; cfg.tool = 'icon'; save(); paintGrid(); } },
-          h('span', { class: 'wb-iconpic', html: wbIconSvg(ic, ic.own ? '#e9eff8' : 'currentColor', 36) }), h('small', {}, ic.name.replace(/\s*\((bovenaanzicht|zijaanzicht)?,?\s*(detail)?\)$/i, '')))));
-        cats.replaceChildren(h('button', { class: 'wb-cat' + (iconCat === 'all' ? ' on' : ''), onclick: () => { iconCat = 'all'; paintGrid(); } }, 'Alles'), ...Object.entries(WB_CATS).map(([k, n]) => h('button', { class: 'wb-cat' + (iconCat === k ? ' on' : ''), onclick: () => { iconCat = k; paintGrid(); } }, n)));
-      };
-      q.addEventListener('input', () => { iconQuery = q.value; paintGrid(); });
-      paintGrid();
-      content = h('div', { class: 'zp-panel' }, h('div', { class: 'zp-profsearch' }, icon('search'), q), cats, grid,
-        h('div', { class: 'row' }, field('Icoongrootte', zpSelect([50, 70, 90, 120, 160].map((v) => ({ value: v, label: `${v}` })), cfg.iconSize, (v) => { cfg.iconSize = +v; save(); }))));
-    } else {
-      content = h('div', { class: 'zp-panel' },
-        h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gereedschap')),
-          h('div', { class: 'wb-tools coa-toolgrid' }, Object.entries(COA_TOOLS).map(([k, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === k ? ' on' : ''), title: `${t.name} — ${t.hint}`, onclick: () => { cfg.tool = k; save(); if (k !== 'select') selMark = null; paintMarks(); paintTools(); } }, icon(t.icon), h('span', {}, t.name)))),
-          h('p', { class: 'zp-hint' }, (COA_TOOLS[cfg.tool] || COA_TOOLS.pen).hint)),
-        h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Kleur en dikte')),
-          h('div', { class: 'wb-colors' }, COA_COLORS.map((c) => h('button', { class: 'wb-color' + (cfg.color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => { cfg.color = c; save(); if (s) { const b = JSON.parse(JSON.stringify(s)); s.color = c; commitMark(s, b); } paintTools(); } }))),
-          h('div', { class: 'wb-widths' }, COA_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd}`, onclick: () => { cfg.width = wd; save(); paintTools(); } }, h('i', { style: `height:${Math.min(12, wd)}px` })))),
-          checkbox('Vormen vullen', !!cfg.fill, (v) => { cfg.fill = v; save(); }),
-          h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([20, 26, 30, 40, 54].map((v) => ({ value: v, label: `${v}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; save(); })))),
-        s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie')),
-          h('div', { class: 'zp-btnrow' },
-            s.type === 'icon' ? h('button', { class: 'btn zp-btn', onclick: () => labelDialog(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…') : null,
-            s.type === 'text' ? h('button', { class: 'btn zp-btn', onclick: () => textDialog(null, s) }, icon('edit'), 'Bewerken') : null,
-            s.type === 'line' ? h('button', { class: 'btn zp-btn', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.dash = !s.dash; commitMark(s, b); paintMarks(); } }, s.dash ? 'Doorgetrokken' : 'Gestippeld') : null,
-            h('button', { class: 'btn zp-btn danger', onclick: () => { removeMark(s); paintMarks(); } }, icon('trash'), 'Verwijderen'))) : null,
-        h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Tekening')),
-          h('div', { class: 'zp-btnrow' },
-            h('button', { class: 'btn zp-btn', onclick: () => doUndo(false), disabled: !undo.length || null }, icon('left'), 'Ongedaan'),
-            h('button', { class: 'btn zp-btn', onclick: () => doUndo(true), disabled: !redo.length || null }, icon('right'), 'Opnieuw'),
-            h('button', { class: 'btn zp-btn danger', onclick: () => { if (!marks.length) return; confirmDialog('Tekening wissen', `Alle ${marks.length} tekeningen op dit plan wissen, ook op de andere schermen?`, 'Wissen', () => { OPS.putMany('coa', marks.map((m) => ({ list: 'marks', id: m.id, item: null }))); undo.length = 0; redo.length = 0; paintMarks(); }); } }, icon('trash'), 'Alles wissen')),
-          h('p', { class: 'zp-hint' }, 'De tekening hoort bij dit plan, staat op alle schermen en komt mee op de A5-afdruk. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
-    }
-    tools.replaceChildren(h('div', { class: 'coa-toolhead' }, h('b', {}, 'Tekenlaag'), tabs), content);
-    tools.scrollTop = scroll;
-  }
+  cleanups.push(() => layer.destroy());
+  const paintMarks = () => layer.paint();
   function paintMode() {
     root.classList.toggle('drawing', !!cfg.draw);
     drawSw.paint();
-    if (cfg.draw) paintTools(); else { tools.replaceChildren(); selMark = null; }
-    paintMarks();
+    if (!cfg.draw) tools.replaceChildren();
+    layer.mode();
+  }
+
+  /* ---------- Teken Schip: the ship large, to draw the plan on ---------- */
+  // The ship of the board, seen from above and lying down (bow right, stern left), as large as the screen
+  // allows and sharp at any size (vector). On the left the whole drawing kit; what is drawn belongs to the
+  // plan (OPS 'coa' / 'shipmarks'), is on every screen at once, and prints on A5 landscape.
+  const SHIP_W = COA_SHEET.w, SHIP_H = COA_SHEET.h;
+  function shipDialog() {
+    if (!P) return toast('Even geduld: het plan wordt geladen');
+    flush();
+    const sideEl = h('aside', { class: 'coa-tools coa-shiptools' });
+    const picEl = h('div', { class: 'coa-shippic' });
+    const drawLayerEl = h('div', { class: 'coa-shipdraw' });
+    const stageEl = h('div', { class: 'coa-shipstage' }, picEl, drawLayerEl);
+    let guides = cfg.shipGuides !== false;
+    const guideBtn = h('button', { class: 'btn zp-btn' + (guides ? ' on' : ''), title: 'De peilingen 45°, 90° en 139° vanaf de boeg en de hartlijn aan of uit', onclick: () => { guides = !guides; cfg.shipGuides = guides; save(); guideBtn.classList.toggle('on', guides); paintPic(); } }, icon('target'), 'Hulplijnen');
+    const countEl = h('span', { class: 'coa-shipcount' });
+    const head = h('div', { class: 'coa-shipbar' },
+      h('span', { class: 'coa-shipname' }, h('b', {}, P.name), h('small', {}, 'Teken het schip één keer (opbouw, dek, kraan …): het gaat als miniatuur mee in alle vier de COA’s en op de A5-kaart')),
+      countEl, h('span', { class: 'zp-spacer' }), guideBtn,
+      h('button', { class: 'btn zp-btn', title: 'Als PDF (A5 liggend)', onclick: () => shipExport('pdf') }, icon('download'), 'PDF A5'),
+      h('button', { class: 'btn zp-btn', title: 'Afdrukken op A5 liggend', onclick: () => shipExport('print') }, icon('note'), 'Afdrukken'));
+    const paintPic = () => { picEl.innerHTML = coaShipSheetSvg(pal(), { guides, id: 'ship-' + w.id }); };
+    paintPic();
+    let shipLayer = null, backdrop = null, boardTimer = null;
+    const close = openModal({ title: 'Teken Schip', wide: true, cls: 'coa-shipmodal', bare: true, body: h('div', { class: 'coa-shipbody' }, sideEl, h('div', { class: 'coa-shipmain' }, head, stageEl)) });
+    backdrop = sideEl.closest('.modal-backdrop');
+    shipLayer = coaDrawLayer({
+      el: drawLayerEl, tools: sideEl, cfg, save, list: 'shipmarks', plan: () => P, W: SHIP_W, H: SHIP_H, pal,
+      on: () => true, keys: () => !!backdrop && $('#modal-root').lastElementChild === backdrop, iconMax: 420, title: 'Teken Schip',
+      hint: 'Wat je op en direct rond de romp tekent (opbouw, dek, kraan) gaat als miniatuur mee op het schip in alle vier de COA’s en op de A5-kaart; het draait mee met de koers per COA. Pijlen en helikopters verder van het schip blijven alleen op dit blad. Staat op alle schermen; los af te drukken op A5 liggend. Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken.',
+      onChange: (n) => {
+        countEl.textContent = n ? `${n} ${n === 1 ? 'tekening' : 'tekeningen'}` : 'nog leeg';
+        // The four COA cards behind the dialog follow the drawing (a moment later, once for a run of changes).
+        clearTimeout(boardTimer); boardTimer = setTimeout(() => { if (P) { vm = coaModel(P, offMin); paintBoard(); } }, 150);
+      },
+    });
+    shipLayer.mode();
+    // Theme switched while open: the ship follows. Closed (cross, backdrop, Escape): everything goes.
+    const tw = new MutationObserver(() => { paintPic(); shipLayer.paint(); });
+    tw.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    const ro = new ResizeObserver(() => shipLayer.paint());
+    ro.observe(stageEl);
+    const gone = new MutationObserver(() => { if (backdrop && !backdrop.isConnected) { shipLayer.destroy(); tw.disconnect(); ro.disconnect(); gone.disconnect(); paintBar(); } });
+    gone.observe($('#modal-root'), { childList: true });
+    void close;
+    function shipExport(how) {
+      const Pp = COA_PAL.print;
+      const svg = coaShipSheetSvg(Pp, { guides, id: 'pship', print: true }).replace('</svg>', `${shipLayer.marks().map((m) => coaMarkSvg(m, Pp)).join('')}</svg>`);
+      const d = new Date(P.hhour || Date.now());
+      const dtg = `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z`;
+      const v = vm;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+@page { size: A5 landscape; margin: 0; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Segoe UI', -apple-system, sans-serif; color: #0b1320; }
+.pg { width: 190mm; margin: ${how === 'print' ? '6mm' : '0'} auto 0; }
+.hd { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1.4pt solid #0b1320; padding-bottom: 1mm; }
+.hd h1 { font: 800 11pt Bahnschrift, 'Segoe UI', sans-serif; letter-spacing: 0.08em; margin: 0; }
+.hd span { font-size: 7.6pt; font-weight: 700; }
+svg { width: 190mm; height: 106.9mm; display: block; margin-top: 1.5mm; }
+.ft { margin-top: 1mm; color: #4a5a70; font-size: 6pt; display: flex; justify-content: space-between; }
+</style></head><body><div class="pg"><div class="hd"><h1>SHIP · ${escHtml(P.name)}</h1><span>${v ? `AT ${v.fmt(v.at)}°${v.refText} · ` : ''}${dtg}</span></div>${svg}<div class="ft"><span>Top view, bow right · port red, starboard green${guides ? ' · rel. bearings 45/90/139°' : ''}</span><span>P-ALV Dashboard · ${escHtml(OPS.screen.name || '')} · ${zulu(Date.now())}</span></div></div></body></html>`;
+      const name = `Schip ${P.name}`.replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.pdf';
+      const job = how === 'print' ? window.palv.plan.printA5({ html, landscape: true }) : window.palv.plan.printPdf({ html, name, pageSize: 'A5', landscape: true });
+      job.then((r) => { if (r && r.ok) toast(how === 'print' ? 'Naar de printer gestuurd (A5 liggend)' : 'Opgeslagen als PDF (A5 liggend)'); else if (r && r.error) toast(r.error, true); }).catch((err) => toast(String(err.message || err), true));
+    }
   }
 
   /* ---------- to a mission ---------- */
@@ -847,7 +746,7 @@ function coaCreate(body, w) {
   function a5Html(how) {
     const Pp = COA_PAL.print;
     const v = vm;
-    const svg = coaBoardSvg(v, Pp, { id: 'p' }).replace('</svg>', `${marks.map((m) => coaMarkSvg(m, Pp)).join('')}</svg>`);
+    const svg = coaBoardSvg(v, Pp, { id: 'p' }).replace('</svg>', `${layer.marks().map((m) => coaMarkSvg(m, Pp)).join('')}</svg>`);
     const e = escHtml;
     const d = new Date(P.hhour || Date.now());
     const dtg = `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z ${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;

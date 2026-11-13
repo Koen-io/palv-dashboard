@@ -111,3 +111,48 @@ body.touch .wb-color { height: 2.5rem; }
 body.touch .wb-qbtn { width: 2.6rem; height: 2.4rem; }
 body.touch .wb-icons { grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr)); }
 body.touch .wb-hbtn { width: 2.4rem; height: 2.4rem; }
+
+/* ============================================================
+   Tekenkit (drawkit.js): het selectiekader met draai- en schaalgrepen, gedeeld door het Whiteboard,
+   de tekenlaag van de COA Planner en Teken Schip
+   ============================================================ */
+.dk-sel { position: absolute; z-index: 4; pointer-events: none; transform-origin: 50% 50%; }
+.dk-sel[hidden], .dk-badge[hidden], .dk-sel [hidden] { display: none; }
+.dk-frame { position: absolute; inset: 0; border: 1.5px dashed #ffd21f; border-radius: 5px; box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.38), inset 0 0 0 1px rgba(5, 9, 16, 0.22); }
+.dk-sel.busy .dk-frame { border-style: solid; }
+.dk-h { position: absolute; width: 13px; height: 13px; margin: -7.5px 0 0 -7.5px; background: #fff; border: 2px solid #f0a800; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); pointer-events: auto; touch-action: none; }
+.dk-h::after { content: ''; position: absolute; inset: -11px; }
+.dk-nw { left: 0; top: 0; cursor: nwse-resize; }
+.dk-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.dk-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.dk-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.dk-stem { position: absolute; left: 50%; top: -24px; height: 24px; width: 0; border-left: 1.5px solid #ffd21f; box-shadow: 0 0 0 0.5px rgba(5, 9, 16, 0.35); }
+.dk-rot { position: absolute; left: 50%; top: -24px; transform: translate(-50%, -100%); width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 2px solid #fff; background: #ffd21f; color: #1a1200; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5); pointer-events: auto; touch-action: none; cursor: grab; }
+.dk-rot::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; }
+.dk-rot svg { width: 18px; height: 18px; }
+.dk-rot:hover { background: #ffe25c; }
+.dk-sel.busy .dk-rot { cursor: grabbing; background: #fff; }
+.dk-badge { position: absolute; z-index: 5; transform: translate(-50%, -50%); padding: 0.15rem 0.5rem; border-radius: 99px; background: rgba(7, 13, 24, 0.92); border: 1px solid #ffd21f; color: #fff; font: 700 0.78rem var(--font-mono); pointer-events: none; white-space: nowrap; }
+body.touch .dk-h { width: 20px; height: 20px; margin: -11px 0 0 -11px; }
+body.touch .dk-stem { top: -30px; height: 30px; }
+body.touch .dk-rot { top: -30px; width: 44px; height: 44px; }
+body.touch .dk-rot svg { width: 24px; height: 24px; }
+.dk-sel.dk-pulse .dk-frame { animation: dk-pulse-frame 0.32s ease-out; }
+@keyframes dk-pulse-frame { 0% { box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.38), 0 0 0 0 rgba(255, 210, 31, 0.75); } 100% { box-shadow: 0 0 0 1px rgba(5, 9, 16, 0.38), 0 0 0 14px rgba(255, 210, 31, 0); } }
+
+/* the icon panel: the quick icons on top */
+.dk-quicksec { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.45rem; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.dk-quicksec[hidden], .wb-cats[hidden] { display: none; }
+.dk-quickhead { display: flex; align-items: baseline; gap: 0.5rem; }
+.dk-quickhead b { font: 800 0.66rem var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.dk-quickhead small { font-size: 0.66rem; color: var(--muted); }
+.wb-iconbtn.dk-sym small { font-size: 0.56rem; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 1.3em; }
+.dk-turnrow { display: grid !important; grid-template-columns: auto 1fr auto; gap: 0.3rem; }
+.dk-turnrow .btn { justify-content: center; white-space: nowrap; }
+.dk-del { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 12px); width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 2px solid #fff; background: #e5383f; color: #fff; box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5); pointer-events: auto; touch-action: none; cursor: pointer; }
+.dk-del::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; }
+.dk-del svg { width: 15px; height: 15px; }
+.dk-del:hover { background: #ff4b55; }
+.dk-sel.busy .dk-del { display: none; }
+body.touch .dk-del { width: 38px; height: 38px; transform: translate(-50%, 16px); }
+body.touch .dk-del svg { width: 20px; height: 20px; }

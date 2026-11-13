@@ -17,16 +17,17 @@
 // of map, drawn from the tile cache on every screen; one board unit is one map pixel at `zoom`).
 // All in board units; `rot` in degrees about the centre.
 const WB_TOOLS = {
-  select: { name: 'Selecteren', icon: 'target', key: 'V', hint: 'Tik op een element om het te kiezen; sleep om te verplaatsen, grepen om te draaien of te schalen. Sleep op leeg om het bord te verschuiven.' },
+  select: { name: 'Selecteren', icon: 'target', key: 'V', hint: 'Tik op een element om het te kiezen en sleep het; draai aan de ronde greep of met twee vingers, schaal aan de hoeken. Sleep op leeg om het bord te verschuiven.' },
   pan: { name: 'Verschuiven', icon: 'swap', key: 'H', hint: 'Sleep om het bord te verschuiven; twee vingers knijpen om te zoomen.' },
-  pen: { name: 'Pen', icon: 'edit', key: 'P', hint: 'Tekenen uit de vrije hand.' },
+  pen: { name: 'Pen', icon: 'edit', key: 'P', hint: 'Tekenen uit de vrije hand. Druk even op een object om het op te pakken en te verslepen.' },
+  farrow: { name: 'Vrije pijl', icon: 'route', key: 'F', hint: 'Teken uit de vrije hand: aan het eind komt vanzelf een pijlpunt, in de richting waarin je eindigde.' },
   marker: { name: 'Markeerstift', icon: 'note', key: 'M', hint: 'Brede, doorzichtige streek.' },
-  line: { name: 'Lijn', icon: 'min', key: 'L', hint: 'Sleep van A naar B.' },
-  arrow: { name: 'Pijl', icon: 'arrowUp', key: 'A', hint: 'Sleep van A naar B: de punt komt bij B.' },
+  line: { name: 'Lijn', icon: 'min', key: 'L', hint: 'Sleep van A naar B; de nieuwe lijn is meteen geselecteerd om te verslepen of te draaien.' },
+  arrow: { name: 'Pijl', icon: 'arrowUp', key: 'A', hint: 'Sleep van A naar B: de punt komt bij B. De nieuwe pijl is meteen te verslepen en te draaien.' },
   rect: { name: 'Rechthoek', icon: 'max', key: 'R', hint: 'Sleep een rechthoek.' },
   ellipse: { name: 'Ellips', icon: 'globe', key: 'E', hint: 'Sleep een ellips of cirkel.' },
-  text: { name: 'Tekst', icon: 'keyboard', key: 'T', hint: 'Tik waar de tekst moet komen en typ.' },
-  icon: { name: 'Icoon', icon: 'star', key: 'I', hint: 'Kies een icoon in het paneel en tik waar het moet komen.' },
+  text: { name: 'Tekst', icon: 'keyboard', key: 'T', hint: 'Tik waar de tekst moet komen en typ; sleep een tekst om haar te verplaatsen, tik erop om te bewerken.' },
+  icon: { name: 'Icoon', icon: 'star', key: 'I', hint: 'Kies een icoon en tik of sleep het op het bord. Een geplaatst icoon pak je direct vast; draai het aan de ronde greep of met twee vingers.' },
   eraser: { name: 'Gum', icon: 'trash', key: 'X', hint: 'Tik op een element om het te verwijderen; sleep om er meer te wissen.' },
 };
 const WB_COLORS = ['#0a0f18', '#ffffff', '#ff4b55', '#ff9f1c', '#ffe14d', '#3ecf6e', '#3d9bff', '#b48cff', '#ff6fd8', '#8ea2bf', '#8b5a2b', '#00c2c7'];
@@ -124,6 +125,8 @@ function wbCreate(body, w) {
   let cover = null;
   const bgOf = () => WB_BG[(board() || {}).bg || cfg.bg] || WB_BG.white;
   const isLight = () => !!bgOf().light;
+  // The grid: none, dots (the standard) or lines; before 1.49 it was on (dots) or off.
+  const gridMode = () => (cfg.grid === false || cfg.grid === 'off' ? 'off' : cfg.grid === 'lines' ? 'lines' : 'dots');
 
   const toWorld = (sx, sy) => [(sx - view.x) / view.k, (sy - view.y) / view.k];
   const toScreen = (wx, wy) => [wx * view.k + view.x, wy * view.k + view.y];
@@ -151,67 +154,19 @@ function wbCreate(body, w) {
     return true;
   }
 
-  /* ---------- geometry ---------- */
-  const rad = (d) => (d * Math.PI) / 180;
-  function box(e) {
-    if (e.type === 'path') { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of e.pts) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; } const p = (e.width || 4) / 2; return { x: x0 - p, y: y0 - p, w: x1 - x0 + 2 * p, h: y1 - y0 + 2 * p }; }
-    if (e.type === 'line') { const x = Math.min(e.x1, e.x2), y = Math.min(e.y1, e.y2); return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) }; }
-    if (e.type === 'text') { const lines = String(e.text || '').split('\n'); const wdt = Math.max(...lines.map((l) => measure(l, e.size))); return { x: e.x, y: e.y, w: wdt, h: lines.length * e.size * 1.25 }; }
-    if (e.type === 'icon') return { x: e.x - e.size / 2, y: e.y - e.size / 2, w: e.size, h: e.size };
-    return { x: Math.min(e.x, e.x + e.w), y: Math.min(e.y, e.y + e.h), w: Math.abs(e.w), h: Math.abs(e.h) };
-  }
-  const centre = (e) => { const b = box(e); return [b.x + b.w / 2, b.y + b.h / 2]; };
+  /* ---------- geometry (drawkit.js) ---------- */
+  const rad = DK.rad;
+  const box = (e) => DK.box(e, measure);
+  const centre = (e) => DK.centre(e, measure);
   function measure(text, size) { g.font = `600 ${size}px ${getComputedStyle(document.body).fontFamily}`; return g.measureText(text).width; }
-  // A point in the element's own frame (undoing its rotation about its centre).
-  function local(e, wx, wy) {
-    if (!e.rot) return [wx, wy];
-    const [cx, cy] = centre(e), a = -rad(e.rot), dx = wx - cx, dy = wy - cy;
-    return [cx + dx * Math.cos(a) - dy * Math.sin(a), cy + dx * Math.sin(a) + dy * Math.cos(a)];
-  }
-  const segDist = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; const t = l2 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0; return Math.hypot(px - (ax + t * dx), py - (ay + t * dy)); };
+  // Board units a finger or the mouse may be off and still hit an element.
+  const tolW = () => (TOUCH.on() ? 14 : 8) / view.k;
   // The element under a board point, topmost first. A locked map is left alone (it is an underlay), unless asked for.
-  function hit(wx, wy, { maps = false } = {}) {
-    const tol = 8 / view.k;
-    for (let i = els.length - 1; i >= 0; i -= 1) {
-      const e = els[i];
-      if (e.type === 'map' && e.lock && !maps) continue;
-      const [x, y] = local(e, wx, wy);
-      const b = box(e);
-      if (x < b.x - tol || y < b.y - tol || x > b.x + b.w + tol || y > b.y + b.h + tol) continue;
-      if (e.type === 'path') { const r = (e.width || 4) * (e.marker ? 1.5 : 0.5) + tol; for (let j = 1; j < e.pts.length; j += 1) if (segDist(x, y, e.pts[j - 1][0], e.pts[j - 1][1], e.pts[j][0], e.pts[j][1]) <= r) return e; if (e.pts.length === 1 && Math.hypot(x - e.pts[0][0], y - e.pts[0][1]) <= r) return e; continue; }
-      if (e.type === 'line') { if (segDist(x, y, e.x1, e.y1, e.x2, e.y2) <= (e.width || 4) / 2 + tol) return e; continue; }
-      if (e.type === 'ellipse' && !e.fill) { const cx = b.x + b.w / 2, cy = b.y + b.h / 2, rx = b.w / 2 || 1, ry = b.h / 2 || 1; const d = Math.hypot((x - cx) / rx, (y - cy) / ry); if (Math.abs(d - 1) * Math.min(rx, ry) <= (e.width || 4) / 2 + tol) return e; continue; }
-      if (e.type === 'rect' && !e.fill) { const inside = x > b.x + tol && y > b.y + tol && x < b.x + b.w - tol && y < b.y + b.h - tol; if (!inside) return e; continue; }
-      return e;
-    }
-    return null;
-  }
+  const hit = (wx, wy, { maps = false } = {}) => DK.hit(els, wx, wy, { tol: tolW(), measure, maps });
   const mapAt = (wx, wy) => { for (let i = els.length - 1; i >= 0; i -= 1) { const e = els[i]; if (e.type !== 'map') continue; const b = box(e); if (wx >= b.x && wy >= b.y && wx <= b.x + b.w && wy <= b.y + b.h) return e; } return null; };
   // Where a board point is on a map element.
   const mapLatLon = (e, wx, wy) => { const [cx, cy] = wbMerc(e.lat, e.lon, e.zoom); return wbUnmerc(cx - e.w / 2 + (wx - e.x), cy - e.h / 2 + (wy - e.y), e.zoom); };
-  function moveBy(e, dx, dy) {
-    if (e.type === 'path') e.pts = e.pts.map(([x, y]) => [x + dx, y + dy]);
-    else if (e.type === 'line') { e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; }
-    else { e.x += dx; e.y += dy; }
-  }
-  function scaleBy(e, f, cx, cy) {
-    const s = (x, y) => [cx + (x - cx) * f, cy + (y - cy) * f];
-    if (e.type === 'path') { e.pts = e.pts.map(([x, y]) => s(x, y)); e.width = (e.width || 4) * f; }
-    else if (e.type === 'line') { [e.x1, e.y1] = s(e.x1, e.y1); [e.x2, e.y2] = s(e.x2, e.y2); e.width = (e.width || 4) * f; }
-    else if (e.type === 'text') { [e.x, e.y] = s(e.x, e.y); e.size = Math.max(6, e.size * f); }
-    else if (e.type === 'icon') { e.size = Math.max(12, e.size * f); }
-    else if (e.type === 'map') { [e.x, e.y] = s(e.x, e.y); e.w *= f; e.h *= f; e.zoom = clamp(e.zoom + Math.log2(f), 2, 20); } // same area, finer tiles
-    else { [e.x, e.y] = s(e.x, e.y); e.w *= f; e.h *= f; e.width = (e.width || 4) * f; }
-  }
-  function rotateTo(e, deg) {
-    if (e.type === 'map') return; // a map stays north-up
-    if (e.type === 'path' || e.type === 'line') {
-      const [cx, cy] = centre(e), a = rad(deg - (e.rot || 0));
-      const r = (x, y) => { const dx = x - cx, dy = y - cy; return [cx + dx * Math.cos(a) - dy * Math.sin(a), cy + dx * Math.sin(a) + dy * Math.cos(a)]; };
-      if (e.type === 'path') e.pts = e.pts.map(([x, y]) => r(x, y)); else { [e.x1, e.y1] = r(e.x1, e.y1); [e.x2, e.y2] = r(e.x2, e.y2); }
-      e.rot = 0;
-    } else e.rot = ((deg % 360) + 360) % 360;
-  }
+  const moveBy = DK.moveBy;
 
   /* ---------- saving ---------- */
   const nextZ = () => (els.length ? Math.max(...els.map((e) => e.z || 0)) + 1 : 1);
@@ -358,6 +313,9 @@ function wbCreate(body, w) {
       gg.lineWidth = e.marker ? lw * 3 : lw;
       if (e.marker) gg.globalAlpha *= 0.4;
       strokePath(gg, e.pts, v);
+      // A free arrow: the head at the end, in the direction the stroke ended.
+      const hd = e.arrow && !e.marker && DK.pathHead(e.pts, e.width || 4);
+      if (hd) { const tx = hd.x * v.k + v.x, ty = hd.y * v.k + v.y, L = Math.max(10, hd.L * v.k); gg.beginPath(); gg.moveTo(tx + Math.cos(hd.a) * lw * 0.6, ty + Math.sin(hd.a) * lw * 0.6); gg.lineTo(tx - L * Math.cos(hd.a - 0.45), ty - L * Math.sin(hd.a - 0.45)); gg.lineTo(tx - L * Math.cos(hd.a + 0.45), ty - L * Math.sin(hd.a + 0.45)); gg.closePath(); gg.fill(); }
     } else if (e.type === 'line') {
       const a = [e.x1 * v.k + v.x, e.y1 * v.k + v.y], b = [e.x2 * v.k + v.x, e.y2 * v.k + v.y];
       gg.lineWidth = lw;
@@ -386,7 +344,8 @@ function wbCreate(body, w) {
       const x = e.x * v.k + v.x, y = e.y * v.k + v.y;
       if (im && im.ready) gg.drawImage(im.img, x - px / 2, y - px / 2, px, px);
       else { gg.lineWidth = 1.5; gg.strokeRect(x - px / 2, y - px / 2, px, px); }
-      if (e.label) { gg.font = `700 ${Math.max(9, e.size * 0.22 * v.k)}px ${getComputedStyle(document.body).fontFamily}`; gg.textAlign = 'center'; gg.textBaseline = 'top'; gg.lineWidth = 3; gg.strokeStyle = haloColor(e.color); gg.strokeText(e.label, x, y + px / 2 + 2); gg.fillText(e.label, x, y + px / 2 + 2); }
+      // The label stays upright under the icon, however the icon is turned.
+      if (e.label) { if (e.rot) { gg.restore(); gg.save(); gg.globalAlpha = (e.opacity != null ? e.opacity : 1) * (ghost ? 0.7 : 1); gg.fillStyle = e.color || '#fff'; } gg.font = `700 ${Math.max(9, e.size * 0.22 * v.k)}px ${getComputedStyle(document.body).fontFamily}`; gg.textAlign = 'center'; gg.textBaseline = 'top'; gg.lineWidth = 3; gg.strokeStyle = haloColor(e.color); gg.strokeText(e.label, x, y + px / 2 + 2); gg.fillText(e.label, x, y + px / 2 + 2); }
     }
     gg.restore();
   }
@@ -397,16 +356,30 @@ function wbCreate(body, w) {
     const bg = bgOf();
     g.fillStyle = bg.fill; g.fillRect(0, 0, W, H);
     // Dots every 50 units, when they are far enough apart to see.
-    if (cfg.grid) {
+    const gm = gridMode();
+    if (gm === 'dots') {
+      // Dots every 50 units, when they are far enough apart to see.
       const step = 50 * view.k;
       if (step >= 14) {
         g.fillStyle = bg.dot;
         const x0 = ((view.x % step) + step) % step, y0 = ((view.y % step) + step) % step;
         for (let x = x0; x < W; x += step) for (let y = y0; y < H; y += step) { g.beginPath(); g.arc(x, y, step > 40 ? 1.6 : 1.1, 0, Math.PI * 2); g.fill(); }
-        // The origin cross.
         const [ox, oy] = toScreen(0, 0);
         g.strokeStyle = bg.dot; g.lineWidth = 1; g.beginPath(); g.moveTo(ox - 12, oy); g.lineTo(ox + 12, oy); g.moveTo(ox, oy - 12); g.lineTo(ox, oy + 12); g.stroke();
       }
+    } else if (gm === 'lines') {
+      // Squared paper: fine lines every 50 units (when far enough apart), stronger ones every 250.
+      const lines = (unit, width, alpha) => {
+        const step = unit * view.k;
+        if (step < 10) return;
+        g.save(); g.strokeStyle = bg.dot; g.globalAlpha = alpha; g.lineWidth = width; g.beginPath();
+        const x0 = ((view.x % step) + step) % step, y0 = ((view.y % step) + step) % step;
+        for (let x = x0; x < W; x += step) { const px = Math.round(x) + 0.5; g.moveTo(px, 0); g.lineTo(px, H); }
+        for (let y = y0; y < H; y += step) { const py = Math.round(y) + 0.5; g.moveTo(0, py); g.lineTo(W, py); }
+        g.stroke(); g.restore();
+      };
+      lines(50, 1, 0.75);
+      lines(250, 1.6, 1);
     }
     for (const e of els) drawEl(g, e, view);
     if (drawing) drawEl(g, drawing.e, view);
@@ -427,37 +400,9 @@ function wbCreate(body, w) {
         g.restore();
       }
     }
-    // Selection.
-    const s = sel && els.find((e) => e.id === sel);
-    if (s) {
-      const b = box(s), [cx, cy] = centre(s);
-      g.save();
-      const [scx, scy] = toScreen(cx, cy);
-      if (s.rot && s.type !== 'path' && s.type !== 'line' && s.type !== 'map') { g.translate(scx, scy); g.rotate(rad(s.rot)); g.translate(-scx, -scy); }
-      const [x, y] = toScreen(b.x, b.y), wd = b.w * view.k, hg = b.h * view.k;
-      g.strokeStyle = '#ffd21f'; g.lineWidth = 1.5; g.setLineDash([6, 4]);
-      g.strokeRect(x - 6, y - 6, wd + 12, hg + 12);
-      g.setLineDash([]);
-      const handle = (hx, hy, round) => { g.fillStyle = '#fff'; g.strokeStyle = '#ffd21f'; g.lineWidth = 2; g.beginPath(); if (round) g.arc(hx, hy, 7, 0, Math.PI * 2); else g.rect(hx - 6, hy - 6, 12, 12); g.fill(); g.stroke(); };
-      for (const [hx, hy] of [[x - 6, y - 6], [x + wd + 6, y - 6], [x - 6, y + hg + 6], [x + wd + 6, y + hg + 6]]) handle(hx, hy, false);
-      if (s.type !== 'map') { g.strokeStyle = '#ffd21f'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x + wd / 2, y - 6); g.lineTo(x + wd / 2, y - 30); g.stroke(); handle(x + wd / 2, y - 30, true); }
-      g.restore();
-    }
+    // The selection: a frame with grips over the canvas (drawkit.js).
+    selUi.paint(selEl());
     paintHud();
-  }
-  // Which handle of the selection is under a screen point: 'rot', 'scale' or null.
-  function handleAt(sx, sy) {
-    const s = sel && els.find((e) => e.id === sel);
-    if (!s) return null;
-    const b = box(s), [cx, cy] = centre(s);
-    // Into the selection frame: undo the rotation about the centre on screen.
-    let px = sx, py = sy;
-    if (s.rot && s.type !== 'path' && s.type !== 'line' && s.type !== 'map') { const [scx, scy] = toScreen(cx, cy), a = -rad(s.rot), dx = sx - scx, dy = sy - scy; px = scx + dx * Math.cos(a) - dy * Math.sin(a); py = scy + dx * Math.sin(a) + dy * Math.cos(a); }
-    const [x, y] = toScreen(b.x, b.y), wd = b.w * view.k, hg = b.h * view.k;
-    const tol = TOUCH.on() ? 18 : 11;
-    if (s.type !== 'map' && Math.hypot(px - (x + wd / 2), py - (y - 30)) <= tol) return 'rot';
-    for (const [hx, hy] of [[x - 6, y - 6], [x + wd + 6, y - 6], [x - 6, y + hg + 6], [x + wd + 6, y + hg + 6]]) if (Math.abs(px - hx) <= tol && Math.abs(py - hy) <= tol) return 'scale';
-    return null;
   }
 
   /* ---------- the hud: zoom, presence, coordinates ---------- */
@@ -512,7 +457,7 @@ function wbCreate(body, w) {
   function liveStroke(e, newPts, end) {
     const b = board();
     if (b && b.lock) return;
-    if (!livePending) livePending = { id: e.id || (e.id = OPS.uid()), color: e.color, width: e.width, marker: !!e.marker, pts: [] };
+    if (!livePending) livePending = { id: e.id || (e.id = OPS.uid()), color: e.color, width: e.width, marker: !!e.marker, arrow: e.arrow || undefined, pts: [] };
     livePending.pts.push(...newPts.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]));
     if (end) { liveSend({ cur: lastCur, st: livePending, end: true }); livePending = null; clearTimeout(liveTimer); liveTimer = null; return; }
     if (!liveTimer) liveTimer = setTimeout(() => { liveTimer = null; if (livePending) { liveSend({ cur: lastCur, st: livePending }); livePending.pts = []; } }, 90);
@@ -531,26 +476,81 @@ function wbCreate(body, w) {
     if (m.n) r.name = m.n;
     if (m.cur) r.cur = m.cur;
     if (m.st) {
-      if (!r.stroke || r.stroke.id !== m.st.id) r.stroke = { type: 'path', id: m.st.id, color: m.st.color, width: m.st.width, marker: m.st.marker, pts: [] };
+      if (!r.stroke || r.stroke.id !== m.st.id) r.stroke = { type: 'path', id: m.st.id, color: m.st.color, width: m.st.width, marker: m.st.marker, arrow: m.st.arrow, pts: [] };
       r.stroke.pts.push(...(m.st.pts || []));
       if (m.end) { const st = r.stroke; setTimeout(() => { if (r.stroke === st) r.stroke = null; request(); }, 1500); }
     }
     request();
   });
 
+  /* ---------- the selection on screen (drawkit.js) ---------- */
+  const selEl = () => (sel && els.find((e) => e.id === sel)) || null;
+  const selUi = dkSelection(stage, {
+    sel: selEl,
+    toScreen: (x, y) => toScreen(x, y),
+    toBoard: (cx, cy) => { const r = cv.getBoundingClientRect(); return toWorld(cx - r.left, cy - r.top); },
+    k: () => view.k,
+    measure,
+    live: (fresh) => { const e = selEl(); if (e) { Object.assign(e, fresh); request(); } },
+    commit: (e, before) => { commit(e, before); request(); },
+    remove: (e) => { remove(e); request(); if (cfg.sideTab === 'draw') paintSide(); },
+  });
+  function select(id) {
+    if (sel === (id || null)) return;
+    sel = id || null;
+    request();
+    if (cfg.sideTab === 'draw') paintSide();
+  }
+
   /* ---------- pointer handling ---------- */
+  // Objects are picked up directly: the selected one in every tool; with the icon or text tool any icon or
+  // text; with the other tools by pressing on it and holding still a moment (a quick stroke still draws).
+  // Two fingers on an object turn, scale and move it; two fingers elsewhere zoom and pan the board.
   const pos = (ev) => { const r = cv.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+  let hold = null;     // a press held still on an object picks it up
+  let pending = null;  // the text tool: a tap opens a text box where it was (on release)
+  let lastSel = null;  // the selection just before the first finger came down (it may have tapped beside it)
+  const onSel = (wx, wy) => { const s = selEl(); return s && DK.hitOne(s, wx, wy, tolW(), measure) ? s : null; };
+  const toolCursor = () => (cfg.tool === 'pan' ? 'grab' : cfg.tool === 'text' ? 'text' : cfg.tool === 'select' ? 'default' : 'crosshair');
+  function dropDrawing() {
+    if (!drawing) return;
+    if (drawing.e.type === 'path' && drawing.e.id) liveStroke(drawing.e, [], true);
+    drawing = null;
+  }
+  function startMove(e, wx, wy) {
+    select(e.id);
+    drag = { mode: 'move', e0: DK.copy(e), e, start: [wx, wy], moved: false };
+    cv.style.cursor = 'grabbing';
+  }
   cv.addEventListener('pointerdown', (ev) => {
     if (!ensureBoard()) { toast('Even geduld: de gedeelde bestanden worden geladen'); return; }
     if (lockedOut()) return;
     cv.setPointerCapture(ev.pointerId);
     const [sx, sy] = pos(ev);
+    if (!pointers.size) lastSel = sel;
     pointers.set(ev.pointerId, [sx, sy]);
     if (pointers.size === 2) {
-      // Two fingers: pinch to zoom and pan; whatever was being drawn is dropped.
-      if (drawing) { if (drawing.e.type === 'path' && drawing.e.id) liveStroke(drawing.e, [], true); drawing = null; }
-      drag = null;
+      if (hold) { hold.cancel(); hold = null; }
+      pending = null;
+      // An icon that the first finger was about to place is not placed: two fingers zoom (or turn the selection).
+      if (drag && drag.mode === 'place') { drawing = null; drag = null; }
+      dropDrawing();
       const [a, b] = [...pointers.values()];
+      const wa = toWorld(a[0], a[1]), wb = toWorld(b[0], b[1]);
+      const s = selEl() || (lastSel && els.find((e) => e.id === lastSel)) || null;
+      const mid = [(wa[0] + wb[0]) / 2, (wa[1] + wb[1]) / 2];
+      const held = drag && drag.mode === 'move' ? els.find((e) => e.id === drag.e.id) : null;
+      const target = held || (s && !(s.type === 'map' && s.lock) && DK.inBox(s, mid[0], mid[1], 30 / view.k, measure) ? s : null);
+      if (target) {
+        // Two fingers on an object: turn, scale and move it.
+        const before = drag && drag.mode === 'move' && drag.e0 && drag.e0.id === target.id ? drag.e0 : DK.copy(target);
+        select(target.id);
+        drag = { mode: 'pinch', e: target, before, st: DK.pinchStart(target, wa, wb), moved: false };
+        request();
+        return;
+      }
+      // Two fingers elsewhere: pinch to zoom and pan the board.
+      drag = null;
       pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], view: { ...view } };
       request();
       return;
@@ -560,22 +560,39 @@ function wbCreate(body, w) {
     const [wx, wy] = toWorld(sx, sy);
     const tool = cfg.tool;
     if (textBox) commitText();
+    const target = onSel(wx, wy) || hit(wx, wy);
+    const how = DK.grabMode(tool, target, sel);
     if (tool === 'select') {
-      const hd = handleAt(sx, sy);
-      const s = sel && els.find((e) => e.id === sel);
-      if (hd && s) { const [cx, cy] = centre(s); drag = { mode: hd, e0: JSON.parse(JSON.stringify(s)), e: s, c: [cx, cy], start: [wx, wy], a0: Math.atan2(wy - cy, wx - cx), d0: Math.hypot(wx - cx, wy - cy), rot0: s.rot || 0 }; return; }
-      const e = hit(wx, wy);
-      sel = e ? e.id : null;
-      drag = e ? { mode: 'move', e0: JSON.parse(JSON.stringify(e)), e, start: [wx, wy], moved: false } : { mode: 'pan', start: [sx, sy], view: { ...view } };
+      if (target) startMove(target, wx, wy);
+      else { select(null); drag = { mode: 'pan', start: [sx, sy], view: { ...view } }; }
       request();
       return;
     }
+    if (how === 'now') { startMove(target, wx, wy); if (tool === 'text' && target.type === 'text') drag.tapEdit = true; request(); return; }
     if (tool === 'eraser') { const e = hit(wx, wy); if (e) remove(e); drag = { mode: 'erase' }; return; }
-    if (tool === 'text') { openText({ x: wx, y: wy }); return; }
-    if (tool === 'icon') { const ic = wbIconById(cfg.iconId); if (!ic) { toast('Kies eerst een icoon in het paneel'); return; } commit({ type: 'icon', icon: ic.id, x: wx, y: wy, size: ic.size || cfg.iconSize, color: cfg.color, rot: 0, z: ic.size ? 0 : undefined }); if (ic.size) toast('Ondergrond geplaatst: wat je nu tekent komt erbovenop'); return; }
-    sel = null;
+    select(null);
+    if (how === 'hold') {
+      hold = DK.hold(ev, () => {
+        hold = null;
+        if (pointers.size !== 1 || !els.some((e) => e.id === target.id)) return;
+        dropDrawing(); pending = null;
+        startMove(els.find((e) => e.id === target.id), wx, wy);
+        selUi.pulse();
+        request();
+      });
+    }
+    if (tool === 'text') { pending = { x: wx, y: wy }; return; }
+    if (tool === 'icon') {
+      // The icon appears under the finger and follows it until it is let go.
+      const ic = wbIconById(cfg.iconId);
+      if (!ic) { toast('Kies eerst een icoon in het paneel'); return; }
+      drawing = { e: { type: 'icon', icon: ic.id, x: wx, y: wy, size: ic.size || cfg.iconSize, color: cfg.color, rot: 0, z: ic.size ? 0 : undefined } };
+      drag = { mode: 'place' };
+      request();
+      return;
+    }
     const base = { color: cfg.color, width: cfg.width };
-    if (tool === 'pen' || tool === 'marker') drawing = { e: { type: 'path', ...base, marker: tool === 'marker', pts: [[wx, wy]] }, last: [wx, wy], sent: 0 };
+    if (tool === 'pen' || tool === 'marker' || tool === 'farrow') drawing = { e: { type: 'path', ...base, marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), pts: [[wx, wy]] }, last: [wx, wy], sent: 0 };
     else if (tool === 'line' || tool === 'arrow') drawing = { e: { type: 'line', ...base, x1: wx, y1: wy, x2: wx, y2: wy, arrow: tool === 'arrow' ? 'end' : 'none' } };
     else if (tool === 'rect' || tool === 'ellipse') drawing = { e: { type: tool, ...base, x: wx, y: wy, w: 0, h: 0, fill: !!cfg.fill, rot: 0 } };
     request();
@@ -583,6 +600,20 @@ function wbCreate(body, w) {
   cv.addEventListener('pointermove', (ev) => {
     const [sx, sy] = pos(ev);
     if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, [sx, sy]);
+    if (hold) hold.move(ev);
+    if (drag && drag.mode === 'pinch') {
+      if (pointers.size >= 2) {
+        const [a, b] = [...pointers.values()];
+        const r = DK.pinchApply(drag.st, toWorld(a[0], a[1]), toWorld(b[0], b[1]), measure);
+        const e = els.find((x) => x.id === drag.e.id) || drag.e;
+        Object.assign(e, r.e);
+        drag.e = e;
+        drag.moved = true;
+        request();
+      }
+      return;
+    }
+    if (drag && drag.mode === 'none') return;
     if (pinch && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]), c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -597,6 +628,7 @@ function wbCreate(body, w) {
     const [wx, wy] = toWorld(sx, sy);
     if (ev.pointerType !== 'touch' || drawing) liveCursor(wx, wy);
     paintCoord(wx, wy);
+    if (drag && drag.mode === 'place') { if (drawing) { drawing.e.x = wx; drawing.e.y = wy; request(); } return; }
     if (drawing) {
       const e = drawing.e;
       if (e.type === 'path') {
@@ -607,38 +639,86 @@ function wbCreate(body, w) {
       request();
       return;
     }
-    if (!drag) { if (cfg.tool === 'select') cv.style.cursor = handleAt(sx, sy) ? 'grab' : hit(wx, wy) ? 'move' : 'default'; return; }
+    if (!drag) {
+      // The mouse over something it would pick up: the move cursor.
+      if (ev.pointerType === 'mouse' && cfg.tool !== 'pan' && cfg.tool !== 'eraser') { const t = onSel(wx, wy) || hit(wx, wy); cv.style.cursor = t && (cfg.tool === 'select' || DK.grabMode(cfg.tool, t, sel) === 'now') ? 'move' : toolCursor(); }
+      return;
+    }
     if (drag.mode === 'pan') { view.x = drag.view.x + (sx - drag.start[0]); view.y = drag.view.y + (sy - drag.start[1]); request(); return; }
     if (drag.mode === 'erase') { const e = hit(wx, wy); if (e) remove(e); return; }
-    if (drag.mode === 'move') { const dx = wx - drag.start[0], dy = wy - drag.start[1]; if (!drag.moved && Math.hypot(dx, dy) * view.k < 3) return; drag.moved = true; const fresh = JSON.parse(JSON.stringify(drag.e0)); moveBy(fresh, dx, dy); Object.assign(drag.e, fresh); request(); return; }
-    if (drag.mode === 'rot') { const a = Math.atan2(wy - drag.c[1], wx - drag.c[0]); let deg = drag.rot0 + ((a - drag.a0) * 180) / Math.PI; if (ev.shiftKey) deg = Math.round(deg / 15) * 15; const fresh = JSON.parse(JSON.stringify(drag.e0)); rotateTo(fresh, deg); Object.assign(drag.e, fresh); drag.moved = true; request(); return; }
-    if (drag.mode === 'scale') { const d = Math.hypot(wx - drag.c[0], wy - drag.c[1]); const f = clamp(d / (drag.d0 || 1), 0.1, 20); const fresh = JSON.parse(JSON.stringify(drag.e0)); scaleBy(fresh, f, drag.c[0], drag.c[1]); Object.assign(drag.e, fresh); drag.moved = true; request(); }
+    if (drag.mode === 'move') {
+      const dx = wx - drag.start[0], dy = wy - drag.start[1];
+      if (!drag.moved && Math.hypot(dx, dy) * view.k < 3) return;
+      drag.moved = true;
+      const fresh = DK.copy(drag.e0); moveBy(fresh, dx, dy);
+      // The list may have been read again meanwhile (another screen saved something): move the one shown.
+      const e = els.find((x) => x.id === drag.e.id) || drag.e;
+      Object.assign(e, fresh); drag.e = e;
+      request();
+    }
   });
   const up = (ev) => {
     pointers.delete(ev.pointerId);
+    if (hold) { hold.cancel(); hold = null; }
+    if (drag && drag.mode === 'pinch') {
+      // One finger off: the turn is done; the other finger does nothing until it is lifted too.
+      if (pointers.size < 2) { if (drag.moved) commit(drag.e, drag.before); drag = pointers.size ? { mode: 'none' } : null; request(); }
+      return;
+    }
+    if (drag && drag.mode === 'none') { if (!pointers.size) drag = null; return; }
     if (pinch) { if (pointers.size < 2) { pinch = null; saveView(); } return; }
+    if (pending) { const p = pending; pending = null; openText({ x: p.x, y: p.y }); return; }
+    if (drag && drag.mode === 'place') {
+      const e = drawing && drawing.e;
+      drawing = null; drag = null;
+      if (e) { commit(e); if (DK.isUnderlay(e)) toast('Ondergrond geplaatst: wat je nu tekent komt erbovenop'); else select(e.id); }
+      request();
+      return;
+    }
     if (drawing) {
       const e = drawing.e;
       drawing = null;
-      if (e.type === 'path') { liveStroke(e, [], true); if (e.pts.length >= 1) commit(e); }
-      else if (e.type === 'line') { if (Math.hypot(e.x2 - e.x1, e.y2 - e.y1) * view.k >= 4) commit(e); }
-      else if (Math.abs(e.w) * view.k >= 4 || Math.abs(e.h) * view.k >= 4) { if (e.w < 0) { e.x += e.w; e.w = -e.w; } if (e.h < 0) { e.y += e.h; e.h = -e.h; } commit(e); }
+      let done = false;
+      if (e.type === 'path') { liveStroke(e, [], true); if (e.pts.length >= 1) { commit(e); done = true; } }
+      else if (e.type === 'line') { if (Math.hypot(e.x2 - e.x1, e.y2 - e.y1) * view.k >= 4) { commit(e); done = true; } }
+      else if (Math.abs(e.w) * view.k >= 4 || Math.abs(e.h) * view.k >= 4) { if (e.w < 0) { e.x += e.w; e.w = -e.w; } if (e.h < 0) { e.y += e.h; e.h = -e.h; } commit(e); done = true; }
+      // A new line, arrow or shape is selected straight away: move it or turn it without changing tool.
+      if (done && DK.selectAfter(e)) select(e.id);
       request();
       return;
     }
     if (drag) {
       if (drag.mode === 'pan') saveView();
-      else if ((drag.mode === 'move' || drag.mode === 'rot' || drag.mode === 'scale') && drag.moved) commit(drag.e, drag.e0);
+      else if (drag.mode === 'move' && drag.moved) commit(drag.e, drag.e0);
+      else if (drag.mode === 'move' && drag.tapEdit) { const e = els.find((x) => x.id === drag.e.id); if (e) openText(e); }
       drag = null;
+      cv.style.cursor = toolCursor();
       request();
     }
   };
+  // For a test run (scripted over the DevTools protocol): the state of the board and where a board point is.
+  cv.dkState = () => ({ sel, drag: drag && drag.mode, pinch: !!pinch, pointers: pointers.size, view: { ...view } });
   cv.addEventListener('pointerup', up);
   cv.addEventListener('pointercancel', up);
   cv.addEventListener('pointerleave', () => paintCoord(null));
   cv.addEventListener('contextmenu', (e) => e.preventDefault());
-  cv.addEventListener('wheel', (ev) => { ev.preventDefault(); const [sx, sy] = pos(ev); zoomAt(sx, sy, ev.deltaY < 0 ? 1.12 : 1 / 1.12); }, { passive: false });
-  cv.addEventListener('dblclick', (ev) => { const [sx, sy] = pos(ev); const [wx, wy] = toWorld(sx, sy); const e = hit(wx, wy); if (e && e.type === 'text') openText(e); else if (e && e.type === 'icon') labelIcon(e); });
+  // The wheel zooms; Alt + wheel turns the selection (5 degrees a notch, saved once the wheel rests).
+  let wheelTurn = null;
+  cv.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const s = selEl();
+    if (ev.altKey && s && DK.canRotate(s)) {
+      if (!wheelTurn) wheelTurn = { before: DK.copy(s), t: null };
+      Object.assign(s, DK.transform(s, { drot: ev.deltaY < 0 ? -5 : 5 }, measure));
+      clearTimeout(wheelTurn.t);
+      wheelTurn.t = setTimeout(() => { const e = selEl(); if (e && wheelTurn) commit(e, wheelTurn.before); wheelTurn = null; request(); }, 450);
+      request();
+      return;
+    }
+    const [sx, sy] = pos(ev);
+    zoomAt(sx, sy, ev.deltaY < 0 ? 1.12 : 1 / 1.12);
+  }, { passive: false });
+  cv.addEventListener('dblclick', (ev) => { if (textBox) return; const [sx, sy] = pos(ev); const [wx, wy] = toWorld(sx, sy); const e = hit(wx, wy); if (e && e.type === 'text') openText(e); else if (e && e.type === 'icon') labelIcon(e); });
 
   /* ---------- text ---------- */
   function openText(e) {
@@ -679,8 +759,12 @@ function wbCreate(body, w) {
     if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); doUndo(ev.shiftKey); return; }
     if ((ev.ctrlKey || ev.metaKey) && k === 'y') { ev.preventDefault(); doUndo(true); return; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    if (ev.key === 'Escape') { if (cfg.tool !== 'select') setTool('select'); else { sel = null; request(); } ev.stopPropagation(); return; }
+    // Escape: first the selection off, then back to Selecteren.
+    if (ev.key === 'Escape') { if (sel) select(null); else if (cfg.tool !== 'select') setTool('select'); ev.stopPropagation(); return; }
     if ((k === 'delete' || k === 'backspace') && sel) { const e = els.find((x) => x.id === sel); if (e) remove(e); ev.preventDefault(); return; }
+    // Arrow keys move the selection, [ and ] turn it (drawkit.js).
+    const s = selEl(), moved = s && dkKey(ev, s, view.k, measure);
+    if (moved) { const before = DK.copy(s); Object.assign(s, moved); commit(s, before); request(); ev.preventDefault(); return; }
     if (k === '+' || k === '=') zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 1.25);
     else if (k === '-') zoomAt(stage.clientWidth / 2, stage.clientHeight / 2, 1 / 1.25);
     else if (k === '0') fitAll();
@@ -700,7 +784,6 @@ function wbCreate(body, w) {
   const showTab = (id) => { cfg.sideTab = id; if (!cfg.side) { cfg.side = true; root.classList.remove('side-off'); } save(); paintTabs(); paintSide(); };
   const paintTabs = () => tabs.replaceChildren(...WB_TABS.map((t) => h('button', { class: 'zp-tab' + (cfg.sideTab === t.id ? ' on' : ''), onclick: () => showTab(t.id) }, icon(t.icon), h('span', {}, t.name))));
   function setTool(t) { cfg.tool = t; save(); paintBar(); if (cfg.sideTab === 'draw') paintSide(); paintHud(); presence.dataset.sig = ''; cv.style.cursor = t === 'pan' ? 'grab' : t === 'text' ? 'text' : t === 'select' ? 'default' : 'crosshair'; request(); }
-  let iconQuery = '', iconCat = 'all';
   function paintSide() {
     const scroll = content.scrollTop;
     if (cfg.sideTab === 'draw') content.replaceChildren(drawPanel());
@@ -737,19 +820,23 @@ function wbCreate(body, w) {
         h('div', { class: 'wb-widths' }, WB_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd} px`, onclick: () => { cfg.width = wd; save(); applyToSel({ width: wd }); paintSide(); } }, h('i', { style: `height:${wd}px` })))),
         chk('Vormen vullen', () => cfg.fill, (v) => { cfg.fill = v; save(); applyToSel({ fill: v }); }),
         h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([12, 14, 18, 24, 32, 48, 64].map((sz) => ({ value: sz, label: `${sz}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; save(); applyToSel({ size: +v }, 'text'); })), field('Icoongrootte', zpSelect([40, 60, 80, 110, 150, 200].map((sz) => ({ value: sz, label: `${sz}` })), cfg.iconSize, (v) => { cfg.iconSize = +v; save(); applyToSel({ size: +v }, 'icon'); })))),
-      s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: 'streek', line: 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon', map: 'kaart' }[s.type] || s.type)),
+      s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: s.arrow ? 'vrije pijl' : 'streek', line: s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon', map: 'kaart' }[s.type] || s.type)),
         h('div', { class: 'zp-btnrow' },
           h('button', { class: 'btn zp-btn', title: 'Naar voren', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.z = nextZ(); commit(s, b); } }, icon('arrowUp'), 'Naar voren'),
           h('button', { class: 'btn zp-btn', title: 'Naar achteren', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.z = lowZ(); commit(s, b); } }, icon('arrowDown'), 'Naar achteren'),
           h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => { const c = JSON.parse(JSON.stringify(s)); delete c.id; delete c.updatedAt; delete c.z; moveBy(c, 30 / view.k, 30 / view.k); commit(c); sel = c.id; request(); paintSide(); } }, icon('history'), 'Kopie'),
           h('button', { class: 'btn zp-btn danger', onclick: () => { remove(s); request(); paintSide(); } }, icon('trash'), 'Verwijderen')),
         s.type === 'line' ? h('div', { class: 'row' }, field('Pijlpunt', zpSelect([['none', 'Geen'], ['end', 'Aan het eind'], ['both', 'Beide kanten']].map(([v, l]) => ({ value: v, label: l })), s.arrow || 'none', (v) => applyToSel({ arrow: v }))), field('Lijnstijl', zpSelect([['solid', 'Doorgetrokken'], ['dash', 'Gestippeld']].map(([v, l]) => ({ value: v, label: l })), s.dash ? 'dash' : 'solid', (v) => applyToSel({ dash: v === 'dash' })))) : null,
-        s.type === 'icon' ? h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => labelIcon(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…'), h('button', { class: 'btn zp-btn', title: 'Terug naar noord (0°)', onclick: () => applyToSel({ rot: 0 }) }, icon('refresh'), 'Recht')) : null,
+        DK.canRotate(s) ? h('div', { class: 'zp-btnrow dk-turnrow' },
+          h('button', { class: 'btn zp-btn', title: '15° linksom ([)', onclick: () => turnSel(-15) }, '↺ 15°'),
+          DK.ownRot(s) ? h('button', { class: 'btn zp-btn', title: 'Recht zetten (0°)', disabled: !s.rot || null, onclick: () => applyToSel({ rot: 0 }) }, icon('refresh'), s.rot ? `Recht (nu ${Math.round(s.rot)}°)` : 'Recht') : null,
+          h('button', { class: 'btn zp-btn', title: '15° rechtsom (])', onclick: () => turnSel(15) }, '↻ 15°')) : null,
+        s.type === 'icon' ? h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => labelIcon(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…')) : null,
         s.type === 'text' ? h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => openText(s) }, icon('edit'), 'Tekst bewerken')) : null,
         s.type === 'map' ? h('p', { class: 'zp-hint' }, 'Een kaart beheer je onder het tabblad Kaart: vergrendelen, dekking, centreren.') : null) : null,
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Bord')),
         field('Achtergrond', h('div', { class: 'wb-bgs' }, Object.entries(WB_BG).map(([k, d]) => h('button', { class: 'wb-bg' + (cur === k ? ' on' : ''), style: `--c:${d.fill}`, title: d.name, onclick: () => setBg(k) }, h('i'), h('span', {}, d.name))))),
-        chk('Raster (stippen)', () => cfg.grid, (v) => { cfg.grid = v; save(); request(); }),
+        field('Raster', segmented([{ value: 'off', label: 'Geen' }, { value: 'dots', label: 'Stippen' }, { value: 'lines', label: 'Lijnen' }], gridMode(), (v) => { cfg.grid = v; save(); request(); })),
         h('div', { class: 'zp-btnrow' },
           h('button', { class: 'btn zp-btn', title: 'Ongedaan maken (Ctrl+Z)', onclick: () => doUndo(false), disabled: !undo.length || null }, icon('left'), 'Ongedaan'),
           h('button', { class: 'btn zp-btn', title: 'Opnieuw (Ctrl+Y)', onclick: () => doUndo(true), disabled: !redo.length || null }, icon('right'), 'Opnieuw'),
@@ -757,8 +844,9 @@ function wbCreate(body, w) {
         h('div', { class: 'zp-btnrow' },
           h('button', { class: 'btn zp-btn', onclick: exportPng }, icon('download'), 'Als PNG'),
           h('button', { class: 'btn zp-btn danger', onclick: () => { if (!els.length) return; confirmDialog('Bord leegmaken', `Alle ${els.length} elementen van dit bord verwijderen, ook op de andere schermen?`, 'Leegmaken', () => { OPS.putMany('boards', els.map((e) => ({ list: 'elements', id: e.id, item: null }))); undo.length = 0; redo.length = 0; scheduleThumb(); }); } }, icon('trash'), 'Leegmaken')),
-        h('p', { class: 'zp-hint' }, 'Sneltoetsen: V selecteren, H verschuiven, P pen, M markeerstift, L lijn, A pijl, R rechthoek, E ellips, T tekst, I icoon, X gum, K kaart; + − 0 zoomen; Delete verwijdert de selectie; Shift houdt lijnen op 45° en vormen vierkant. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
+        h('p', { class: 'zp-hint' }, 'Vrije pijl (F): teken als met de pen, de punt komt vanzelf aan het eind. De rode prullenbak onder een selectie verwijdert haar. Verplaatsen zonder te wisselen: sleep een icoon of tekst direct, of druk even op een lijn, pijl of vorm en sleep. Draaien aan de ronde greep boven de selectie, met twee vingers of met [ en ]; schalen aan de hoeken. Sneltoetsen: V selecteren, H verschuiven, P pen, M markeerstift, L lijn, A pijl, R rechthoek, E ellips, T tekst, I icoon, X gum, K kaart; + − 0 zoomen; pijltjes verplaatsen de selectie; Delete verwijdert haar; Shift houdt lijnen op 45° en vormen vierkant. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
   }
+  function turnSel(d) { const e = selEl(); if (!e) return; const before = DK.copy(e); Object.assign(e, DK.transform(e, { drot: d }, measure)); commit(e, before); request(); paintSide(); }
   function applyToSel(patch, type) {
     const e = sel && els.find((x) => x.id === sel);
     if (!e || (type && e.type !== type)) return;
@@ -767,23 +855,9 @@ function wbCreate(body, w) {
     commit(e, before);
     request();
   }
+  const iconState = { query: '', cat: 'all' };
   function iconsPanel() {
-    const q = h('input', { class: 'input zp-profq', type: 'search', placeholder: 'Zoek een icoon: AW139, platform, boot, verdachte…', value: iconQuery });
-    const grid = h('div', { class: 'wb-icons' });
-    const cats = h('div', { class: 'wb-cats' });
-    const count = h('p', { class: 'zp-hint' });
-    const paintGrid = () => {
-      const words = iconQuery.toLowerCase().split(/\s+/).filter(Boolean);
-      const list = WB_ICONS.filter((ic) => (iconCat === 'all' || ic.cat === iconCat) && words.every((wd) => ic.kw.includes(wd)));
-      grid.replaceChildren(...list.map((ic) => h('button', { class: 'wb-iconbtn' + (cfg.iconId === ic.id && cfg.tool === 'icon' ? ' on' : ''), title: `${ic.name} · ${WB_CATS[ic.cat]}`, onclick: () => { cfg.iconId = ic.id; save(); setTool('icon'); paintGrid(); } },
-        h('span', { class: 'wb-iconpic', html: wbIconSvg(ic, ic.own ? (isLight() ? '#0a0f18' : '#e9eff8') : 'currentColor', 40) }), h('small', {}, ic.name.replace(/\s*\((bovenaanzicht|zijaanzicht)?,?\s*(detail)?\)$/i, '')))));
-      if (!list.length) grid.append(h('p', { class: 'zp-hint' }, 'Geen icoon gevonden.'));
-      count.textContent = `${list.length} van ${WB_ICONS.length} iconen · in de kleur van de pen; tik een icoon en daarna op het bord. Dubbeltik op een geplaatst icoon voor een label (callsign, LP-nummer).`;
-      cats.replaceChildren(h('button', { class: 'wb-cat' + (iconCat === 'all' ? ' on' : ''), onclick: () => { iconCat = 'all'; paintGrid(); } }, 'Alles'), ...Object.entries(WB_CATS).map(([k, n]) => h('button', { class: 'wb-cat' + (iconCat === k ? ' on' : ''), onclick: () => { iconCat = k; paintGrid(); } }, n)));
-    };
-    q.addEventListener('input', () => { iconQuery = q.value; paintGrid(); });
-    paintGrid();
-    return h('div', { class: 'zp-panel' }, h('div', { class: 'zp-profsearch' }, icon('star'), q), cats, count, grid);
+    return dkIconPanel({ state: iconState, light: isLight, picked: () => (cfg.tool === 'icon' ? cfg.iconId : null), pick: (ic) => { cfg.iconId = ic.id; save(); setTool('icon'); }, px: 40 });
   }
   /* ---------- a piece of map ---------- */
   function mapPanel() {
@@ -957,7 +1031,7 @@ function wbCreate(body, w) {
     const b = board();
     title.replaceChildren(icon(b && b.lock ? 'lock' : 'note'), h('b', {}, b ? b.name : 'Whiteboard'), h('small', {}, !b ? 'bord wordt geopend…' : b.lock ? (b.lockOpen ? 'vergrendeld · zichtbaar op dit scherm' : 'vergrendeld · pincode nodig') : 'live op alle schermen'));
     lockBtn.paint();
-    quick.replaceChildren(...['select', 'pan', 'pen', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => setTool(k) }, icon(WB_TOOLS[k].icon))),
+    quick.replaceChildren(...['select', 'pan', 'pen', 'farrow', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'icon', 'eraser'].map((k) => h('button', { class: 'btn zp-btn wb-qbtn' + (cfg.tool === k ? ' on' : ''), title: `${WB_TOOLS[k].name} (${WB_TOOLS[k].key})`, onclick: () => setTool(k) }, icon(WB_TOOLS[k].icon))),
       h('span', { class: 'wb-swatch', style: `--c:${cfg.color}`, title: 'Huidige kleur (kies in het paneel Tekenen)', onclick: () => showTab('draw') }),
       h('span', { class: 'wb-sep' }),
       h('button', { class: 'btn zp-btn wb-qbtn', title: 'Ongedaan maken (Ctrl+Z)', onclick: () => doUndo(false) }, icon('left')),

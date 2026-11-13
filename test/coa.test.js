@@ -150,7 +150,7 @@ test('migratie 12: het tabblad COA Planner komt na Offshore, één keer, en blij
 
 test('gedeelde bestanden: de COA-plannen gaan mee tussen de schermen', () => {
   const store = require('../src/plan/store.js');
-  assert.deepStrictEqual(store.KINDS.coa.lists, ['plans', 'marks']);
+  assert.deepStrictEqual(store.KINDS.coa.lists, ['plans', 'marks', 'shipmarks']);
 });
 
 test('zee t.o.v. het schip en sea state in de Engelse zeemanstermen', () => {

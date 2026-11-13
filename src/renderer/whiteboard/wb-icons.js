@@ -6,7 +6,7 @@
    vaartuigen van boven, offshore en infra, tactisch/natuur/markeringen); index.html laadt die na dit
    bestand. Elk icoon is een vector (SVG, 64 × 64) die in elke kleur en op elke grootte scherp blijft.
    ============================================================ */
-const WB_CATS = { air: 'Luchtvaart', veh: 'Voertuigen', sea: 'Vaartuigen', seatop: 'Vaartuigen (bovenaanzicht)', off: 'Offshore', per: 'Personen', inf: 'Gebouwen en infra', nat: 'Natuur en dieren', tac: 'Tactisch', mrk: 'Markeringen' };
+const WB_CATS = { coa: 'COA-symbolen', air: 'Luchtvaart', veh: 'Voertuigen', sea: 'Vaartuigen', seatop: 'Vaartuigen (bovenaanzicht)', off: 'Offshore', per: 'Personen', inf: 'Gebouwen en infra', nat: 'Natuur en dieren', tac: 'Tactisch', mrk: 'Markeringen' };
 // Every icon: id, name, category, keywords, and the SVG inside a 64 × 64 box. Strokes use currentColor
 // and fills use currentColor with a fill-opacity, so one icon draws in any pen colour on any background.
 // `extra`: size (a standard size on the board, for a diagram used as a base) and own (keeps its own colours).

@@ -326,22 +326,23 @@ async function saveFile(title, name, filters, content) {
   return res.filePath;
 }
 // The kneeboard card: an HTML page laid out by the renderer, printed to PDF in a hidden window.
-async function printPdf(html, name, pageSize = 'A5') {
+async function printPdf(html, name, pageSize = 'A5', landscape = false) {
   const w = new BrowserWindow({ show: false, webPreferences: { javascript: false, offscreen: true } });
   try {
     await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    const pdf = await w.webContents.printToPDF({ pageSize: pageSize === 'A4' ? 'A4' : 'A5', printBackground: true, margins: { marginType: 'custom', top: 0.3, bottom: 0.3, left: 0.3, right: 0.3 } });
+    const pdf = await w.webContents.printToPDF({ pageSize: pageSize === 'A4' ? 'A4' : 'A5', landscape: !!landscape, printBackground: true, margins: { marginType: 'custom', top: 0.3, bottom: 0.3, left: 0.3, right: 0.3 } });
     return saveFile(pageSize === 'A4' ? 'PDF opslaan' : 'Kniebordkaart opslaan', name, [{ name: 'PDF', extensions: ['pdf'] }], pdf);
   } finally { w.destroy(); }
 }
 
-// Straight to the printer, A5 portrait (the kneeboard card of the COA Planner): the system print dialog.
-async function printA5(html) {
+// Straight to the printer, A5 portrait (the kneeboard card of the COA Planner) or landscape (Teken Schip,
+// 1.49): the system print dialog.
+async function printA5(html, landscape = false) {
   const w = new BrowserWindow({ show: false, webPreferences: { javascript: false } });
   try {
     await w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     return await new Promise((resolve) => {
-      w.webContents.print({ silent: false, printBackground: true, pageSize: 'A5', landscape: false, margins: { marginType: 'none' } }, (ok, reason) => resolve({ ok, error: ok || reason === 'cancelled' ? null : reason }));
+      w.webContents.print({ silent: false, printBackground: true, pageSize: 'A5', landscape: !!landscape, margins: { marginType: 'none' } }, (ok, reason) => resolve({ ok, error: ok || reason === 'cancelled' ? null : reason }));
     });
   } finally { setTimeout(() => { if (!w.isDestroyed()) w.destroy(); }, 1000); }
 }
@@ -512,8 +513,8 @@ ipcMain.handle('plan:saveBinary', safe(async (_e, { title, name, ext, dataUrl })
   return { ok: !!(await saveFile(String(title || 'Opslaan'), String(name || 'bestand'), [{ name: String(ext || 'png').toUpperCase(), extensions: [String(ext || 'png')] }], Buffer.from(m[2], 'base64'))) };
 }));
 ipcMain.handle('plan:saveText', safe(async (_e, { title, name, ext, content }) => ({ ok: !!(await saveFile(title, name, [{ name: ext.toUpperCase(), extensions: [ext] }], String(content))) })));
-ipcMain.handle('plan:printA5', safe(async (_e, { html }) => printA5(String(html))));
-ipcMain.handle('plan:printPdf', safe(async (_e, { html, name, pageSize }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'), pageSize)) })));
+ipcMain.handle('plan:printA5', safe(async (_e, { html, landscape }) => printA5(String(html), !!landscape)));
+ipcMain.handle('plan:printPdf', safe(async (_e, { html, name, pageSize, landscape }) => ({ ok: !!(await printPdf(String(html), String(name || 'kniebord.pdf'), pageSize, !!landscape)) })));
 
 const status = () => ({ ...store.digests(), wind: wind.own() });
 
