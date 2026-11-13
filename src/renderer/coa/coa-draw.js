@@ -65,8 +65,8 @@ function coaDrawLayer(o) {
     const Pp = o.pal();
     svgHost.innerHTML = `<svg viewBox="0 0 ${o.W} ${o.H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, Pp)).join('')}${drawing ? coaMarkSvg(drawing, Pp) : ''}</svg>`;
     selUi.paint(o.on() ? selEl() : null);
-    floatBar.hidden = !o.on();
-    floatBar.paint();
+    if (floatBar) floatBar.hidden = !o.on();
+    for (const b of undoBars) b.paint();
     if (o.onChange) o.onChange(marks.length);
   }
   // The marks of the list as they are now, with the one being moved or turned in its new place.
@@ -124,8 +124,9 @@ function coaDrawLayer(o) {
     paintNow(); if (o.on()) paintTools();
   }
   const undoBar = (opt = {}) => { const b = dkUndoButtons({ undo: () => doUndo(false), redo: () => doUndo(true), count: () => hist.count(histKey()), ...opt }); undoBars.add(b); return b; };
-  const floatBar = undoBar({ big: true });
-  o.el.append(floatBar);
+  // The floating pair on the surface, unless the page puts the pair in its own toolbar (`floatUndo: false`).
+  const floatBar = o.floatUndo === false ? null : undoBar({ big: true });
+  if (floatBar) o.el.append(floatBar);
   function clearAll() {
     if (!marks.length) return;
     confirmDialog('Tekening wissen', `Alle ${marks.length} tekeningen ${o.list === 'shipmarks' ? 'op het schip' : 'op dit plan'} wissen, ook op de andere schermen?`, 'Wissen', () => { hist.push(histKey(), marks.map((m) => ({ id: m.id, before: cleanMark(m), after: null }))); OPS.putMany('coa', marks.map((m) => ({ list: o.list, id: m.id, item: null }))); selId = null; paintNow(); paintTools(); toast('Tekening gewist · Ongedaan maken zet alles terug'); });
@@ -384,6 +385,7 @@ function coaDrawLayer(o) {
   return {
     paint: paintNow,
     paintTools,
+    undoBar,
     marks: () => marks,
     clearSel: () => { selId = null; selUi.paint(null); },
     mode: () => { o.el.style.cursor = o.on() ? toolCursor() : ''; if (!o.on()) { selId = null; drawing = null; drag = null; } paintNow(); if (o.on()) paintTools(); },

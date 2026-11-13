@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const log = require('./log');
 const store = require('../plan/store');
+const { syncTracker } = require('../plan/sync');
 const locks = require('../plan/locks');
 const wind = require('../plan/wind');
 const aero = require('../plan/aero');
@@ -77,33 +78,36 @@ const isPeer = (caller) => !!caller && caller.secure === true && screens.peers()
 
 const KIND_WORDS = { private: 'eigen profielen en dekken', shared: 'routes en favorieten', ops: 'timers', boards: 'whiteboards', missions: 'missieplanning', coa: 'COA-plannen' };
 // What was fetched from each screen so far, per kind: the next fetch asks only for what changed after it.
-const synced = new Map();
-let syncBusy = false, syncAgain = false;
-async function syncFiles() {
-  if (syncBusy) { syncAgain = true; return; }
-  syncBusy = true;
+// (1.53: a fetch that stays empty while the files differ is followed by a full one, see sync.js.)
+const synced = syncTracker();
+// Each screen on its own (1.53): one slow or unreachable screen (8 s time-out per kind) never holds up
+// what another screen just drew. Merging is synchronous, so two fetches never write over each other.
+const peerBusy = new Map(); // screen id → 'busy' | 'again'
+async function syncPeer(p) {
+  if (peerBusy.has(p.id)) { peerBusy.set(p.id, 'again'); return; }
+  peerBusy.set(p.id, 'busy');
   try {
-    const mine = store.digests();
-    for (const p of screens.peers()) {
-      const theirs = p.online && p.status && p.status.plan;
-      if (!theirs || p.status.ephemeral || !p.secure) continue;
-      for (const kind of Object.keys(store.KINDS)) {
-        if (!theirs[kind] || theirs[kind] === mine[kind]) continue;
-        const key = `${p.id}|${kind}`;
-        try {
-          const since = synced.get(key) || 0;
-          const data = await peerGet(p, `/api/plan/sync?kind=${kind}&since=${since}`);
-          let newest = since;
-          for (const l of Object.values(data || {})) for (const it of Object.values(l || {})) if (it && it.updatedAt > newest && it.updatedAt < Date.now() + 864e5) newest = it.updatedAt;
-          synced.set(key, newest);
-          if (store.merge(kind, data)) { mine[kind] = store.digests()[kind]; if (kind === 'private' || kind === 'shared') log.info('plan', `${KIND_WORDS[kind]} bijgewerkt van ${p.name}`); }
-        } catch (err) { synced.delete(key); /* that screen is busy or gone; the next round tries again */ }
-      }
+    const theirs = p.online && p.status && p.status.plan;
+    if (!theirs || p.status.ephemeral || !p.secure) return;
+    for (const kind of Object.keys(store.KINDS)) {
+      if (!theirs[kind] || theirs[kind] === store.digest(kind)) continue;
+      const key = `${p.id}|${kind}`;
+      try {
+        const since = synced.since(key);
+        const data = await peerGet(p, `/api/plan/sync?kind=${kind}&since=${since}`);
+        const changed = store.merge(kind, data);
+        synced.done(key, since, data, changed);
+        if (changed && (kind === 'private' || kind === 'shared')) log.info('plan', `${KIND_WORDS[kind]} bijgewerkt van ${p.name}`);
+      } catch (err) { synced.forget(key); /* that screen is busy or gone; the next round tries again */ }
     }
   } finally {
-    syncBusy = false;
-    if (syncAgain) { syncAgain = false; setTimeout(syncFiles, 50); }
+    const again = peerBusy.get(p.id) === 'again';
+    peerBusy.delete(p.id);
+    if (again) setTimeout(() => syncPeer(screens.peers().find((x) => x.id === p.id) || p).catch(() => {}), 30);
   }
+}
+async function syncFiles() {
+  await Promise.all(screens.peers().map((p) => syncPeer(p).catch(() => {})));
 }
 // A change made here goes to the other screens at once: they are told the new fingerprints and fetch what
 // is new. That keeps a whiteboard stroke or a timer within a tenth of a second on every screen.
@@ -122,12 +126,14 @@ function pokePeers() {
     }
   }, 40);
 }
-let pokedTimer = null;
+const pokedTimer = new Map();
 function onPoked(caller, digests) {
   const p = screens.peers().find((x) => x.id === caller.id);
   if (p && p.status && digests && typeof digests === 'object') p.status.plan = { ...(p.status.plan || {}), ...digests };
-  clearTimeout(pokedTimer);
-  pokedTimer = setTimeout(() => syncFiles().catch(() => {}), 30);
+  // Only the screen that changed something: its news is fetched at once, whatever the others are doing.
+  if (!p) return;
+  clearTimeout(pokedTimer.get(p.id));
+  pokedTimer.set(p.id, setTimeout(() => { pokedTimer.delete(p.id); syncPeer(p).catch(() => {}); }, 30));
 }
 // Volatile messages between the screens (a cursor on a whiteboard, a stroke still being drawn): never
 // stored, straight to the dashboards of the other screens.

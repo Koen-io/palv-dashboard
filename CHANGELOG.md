@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 1.53.0
+
+### COA Planner: tekeningen meteen bij het juiste plan
+- Wie een ander plan koos in de keuzelijst (of een nieuw plan maakte of er een verwijderde), zag nog de tekeningen van het vorige plan; die van het gekozen plan kwamen pas bij de volgende wijziging op een van de schermen. Nu staan de tekeningen van het gekozen plan er meteen
+- Ongedaan maken en Opnieuw staan in de bovenste balk, rechts naast Teken Schip, als gewone knoppen (zichtbaar zolang Tekenen aan staat); ze zweven niet meer over de COA's
+- Zon en maan: één rij per hemellichaam (schijfje, naam, richting, details) in vaste kolommen; de maan toont de echte fase (sikkel aan de goede kant) in plaats van een balkje dat links afgekapt leek; details lopen op een smal scherm om in plaats van te worden afgekapt
+
+### Gedeelde bestanden sneller tussen de schermen
+- Elk scherm wordt apart bijgewerkt: één trage of onbereikbare verbinding (bijvoorbeeld via Tailscale) houdt niet meer op wat een ander scherm net tekende
+- Een scherm dat iets later via een derde scherm kreeg (met een oudere tijd) werd met "alleen het nieuwe" nooit opgehaald tot een herstart; nu volgt dan een volledige ronde
+
 ## 1.52.2
 
 ### AIS: rustig opnieuw verbinden

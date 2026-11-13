@@ -82,3 +82,32 @@ test('migratie 10: het tabblad MadeSmart komt er één keer bij, achteraan, en b
   const has = model.normalize({ version: 9, pages: [{ id: 'a', name: 'Eigen', widgets: [{ id: 'w', type: 'browser', x: 0, y: 0, w: 96, h: 54, z: 1, cfg: {} }] }] });
   assert.strictEqual(has.pages.filter((p) => p.widgets.some((x) => x.type === 'browser')).length, 1, 'al een browser: geen tweede');
 });
+
+// 1.53: what one screen fetched of another (src/plan/sync.js).
+test('ophalen: alleen het nieuwe, en een volledige ronde als het nieuwe leeg blijft terwijl de bestanden verschillen', () => {
+  const { syncTracker } = require('../src/plan/sync');
+  let t = 1_000_000;
+  const sy = syncTracker({ fullMs: 120000, now: () => t });
+  const k = 'qra|coa';
+  assert.strictEqual(sy.since(k), 0, 'eerste keer alles');
+  sy.done(k, 0, { marks: { a: { updatedAt: 500 }, b: { updatedAt: 900 } } }, true);
+  assert.strictEqual(sy.since(k), 900, 'daarna alleen wat na het nieuwste kwam');
+  // A drawing with an older time arrived there from a third screen: the since-fetch stays empty.
+  sy.done(k, 900, { marks: {} }, false);
+  t += 1000;
+  assert.strictEqual(sy.since(k), 0, 'leeg terwijl ze verschillen: de volgende keer alles');
+  sy.done(k, 0, { marks: { a: { updatedAt: 500 }, b: { updatedAt: 900 }, c: { updatedAt: 700 } } }, true);
+  assert.strictEqual(sy.since(k), 900);
+  // Still different (this screen is ahead): no full fetch again within two minutes.
+  sy.done(k, 900, {}, false);
+  t += 60000;
+  assert.strictEqual(sy.since(k), 900, 'niet vaker dan eens per twee minuten alles');
+  t += 61000;
+  assert.strictEqual(sy.since(k), 0);
+  // Something new came: not stalled.
+  sy.done(k, 0, { marks: { d: { updatedAt: 1500 } } }, true);
+  sy.done(k, 1500, { marks: { e: { updatedAt: 1600 } } }, true);
+  assert.strictEqual(sy.since(k), 1600);
+  sy.forget(k);
+  assert.strictEqual(sy.since(k), 0);
+});

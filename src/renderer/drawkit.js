@@ -420,12 +420,14 @@ function dkHistory(onChange) {
     count(key) { const s = of(key); return { undo: s.undo.length, redo: s.redo.length }; },
   };
 }
-// The two buttons (a bent arrow back, a bent arrow forward). `big` for the floating pair on the surface.
-function dkUndoButtons({ undo, redo, count, big = false, labels = false }) {
-  const mk = (svg, label, title, fn) => h('button', { class: 'dk-ur' + (big ? ' big' : '') + (labels ? ' lab' : ''), type: 'button', title, onclick: (ev) => { ev.stopPropagation(); fn(); } }, h('span', { class: 'dk-ur-ic', html: svg }), labels ? h('span', {}, label) : null);
+// The two buttons (a bent arrow back, a bent arrow forward). `big` for the floating pair on the surface;
+// `bar` for a pair in a toolbar, looking like the other toolbar buttons.
+function dkUndoButtons({ undo, redo, count, big = false, labels = false, bar = false }) {
+  const cls = bar ? 'btn zp-btn dk-ur-bar' : 'dk-ur' + (big ? ' big' : '') + (labels ? ' lab' : '');
+  const mk = (svg, label, title, fn) => h('button', { class: cls, type: 'button', title, onclick: (ev) => { ev.stopPropagation(); fn(); } }, h('span', { class: 'dk-ur-ic', html: svg }), labels || bar ? h('span', {}, label) : null);
   const u = mk(DK_UNDO_SVG, 'Ongedaan', 'Ongedaan maken (Ctrl+Z)', undo);
   const r = mk(DK_REDO_SVG, 'Opnieuw', 'Opnieuw (Ctrl+Y)', redo);
-  const el = h('div', { class: 'dk-urbar' + (big ? ' big' : '') }, u, r);
+  const el = h('div', { class: 'dk-urbar' + (big ? ' big' : '') + (bar ? ' inbar' : '') }, u, r);
   el.addEventListener('pointerdown', (ev) => ev.stopPropagation());
   el.paint = () => {
     const c = count();

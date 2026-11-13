@@ -349,6 +349,9 @@ function coaCreate(body, w) {
     return card('coa-seacard', 'Zee en weer', h('span', { class: 'coa-badge' }, where), h('div', { class: 'coa-searow' }, tile, rows), wrow, near,
       sea && sea.modelError ? h('p', { class: 'coa-hint' }, `Golfmodel: ${sea.modelError}`) : null);
   }
+  // One row per body: disc, name, direction (or light level) and the detail, in fixed columns so all three line up.
+  const bodyRow = (kind, down, disc, name, value, sub) => h('div', { class: `coa-body2 coa-b-${kind}` + (down ? ' coa-down' : ''), title: down ? `${name === 'SUN' ? 'Zon' : 'Maan'} onder de horizon` : '' },
+    h('span', { class: 'coa-bodydisc' }, disc), h('small', {}, name), h('b', {}, value), h('span', { class: 'coa-bodysub' }, sub));
   function astroCard() {
     const s = vm.sun, m = vm.moon, lx = ASTRO.formatLux(vm.light.lux);
     const warn = [];
@@ -356,9 +359,9 @@ function coaCreate(body, w) {
     if (vm.glareMoon) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Approach into moon (NVG)'), ` · elevation ${Math.round(m.alt)}°, ${Math.round(m.fraction * 100)}% illuminated, ${Math.round(Math.abs(C.signed(m.az - vm.at)))}° off the AT`)));
     return card('coa-astro', 'Zon en maan', h('span', { class: 'coa-badge' + (vm.dark ? ' night' : '') }, vm.phase ? vm.phase.name : ''),
       h('div', { class: 'coa-bodies' },
-        h('div', { class: 'coa-body2 coa-b-sun' + (s.alt < 0 ? ' coa-down' : '') }, h('i'), h('div', {}, h('small', {}, 'SUN'), h('b', {}, `${vm.fmt(s.az)}°${vm.refText}`), h('span', {}, `elev ${Math.round(s.alt)}°`))),
-        h('div', { class: 'coa-body2 coa-b-moon' + (m.alt < 0 ? ' coa-down' : '') }, h('i', { style: `--f:${m.fraction.toFixed(2)}` }), h('div', {}, h('small', {}, 'MOON'), h('b', {}, `${vm.fmt(m.az)}°${vm.refText}`), h('span', {}, `elev ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`))),
-        h('div', { class: 'coa-body2 coa-b-lux' }, h('i'), h('div', {}, h('small', {}, 'LIGHT'), h('b', {}, `${lx.value} ${lx.unit}`), h('span', {}, m.phaseName)))),
+        bodyRow('sun', s.alt < 0, h('span', { class: 'coa-sundisc' }), 'SUN', `${vm.fmt(s.az)}°${vm.refText}`, `elev ${Math.round(s.alt)}°`),
+        bodyRow('moon', m.alt < 0, moonSvg(m, 'mo-disc coa-moondisc'), 'MOON', `${vm.fmt(m.az)}°${vm.refText}`, `elev ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`),
+        bodyRow('lux', false, h('span', { class: 'coa-luxdisc' }), 'LIGHT', `${lx.value} ${lx.unit}`, m.phaseName)),
       ...warn,
       vm.shadow ? h('p', { class: 'coa-hint' }, `Schaduw ${vm.shadow.moon ? 'van de maan ' : ''}valt naar ${vm.fmt(vm.shadow.dir)}°${vm.refText}, ${vm.shadow.len < 1 ? 'kort' : vm.shadow.len < 2.5 ? 'middellang' : 'lang'}${vm.showShadow ? ' (getekend naast elk schip)' : ' (niet getekend: Schaduw staat uit)'}.`) : null,
       h('p', { class: 'coa-hint' }, `${offMin ? 'Tijdschuif ' : ''}${zulu(vm.tAstro)} · ${vm.ref === 'M' ? `variatie ${Math.abs(vm.decl).toFixed(1).replace('.', ',')}°${vm.decl >= 0 ? 'E' : 'W'} · ` : ''}${vm.pos ? 'op de positie van het schip' : 'voor ' + vm.base.name}`));
@@ -640,14 +643,21 @@ function coaCreate(body, w) {
 
   /* ---------- drawing on the plan (coa-draw.js) ---------- */
   const layer = coaDrawLayer({
-    el: drawEl, tools, cfg, save, list: 'marks', plan: () => P, W: COA_W, H: COA_H, pal,
+    el: drawEl, tools, cfg, save, list: 'marks', plan: () => P, W: COA_W, H: COA_H, pal, floatUndo: false,
     on: () => !!cfg.draw, keys: () => onScreen(body) && !modalOpen(), iconMax: 300, title: 'Tekenlaag',
     hint: 'De tekening hoort bij dit plan, staat op alle schermen en komt mee op de A5-afdruk. Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken.',
   });
   cleanups.push(() => layer.destroy());
-  const paintMarks = () => layer.paint();
+  // Undo and redo in the toolbar, right of Teken Schip, while drawing is on (not floating over the COA's).
+  const undoPair = layer.undoBar({ bar: true });
+  shipBtn.after(undoPair);
+  // The drawings shown are those of the plan that is open: a plan picked, made or deleted shows its own
+  // drawings at once (before 1.53 they only came after the next change on any screen).
+  let marksOf = null;
+  const paintMarks = () => { marksOf = P ? P.id : null; layer.paint(); };
   function paintMode() {
     root.classList.toggle('drawing', !!cfg.draw);
+    undoPair.hidden = !cfg.draw;
     drawSw.paint();
     if (!cfg.draw) tools.replaceChildren();
     layer.mode();
@@ -895,6 +905,7 @@ ${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) =
     if (inputs) paintInputs();
     paintSide();
     paintBoard();
+    if (P.id !== marksOf) { layer.clearSel(); paintMarks(); }
     // While a field in the right column has the focus (typing, the on-screen keyboard on it), the column
     // is left alone and repainted once the focus leaves it.
     const ae = document.activeElement;

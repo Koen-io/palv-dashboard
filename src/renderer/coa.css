@@ -144,16 +144,19 @@ html[data-theme="light"] .coa-wind { color: #1767c2; }
 .coa-wx b { display: block; font: 800 0.88rem var(--font-mono); }
 .coa-wx small { display: block; font-size: 0.6rem; color: var(--muted); }
 .coa-wx .btn { height: 1.8rem; font-size: 0.7rem; }
-.coa-bodies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
-.coa-body2 { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; padding: 0.35rem 0.4rem; border-radius: var(--radius-sm); background: var(--surface-3); min-width: 0; }
-.coa-body2 > i { width: 1.05rem; height: 1.05rem; border-radius: 50%; flex: none; }
-.coa-body2.coa-b-sun > i { background: radial-gradient(circle at 40% 40%, #fff4b3, #ffd23f 55%, #e0a800); box-shadow: 0 0 0.5rem rgba(255, 210, 63, 0.55); }
-.coa-body2.coa-b-moon > i { background: linear-gradient(90deg, #d7dde7 calc(var(--f, 1) * 100%), #3a4556 0); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
-.coa-body2.coa-b-lux > i { background: radial-gradient(circle, #9fd0ff, #2a5f9c); }
-.coa-body2.coa-down { opacity: 0.6; }
-.coa-body2 small { font-size: 0.5rem; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); }
-.coa-body2 b { display: block; font: 800 0.84rem var(--font-mono); }
-.coa-body2 span { display: block; font-size: 0.6rem; color: var(--muted); line-height: 1.2; }
+.coa-bodies { display: flex; flex-direction: column; gap: 0.25rem; }
+/* Disc · name · value · detail, in the same columns on every row. */
+.coa-body2 { display: grid; grid-template-columns: 1.6rem 2.9rem auto minmax(0, 1fr); align-items: center; column-gap: 0.45rem; padding: 0.3rem 0.5rem; border-radius: var(--radius-sm); background: var(--surface-3); min-width: 0; }
+.coa-bodydisc { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; }
+.coa-sundisc, .coa-luxdisc { display: block; width: 1.1rem; height: 1.1rem; border-radius: 50%; }
+.coa-sundisc { background: radial-gradient(circle at 40% 40%, #fff4b3, #ffd23f 55%, #e0a800); box-shadow: 0 0 0.45rem rgba(255, 210, 63, 0.55); }
+.coa-luxdisc { background: radial-gradient(circle at 40% 40%, #cfe7ff, #6fa8e6 55%, #2a5f9c); box-shadow: 0 0 0.4rem rgba(111, 168, 230, 0.4); }
+.coa-bodydisc .mo-disc.coa-moondisc { width: 1.35rem; height: 1.35rem; }
+.coa-body2.coa-down .coa-bodydisc, .coa-body2.coa-down b { opacity: 0.55; }
+.coa-body2 small { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.1em; color: var(--muted); }
+.coa-body2 b { font: 800 0.86rem var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The detail stays whole: on a narrow column it goes to two lines, right-aligned. */
+.coa-body2 .coa-bodysub { font-size: 0.64rem; color: var(--muted); line-height: 1.25; text-align: right; overflow-wrap: anywhere; }
 .coa-warn { display: flex; gap: 0.4rem; align-items: flex-start; background: color-mix(in srgb, #ff4d42 18%, var(--surface-2)); border: 1px solid color-mix(in srgb, #ff4d42 60%, transparent); color: var(--text); border-radius: var(--radius-sm); padding: 0.32rem 0.45rem; font-size: 0.68rem; line-height: 1.35; }
 .coa-warn svg { width: 0.95rem; height: 0.95rem; flex: none; color: #ff5a52; margin-top: 0.05rem; }
 .coa-warn b { color: #ff7d77; }
@@ -204,6 +207,11 @@ html[data-theme="light"] .coa-warn b { color: #c8161c; }
 
 /* ---------- Teken Schip: the ship large, the drawing kit on the left ---------- */
 .coa-shipbtn { position: relative; }
+/* Undo and redo in the toolbar, next to Teken Schip: toolbar buttons with the bent arrows. */
+.dk-urbar.inbar { display: inline-flex; gap: 0.3rem; }
+.dk-urbar.inbar[hidden] { display: none; }
+.dk-ur-bar .dk-ur-ic svg { width: 1rem; height: 1rem; }
+.dk-ur-bar:disabled { opacity: 0.4; cursor: default; }
 .coa-shipn { min-width: 1.15rem; height: 1.15rem; padding: 0 0.3rem; border-radius: 99px; background: var(--accent); color: var(--accent-text, #1a1200); font: 800 0.66rem var(--font-ui); display: inline-grid; place-items: center; }
 .coa-shipn[hidden] { display: none; }
 .modal.coa-shipmodal { width: 97vw; max-width: none; height: 94vh; max-height: none; display: flex; flex-direction: column; }
