@@ -334,12 +334,13 @@ function connect(s) {
   const onText = (text) => {
     let m;
     try { m = JSON.parse(text); } catch { return; }
+    // A refusal (too many connections, a bad key) is no connection: the wait before the next try grows.
+    const refusal = m && (m.error || (s.id === 'openwaters' && (m.type === 'error' || m.type === 'notice')));
+    if (refusal) { s.lastErr = String(m.error || m.message || m.reason || m.type); log.warn('ais', `${s.name}: ${s.lastErr}`); return; }
     if (!s.connected) { s.connected = true; s.retries = 0; s.lastErr = null; log.info('ais', `verbonden met ${s.name}`); }
     s.lastMsg = Date.now(); s.count += 1;
-    if (m && m.error) { s.lastErr = String(m.error); log.warn('ais', `${s.name}: ${s.lastErr}`); return; }
     if (s.id === 'openwaters') {
       if (m && m.type === 'welcome') { s.info = { role: m.role || null, limits: m.limits || null }; return; }
-      if (m && (m.type === 'error' || m.type === 'notice')) { s.lastErr = String(m.message || m.reason || m.type); log.warn('ais', `Open Waters: ${s.lastErr}`); return; }
       const got = owMessage(m);
       if (!got) return;
       try { ingest(got.msg, got.from); s.used += 1; } catch { /* one bad message */ }
@@ -361,7 +362,7 @@ function connect(s) {
     const was = s.connected;
     s.connected = false;
     if (was || Date.now() - opened > 10000) log.warn('ais', `verbinding met ${s.name} weg (${why}); opnieuw proberen`);
-    if (!s.lastErr || !was) s.lastErr = why;
+    if (!s.lastErr || was) s.lastErr = why;
     scheduleReconnect(s);
   };
   sock.addEventListener('close', (ev) => down(`gesloten ${ev.code || ''}${ev.reason ? ' ' + ev.reason : ''}`.trim()));

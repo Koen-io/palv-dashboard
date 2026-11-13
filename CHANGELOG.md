@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.52.2
+
+### AIS: rustig opnieuw verbinden
+- Een geweigerde verbinding (bijvoorbeeld "te veel verbindingen vanaf dit adres") telde als gelukt, waardoor het dashboard elke 3 seconden opnieuw probeerde. Nu wacht het steeds langer (tot een minuut), zodat een bron ons niet blokkeert
+
 ## 1.52.1
 
 ### AIS: één scherm haalt op
