@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 1.52.1
+
+### AIS: één scherm haalt op
+- Na een herstart van alle schermen gingen ze allemaal zelf AIS ophalen, waardoor aisstream.io (3 verbindingen per account) en Open Waters (2 per internetadres) vol zaten en juist het leidende scherm geen verbinding kreeg. Nu volgt elk scherm meteen het scherm dat ook het vliegverkeer leidt, ook als dat nog aan het verbinden is
+
 ## 1.52.0
 
 ### AIS sneller en vollediger op de kaart

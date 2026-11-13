@@ -388,14 +388,20 @@ function disconnect(why, only) {
 const connectAll = () => { for (const s of Object.values(SRC)) if (!s.ws && !s.timer) connect(s); };
 
 /* ---------- following another screen ---------- */
-// The screen to take the ships from: the one this screen follows for the air traffic when it has AIS,
-// else any screen of the unit that has it; none when this screen has a key of its own and the others not.
+// The screen to take the ships from. The screen this one follows for the air traffic, as soon as it runs
+// 1.52 or newer (it then takes the AIS itself, also while it is still connecting), or, older, once it has
+// AIS. Else, without a key of its own, any screen of the unit that has AIS. The traffic leader never follows.
+// So only one screen of the unit streams: aisstream.io allows 3 connections per account, Open Waters 2
+// per internet address, and screens in one office share that address.
 function pickSource() {
-  const peers = screens ? screens.peers() : [];
-  const has = (p) => p.online && p.secure && p.status && !p.status.ephemeral && p.status.ais && p.status.ais.connected;
   const info = share && share.info();
+  if (info && info.role === 'lead') return null;
+  const peers = screens ? screens.peers() : [];
+  const ok = (p) => p.online && p.secure && p.status && !p.status.ephemeral && p.status.ais;
+  const has = (p) => ok(p) && p.status.ais.connected;
+  const able = (p) => ok(p) && !!p.status.ais.sources; // 1.52+: streams by itself when it leads
   const leadId = info && info.leader ? info.leader.id : null;
-  const lead = leadId ? peers.find((p) => p.id === leadId && has(p)) : null;
+  const lead = leadId ? peers.find((p) => p.id === leadId && (able(p) || has(p))) : null;
   if (lead) return lead;
   if (key) return null;
   return peers.find(has) || null;
