@@ -156,3 +156,21 @@ test('het register gaat naar schijf en komt na een herstart terug', () => {
     assert.strictEqual(v.src, 'Open Waters · ontvanger');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('de route voor andere schermen wacht op nieuws en antwoordt dan; zonder sleutel geweigerd', async () => {
+  const { EventEmitter } = require('events');
+  const call = (url, caller) => new Promise((resolve) => {
+    const req = new EventEmitter(); req.url = url;
+    const res = { writableEnded: false, destroyed: false };
+    ais.routes['/api/ais/snap'](req, res, caller, (_r, code, _type, body) => { res.writableEnded = true; resolve({ code, body }); });
+  });
+  assert.strictEqual((await call('/api/ais/snap?since=0', null)).code, 403);
+  const rev = ais.snapshot(0).rev;
+  const t0 = Date.now();
+  const pending = call(`/api/ais/snap?since=${rev}&wait=5000`, { id: 'x', secure: true });
+  setTimeout(() => ais._ingest(posAt(244110001, 53.6, 4.6, at(Date.now()))), 200);
+  const got = await pending;
+  assert.strictEqual(got.code, 200);
+  assert.ok(Date.now() - t0 < 1500, 'antwoord zodra er iets binnenkwam');
+  assert.deepStrictEqual(JSON.parse(got.body).vessels.map((v) => v.mmsi), ['244110001']);
+});
