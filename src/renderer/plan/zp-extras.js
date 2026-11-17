@@ -171,7 +171,7 @@ function zpExtras(ctx) {
       warns.length ? h('div', { class: 'zp-warns' }, warns) : h('div', { class: 'zp-warn ok' }, icon('check'), 'Geen waarschuwingen voor snelheid, gewicht, brandstof en wind.'),
       // Both folded in to start with: with many layers they are long, and they are there when wanted.
       zpFold('brief-vprof', 'Verticaal profiel', () => zpProfileCanvas(ctx, plan, crossed)),
-      zpFold('brief-air', 'Luchtruim langs de route', () => [tbl,
+      zpFold('brief-air', 'Luchtruim langs de route', () => [h('div', { class: 'zp-tblwrap' }, tbl),
         h('p', { class: 'zp-hint' }, 'Bron openAIP. Niet voor navigatie: controleer altijd de AIP, NOTAM\'s en actuele activatie van TRA/TSA en EHR/EHD-gebieden.'),
         h('div', { class: 'zp-btnrow' }, zpAipBtn(zpAipUrl(), 'eAIP Nederland (geldende cyclus)'), zpBtn('ICAO-kaart 1:500.000', () => zpOpenAip(ZP_AIP_CHART.front), { icon: 'globe', title: 'Officiële VFR-kaart van LVNL (PDF, voorzijde)' }))], { badge: crossed.length }),
       h('div', { class: 'zp-sec open' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Weer langs de route'), switchTool('STATIONS', 'Weerstations op de kaart', () => cfg.wx.metar, () => { cfg.wx.metar = !cfg.wx.metar; ctx.save(); applyWx(); ctx.emit('layers'); })),

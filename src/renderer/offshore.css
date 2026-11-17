@@ -4,10 +4,14 @@
 .widget.offshore .w-body { background: var(--bg); }
 .os { position: absolute; inset: 0; display: flex; flex-direction: column; font-family: var(--font-ui); }
 .os-body { flex: 1; min-height: 0; display: flex; position: relative; }
-.os-side { flex: none; width: 25rem; max-width: 40%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; }
-.os.side-off .os-side { margin-left: calc(-1 * min(25rem, 40%)); }
+.os-side { flex: none; width: 25rem; max-width: 48%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; container: zpside / inline-size; }
+/* folds away by exactly its own width (--zp-side-w: the standard or the dragged width, see zpSideWidth) */
+.os.side-off .os-side { margin-left: calc(-1 * var(--zp-side-w, min(25rem, 48%))); }
 .os.side-off .zp-side-toggle svg { transform: rotate(180deg); }
-.os-tabs { grid-template-columns: repeat(3, 1fr); }
+.os-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.os-side .row { flex-wrap: wrap; }
+.os-side .row > .field { flex: 1 1 9rem; }
+.os-side .row .input { width: 100%; min-width: 0; }
 .os-status { position: static; }
 .os-ships { display: flex; flex-direction: column; gap: 0.2rem; }
 .os-ship { display: grid; grid-template-columns: auto auto 1fr auto; gap: 0.5rem; align-items: center; padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); text-align: left; }
@@ -17,6 +21,8 @@
 .os-ship b { display: block; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-ship small { display: block; font-size: 0.66rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-ship > div { min-width: 0; }
+/* a platform has no flag: the name takes the room, the distance stays at the right */
+.os-ship:not(:has(.os-flag)) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .os-ship-d { font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .os-flag { display: inline-block; width: 1.3rem; height: 0.975rem; border-radius: 2px; background: var(--surface-3) center / cover no-repeat; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3); }
 .os-card { width: 25rem; }

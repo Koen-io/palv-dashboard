@@ -1,5 +1,26 @@
 # Wijzigingen
 
+## 1.54.0
+
+### COA Planner
+- De relatieve wind staat als echte windvaan (wind barb, zoals in de luchtvaart) over elk schip: de staf wijst naar waar de schijnbare wind vandaan komt, met veren voor de sterkte (vaantje 50, lange veer 10, halve veer 5 kt). De waarde (bv. R022 - 38 kt) staat klein en altijd linksonder in elke COA
+- Nieuwe indeling van elke COA, op het scherm én op de afdruk: het nummer groot in de hoek, het schip veel groter, de cijfers compact eronder; het kompas blijft in het midden
+- Approach is nu de kant van het schip waar je naartoe vliegt: van bakboordkwartier over het schip naar stuurboord voor is "Approach G045"; met het schip mee (van achteren) is 000, er recht tegenin 180
+- Nieuwe knop Weergave in de balk met de snelle instellingen: °T of °M, AT of N boven, schaduw en de tactische graden (45°, 90°, 139°) rond het schip; die graden staan standaard uit
+- De verwachte COA (most likely) krijgt een dikke, overal even brede oranje rand; met de keuzelijst Verwacht kies je hem zelf (of Auto: de COA op de BRC), ook vóór het printen
+- Stap 2 in twee knoppen: 2a. Weer bij schip overnemen (de wind nu, op de live AIS-positie van het schip) en 2b. Weer H-hour overnemen (de verwachting voor het H-uur op de positie van dan). De wind wordt tussen de modeluren in berekend, op de minuut
+- Zon en maan voor het H-uur én voor nu naast elkaar, zodat ze met de bovenbalk te vergelijken zijn; een waarschuwing als het H-uur ver van nu ligt, met een knop "H-uur op nu"
+- Afdrukken, PDF en e-mail: twee bladen A5 staand. Blad 1 de vier COA's groot met de schipgegevens bovenaan; blad 2 het bord met de tekening, de tabel, zon en maan, de zee en de hoogtes. Drie indelingen onder Weergave › Afdruk (A raster, B met kompas, C hoog contrast); A is de standaard
+
+### Tekenen (Whiteboard, COA-tekenlaag en Teken Schip)
+- Houd aan het eind van een streek je vinger even stil en de vorm wordt netjes gemaakt, met een korte overgang: lijn (ook met trillende hand), boog, gebroken lijn, cirkel, ellips, vierkant, rechthoek, driehoek, ruit, parallellogram, trapezium, vijf-, zes- en achthoek, ster en een pijl in één streek. Blijf vasthouden en de nette vorm draait en schaalt mee met je vinger
+- Lijnen en pijlen ombuigen: selecteer ze en sleep een "+"-greep, of druk op de lijn en houd even vast voor een ankerpunt op die plek. Vloeiende bochten door alle ankerpunten, de pijlpunt volgt de bocht; dubbeltik op een ankerpunt haalt hem weg, "Recht maken" alle bochten
+- Alle tekenpanelen hebben dezelfde indeling: Gereedschap, Kleur en dikte, Selectie en Tekening, met dezelfde knoppen op dezelfde plek
+
+### Zoek & Plan en Offshore
+- Lagen en Eenheden staan als tabbladen in de linkerkolom (niet meer in de bovenbalk)
+- De linkerkolom is breder en smaller te slepen; de inhoud schuift mee (kolommen, rijen en tabellen passen zich aan)
+
 ## 1.53.0
 
 ### COA Planner: tekeningen meteen bij het juiste plan

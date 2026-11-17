@@ -78,8 +78,14 @@ test('helikopter op de AT: kopwind en zijwind van rechts of links', () => {
 
 test('nadering gezien vanaf het schip en de zee ten opzichte van de koers', () => {
   const p = C.coaPicture({ n: 1, nominal: 0, heading: 0, brc: false }, { at: 0, bs: 10, wd: 0, ws: 10, gust: 18, waveDir: 90 });
-  assert.strictEqual(p.approach.text, '180', 'heli op AT 000 komt van achteren');
-  assert.strictEqual(p.approach.sector, 'stern');
+  assert.strictEqual(p.approach.text, '000', 'heli op AT 000 vliegt mee met het schip (komt van achteren)');
+  assert.strictEqual(p.approach.from.text, '180');
+  // Schip 000, heli van bakboordkwartier (R135) over het schip naar stuurboord voor: approach G045.
+  const q = C.coaPicture({ n: 1, nominal: 0, heading: 0, brc: false }, { at: 45, bs: 10, wd: 0, ws: 10 });
+  assert.strictEqual(q.approach.text, 'G045');
+  assert.strictEqual(q.approach.from.text, 'R135');
+  const r = C.coaPicture({ n: 2, nominal: 90, heading: 90, brc: false }, { at: 0, bs: 10, wd: 0, ws: 10 });
+  assert.strictEqual(r.approach.text, 'R090', 'schip 090, heli naar het noorden: over het schip naar bakboord');
   assert.strictEqual(p.sea.id, 'beam');
   assert.ok(p.gust.spd > p.app.spd);
   assert.strictEqual(C.seaRelative(10, 0).id, 'head');

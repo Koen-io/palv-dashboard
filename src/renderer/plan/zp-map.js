@@ -253,3 +253,32 @@ function zpPulse(map) {
     remove() { if (mk) { mk.remove(); mk = null; } },
   };
 }
+
+// The side panel of a map tab (Zoek & Plan, Offshore) as wide as the screen wants it: a grip on its right
+// edge (the width kept in cfg.sideW, double-tap for the standard width), folding away by exactly its own
+// width, and the map and the panel's contents following every change of width.
+function zpSideWidth({ root, side, mapBox, map, cv, cfg, save, onWidth }) {
+  const grip = dkPanelGrip(side, { get: () => cfg.sideW, set: (w) => { cfg.sideW = w || undefined; save(); }, min: 200, max: 760 });
+  grip.classList.add('zp-sgrip');
+  side.after(grip);
+  // The fold-away margin reads the real width (a custom one, or the standard capped at a share of the screen).
+  let lastW = 0, widthTimer = null;
+  const sideRo = new ResizeObserver(() => {
+    const w = Math.round(side.getBoundingClientRect().width);
+    if (!w || w === lastW) return;
+    root.style.setProperty('--zp-side-w', `${w}px`);
+    const first = !lastW;
+    lastW = w;
+    // The contents are laid out again once the width settles (a canvas or a table drawn for the old width).
+    if (!first && onWidth) { clearTimeout(widthTimer); widthTimer = setTimeout(onWidth, 160); }
+  });
+  sideRo.observe(side);
+  // The map fills what is left: once per frame while the panel is dragged or folds.
+  let frame = 0;
+  const mapRo = new ResizeObserver(() => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => { frame = 0; map.invalidateSize(false); if (cv) cv.request(); });
+  });
+  mapRo.observe(mapBox);
+  return () => { sideRo.disconnect(); mapRo.disconnect(); clearTimeout(widthTimer); if (frame) cancelAnimationFrame(frame); };
+}

@@ -223,6 +223,29 @@ test('points: interpolated by the model heights, in order, cached', async () => 
   assert.strictEqual(f.calls[1].hours, 21);
 });
 
+test('points: interpolated between the model hours when asked (COA Planner)', async () => {
+  const f = fake();
+  clock = T0 + 20 * 60000;
+  wind.start({ dir: tmp(), fetchJson: f.fetchJson, log: quiet, now });
+  const h = POINTS[0].hourly;
+  const [half, plain] = await wind.points([
+    { lat: 52.31, lon: 4.76, ftAmsl: 0, time: T0 + 30 * 60000, interp: true },
+    { lat: 52.31, lon: 4.76, ftAmsl: 0, time: T0 + 30 * 60000 },
+  ]);
+  assert.strictEqual(plain.validTime, T0, 'without interp: the hour it falls in');
+  assert.strictEqual(half.validTime, T0 + 30 * 60000, 'with interp: the exact time');
+  assert.deepStrictEqual(half.hours, [T0, T0 + 3600000]);
+  const a = wind.uv(h.wind_speed_10m[0], h.wind_direction_10m[0]), b = wind.uv(h.wind_speed_10m[1], h.wind_direction_10m[1]);
+  const want = wind.fromUv((a.u + b.u) / 2, (a.v + b.v) / 2);
+  assert.ok(Math.abs(half.speedKt - want.speed) < 0.11, `${half.speedKt} vs ${want.speed}`);
+  assert.ok(Math.abs(((half.dirDeg - want.dirFrom + 540) % 360) - 180) <= 1, `${half.dirDeg} vs ${want.dirFrom}`);
+  assert.ok(Math.abs(half.gustKt - (h.wind_gusts_10m[0] + h.wind_gusts_10m[1]) / 2) < 0.06);
+  // A time already past is the current hour, and says so.
+  const [past] = await wind.points([{ lat: 52.31, lon: 4.76, ftAmsl: 0, time: T0 - 5 * 3600000, interp: true }]);
+  assert.strictEqual(past.past, true);
+  assert.strictEqual(past.validTime, T0);
+});
+
 test('budget: refuses above 70 % of the day, serves the stale grid', async () => {
   const dir = tmp();
   const f = fake();

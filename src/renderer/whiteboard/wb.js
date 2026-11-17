@@ -237,12 +237,20 @@ function wbCreate(body, w) {
   }
   const request = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
   wbIconCache.onReady = request;
-  function strokePath(gg, pts, v) {
+  function strokePath(gg, pts, v, e) {
     if (!pts.length) return;
     const P = (p) => [p[0] * v.k + v.x, p[1] * v.k + v.y];
     gg.beginPath();
     const p0 = P(pts[0]);
     gg.moveTo(p0[0], p0[1]);
+    // A recognised shape (1.54): straight sides, closed when it is a polygon, filled on request.
+    if (e && e.poly) {
+      for (let i = 1; i < pts.length; i += 1) { const p = P(pts[i]); gg.lineTo(p[0], p[1]); }
+      if (e.closed) gg.closePath();
+      if (e.closed && e.fill) { const a0 = gg.globalAlpha; gg.globalAlpha = a0 * 0.28; gg.fill(); gg.globalAlpha = a0; }
+      gg.stroke();
+      return;
+    }
     if (pts.length < 3) { for (let i = 1; i < pts.length; i += 1) { const p = P(pts[i]); gg.lineTo(p[0], p[1]); } if (pts.length === 1) gg.lineTo(p0[0] + 0.1, p0[1]); gg.stroke(); return; }
     for (let i = 1; i < pts.length - 1; i += 1) { const a = P(pts[i]), b = P(pts[i + 1]); gg.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); }
     const last = P(pts[pts.length - 1]);
@@ -318,7 +326,7 @@ function wbCreate(body, w) {
       gg.lineWidth = e.marker ? lw * 3 : lw;
       if (e.marker) gg.globalAlpha *= 0.4;
       else if (e.dash) gg.setLineDash(DK.dashArray(lw));
-      strokePath(gg, e.pts, v);
+      strokePath(gg, e.pts, v, e);
       gg.setLineDash([]);
       // A free arrow: the head at the end, in the direction the stroke ended.
       const hd = e.arrow && !e.marker && DK.pathHead(e.pts, e.width || 4);
@@ -327,11 +335,14 @@ function wbCreate(body, w) {
       const a = [e.x1 * v.k + v.x, e.y1 * v.k + v.y], b = [e.x2 * v.k + v.x, e.y2 * v.k + v.y];
       gg.lineWidth = lw;
       if (e.dash) gg.setLineDash(DK.dashArray(lw));
-      gg.beginPath(); gg.moveTo(a[0], a[1]); gg.lineTo(b[0], b[1]); gg.stroke();
+      // Straight, or bent through its anchors (DK.curvePts); the heads follow the curve at the ends.
+      gg.beginPath();
+      if (DK.bent(e)) { DK.curvePts(e).forEach(([x, y], i) => { const px = x * v.k + v.x, py = y * v.k + v.y; if (i) gg.lineTo(px, py); else gg.moveTo(px, py); }); } else { gg.moveTo(a[0], a[1]); gg.lineTo(b[0], b[1]); }
+      gg.stroke();
       gg.setLineDash([]);
-      const head = (from, to) => { const ang = Math.atan2(to[1] - from[1], to[0] - from[0]), L = Math.max(10, lw * 3.5); gg.beginPath(); gg.moveTo(to[0], to[1]); gg.lineTo(to[0] - L * Math.cos(ang - 0.45), to[1] - L * Math.sin(ang - 0.45)); gg.lineTo(to[0] - L * Math.cos(ang + 0.45), to[1] - L * Math.sin(ang + 0.45)); gg.closePath(); gg.fill(); };
-      if (e.arrow === 'end' || e.arrow === 'both') head(a, b);
-      if (e.arrow === 'both') head(b, a);
+      const head = (start) => { const t = DK.lineEnd(e, start), tx = t.x * v.k + v.x, ty = t.y * v.k + v.y, ang = t.a, L = Math.max(10, lw * 3.5); gg.beginPath(); gg.moveTo(tx, ty); gg.lineTo(tx - L * Math.cos(ang - 0.45), ty - L * Math.sin(ang - 0.45)); gg.lineTo(tx - L * Math.cos(ang + 0.45), ty - L * Math.sin(ang + 0.45)); gg.closePath(); gg.fill(); };
+      if (e.arrow === 'end' || e.arrow === 'both') head(false);
+      if (e.arrow === 'both') head(true);
     } else if (e.type === 'rect' || e.type === 'ellipse') {
       const b = box(e), x = b.x * v.k + v.x, y = b.y * v.k + v.y, wd = b.w * v.k, hg = b.h * v.k;
       gg.lineWidth = lw;
@@ -390,8 +401,12 @@ function wbCreate(body, w) {
       lines(50, 1, 0.75);
       lines(250, 1.6, 1);
     }
-    for (const e of els) drawEl(g, e, view);
-    if (drawing) drawEl(g, drawing.e, view);
+    // A snap (1.54): the old stroke fades out while the clean shape fades in.
+    const mp = morph ? DK.morphT(morph) : 1;
+    for (const e of els) drawEl(g, morph && mp < 1 && e.id === morph.id ? { ...e, opacity: mp } : e, view);
+    if (morph && mp < 1) drawEl(g, { ...morph.ghost, opacity: 1 - mp }, view);
+    if (drawing) drawEl(g, snap && mp < 1 ? { ...drawing.e, opacity: mp } : drawing.e, view);
+    if (morph && mp < 1) request(); else if (morph && !snap) morph = null;
     // Strokes still being drawn elsewhere, and the cursors of the others.
     const now = Date.now();
     for (const [id, r] of remote) {
@@ -527,10 +542,37 @@ function wbCreate(body, w) {
     if (drawing.e.type === 'path' && drawing.e.id) liveStroke(drawing.e, [], true);
     drawing = null;
   }
+  // Hold to snap (1.54): the snap in progress while the finger is down, and the cross-fade afterwards.
+  let snap = null, morph = null, lastPt = null;
+  const snapT = dkSnapTimer(() => {
+    if (!drawing || drawing.e.type !== 'path' || pointers.size !== 1 || snap || !lastPt) return;
+    drawing.e.fillShapes = !!cfg.fill;
+    const st = DK.trySnap(drawing.e, view.k, lastPt);
+    delete drawing.e.fillShapes;
+    if (!st) return;
+    if (drawing.e.id) liveStroke(drawing.e, [], true);
+    snap = st; morph = { ghost: st.ghost, t0: st.t0, id: null };
+    drawing = { e: st.el };
+    request();
+  });
   function startMove(e, wx, wy) {
+    const was = sel === e.id;
     select(e.id);
     drag = { mode: 'move', e0: DK.copy(e), e, start: [wx, wy], moved: false };
     cv.style.cursor = 'grabbing';
+    // A line or arrow that was already selected, pressed and held still: an anchor right there, and the
+    // drag bends the line instead of moving it (1.54).
+    if (was && e.type === 'line') {
+      const d = drag;
+      d.bendT = setTimeout(() => {
+        if (drag !== d || d.moved) return;
+        const cur = els.find((x) => x.id === e.id) || e;
+        const before = DK.copy(cur);
+        const idx = DK.insertVia(cur, wx, wy);
+        drag = { mode: 'bend', e: cur, idx, before };
+        selUi.pulse(); request();
+      }, DK_HOLD_MS);
+    }
   }
   cv.addEventListener('pointerdown', (ev) => {
     if (!ensureBoard()) { toast('Even geduld: de gedeelde bestanden worden geladen'); return; }
@@ -540,6 +582,7 @@ function wbCreate(body, w) {
     if (!pointers.size) lastSel = sel;
     pointers.set(ev.pointerId, [sx, sy]);
     if (pointers.size === 2) {
+      snapT.cancel(); snap = null;
       if (hold) { hold.cancel(); hold = null; }
       pending = null;
       // An icon that the first finger was about to place is not placed: two fingers zoom (or turn the selection).
@@ -602,7 +645,7 @@ function wbCreate(body, w) {
       return;
     }
     const base = { color: cfg.color, width: cfg.width, ...(cfg.dash && tool !== 'marker' ? { dash: true } : {}) };
-    if (tool === 'pen' || tool === 'marker' || tool === 'farrow') drawing = { e: { type: 'path', ...base, marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), pts: [[wx, wy]] }, last: [wx, wy], sent: 0 };
+    if (tool === 'pen' || tool === 'marker' || tool === 'farrow') { drawing = { e: { type: 'path', ...base, marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), pts: [[wx, wy]] }, last: [wx, wy], sent: 0 }; snap = null; lastPt = [wx, wy]; snapT.move(ev); }
     else if (tool === 'line' || tool === 'arrow') drawing = { e: { type: 'line', ...base, x1: wx, y1: wy, x2: wx, y2: wy, arrow: tool === 'arrow' ? 'end' : 'none' } };
     else if (tool === 'rect' || tool === 'ellipse') drawing = { e: { type: tool, ...base, x: wx, y: wy, w: 0, h: 0, fill: !!cfg.fill, rot: 0 } };
     request();
@@ -640,8 +683,10 @@ function wbCreate(body, w) {
     paintCoord(wx, wy);
     if (drag && drag.mode === 'place') { if (drawing) { drawing.e.x = wx; drawing.e.y = wy; request(); } return; }
     if (drawing) {
+      if (snap) { drawing = { e: DK.snapFollow(snap, wx, wy) }; request(); return; }
       const e = drawing.e;
       if (e.type === 'path') {
+        lastPt = [wx, wy]; snapT.move(ev);
         const [lx, ly] = drawing.last;
         if (Math.hypot(wx - lx, wy - ly) >= 1.2 / view.k) { e.pts.push([wx, wy]); drawing.last = [wx, wy]; liveStroke(e, [[wx, wy]], false); }
       } else if (e.type === 'line') { e.x2 = wx; e.y2 = wy; if (ev.shiftKey) { const a = Math.round(Math.atan2(wy - e.y1, wx - e.x1) / (Math.PI / 4)) * (Math.PI / 4), L = Math.hypot(wx - e.x1, wy - e.y1); e.x2 = e.x1 + L * Math.cos(a); e.y2 = e.y1 + L * Math.sin(a); } }
@@ -656,9 +701,11 @@ function wbCreate(body, w) {
     }
     if (drag.mode === 'pan') { view.x = drag.view.x + (sx - drag.start[0]); view.y = drag.view.y + (sy - drag.start[1]); request(); return; }
     if (drag.mode === 'erase') { const e = hit(wx, wy); if (e) remove(e); return; }
+    if (drag.mode === 'bend') { const e = els.find((x) => x.id === drag.e.id) || drag.e; DK.setCtrl(e, drag.idx, wx, wy); drag.e = e; request(); return; }
     if (drag.mode === 'move') {
       const dx = wx - drag.start[0], dy = wy - drag.start[1];
-      if (!drag.moved && Math.hypot(dx, dy) * view.k < 3) return;
+      if (!drag.moved && Math.hypot(dx, dy) * view.k < (drag.bendT ? DK_HOLD_SLOP : 3)) return;
+      if (drag.bendT) { clearTimeout(drag.bendT); drag.bendT = null; }
       drag.moved = true;
       const fresh = DK.copy(drag.e0); moveBy(fresh, dx, dy);
       // The list may have been read again meanwhile (another screen saved something): move the one shown.
@@ -669,6 +716,8 @@ function wbCreate(body, w) {
   });
   const up = (ev) => {
     pointers.delete(ev.pointerId);
+    snapT.cancel();
+    const snapped = snap; snap = null;
     if (hold) { hold.cancel(); hold = null; }
     if (drag && drag.mode === 'pinch') {
       // One finger off: the turn is done; the other finger does nothing until it is lifted too.
@@ -689,7 +738,8 @@ function wbCreate(body, w) {
       const e = drawing.e;
       drawing = null;
       let done = false;
-      if (e.type === 'path') { liveStroke(e, [], true); if (e.pts.length >= 1) { commit(e); done = true; } }
+      if (snapped) { commit(e); done = true; if (morph) morph.id = e.id; }
+      else if (e.type === 'path') { liveStroke(e, [], true); if (e.pts.length >= 1) { commit(e); done = true; } }
       else if (e.type === 'line') { if (Math.hypot(e.x2 - e.x1, e.y2 - e.y1) * view.k >= 4) { commit(e); done = true; } }
       else if (Math.abs(e.w) * view.k >= 4 || Math.abs(e.h) * view.k >= 4) { if (e.w < 0) { e.x += e.w; e.w = -e.w; } if (e.h < 0) { e.y += e.h; e.h = -e.h; } commit(e); done = true; }
       // A new line, arrow or shape is selected straight away: move it or turn it without changing tool.
@@ -698,7 +748,9 @@ function wbCreate(body, w) {
       return;
     }
     if (drag) {
+      if (drag.bendT) clearTimeout(drag.bendT);
       if (drag.mode === 'pan') saveView();
+      else if (drag.mode === 'bend') commit(drag.e, drag.before);
       else if (drag.mode === 'move' && drag.moved) commit(drag.e, drag.e0);
       else if (drag.mode === 'move' && drag.tapEdit) { const e = els.find((x) => x.id === drag.e.id); if (e) openText(e); }
       drag = null;
@@ -818,34 +870,31 @@ function wbCreate(body, w) {
     request(); paintBar(); paintSide();
   }
   function drawPanel() {
-    const chk = (label, get, set) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!get(), onchange: (e) => set(e.target.checked) }), label);
     const cur = (board() || {}).bg || cfg.bg;
     const s = sel && els.find((e) => e.id === sel);
-    return h('div', { class: 'zp-panel' },
-      h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gereedschap')),
-        // The icon tool has no button: picking an icon under Iconen switches to it.
-        h('div', { class: 'wb-tools' }, Object.entries(WB_TOOLS).filter(([k]) => k !== 'icon').map(([k, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === k ? ' on' : ''), title: `${t.name} (${t.key}) — ${t.hint}`, onclick: () => setTool(k) }, icon(t.icon), h('span', {}, t.name)))),
-        h('p', { class: 'zp-hint' }, (WB_TOOLS[cfg.tool] || WB_TOOLS.pen).hint)),
-      h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Kleur en dikte')),
-        h('div', { class: 'wb-colors' }, WB_COLORS.map((c) => h('button', { class: 'wb-color' + (cfg.color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => { cfg.color = c; save(); applyToSel({ color: c }); paintSide(); paintBar(); } }))),
-        h('div', { class: 'wb-widths' }, WB_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd} px`, onclick: () => { cfg.width = wd; save(); applyToSel({ width: wd }); paintSide(); } }, h('i', { style: `height:${wd}px` })))),
-        dkDashPicker(DK.canDash(s) ? !!s.dash : cfg.dash, (v) => { cfg.dash = v; save(); if (DK.canDash(s)) applyToSel({ dash: v || undefined }); paintSide(); }),
-        chk('Vormen vullen', () => cfg.fill, (v) => { cfg.fill = v; save(); applyToSel({ fill: v }); }),
-        h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([12, 14, 18, 24, 32, 48, 64].map((sz) => ({ value: sz, label: `${sz}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; save(); applyToSel({ size: +v }, 'text'); })), field('Icoongrootte', zpSelect([40, 60, 80, 110, 150, 200].map((sz) => ({ value: sz, label: `${sz}` })), cfg.iconSize, (v) => { cfg.iconSize = +v; save(); applyToSel({ size: +v }, 'icon'); })))),
-      s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: s.arrow ? 'vrije pijl' : 'streek', line: s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon', map: 'kaart' }[s.type] || s.type)),
-        h('div', { class: 'zp-btnrow' },
-          h('button', { class: 'btn zp-btn', title: 'Naar voren', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.z = nextZ(); commit(s, b); } }, icon('arrowUp'), 'Naar voren'),
-          h('button', { class: 'btn zp-btn', title: 'Naar achteren', onclick: () => { const b = JSON.parse(JSON.stringify(s)); s.z = lowZ(); commit(s, b); } }, icon('arrowDown'), 'Naar achteren'),
-          h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => { const c = JSON.parse(JSON.stringify(s)); delete c.id; delete c.updatedAt; delete c.z; moveBy(c, 30 / view.k, 30 / view.k); commit(c); sel = c.id; request(); paintSide(); } }, icon('history'), 'Kopie'),
-          h('button', { class: 'btn zp-btn danger', onclick: () => { remove(s); request(); paintSide(); } }, icon('trash'), 'Verwijderen')),
-        s.type === 'line' ? h('div', { class: 'row' }, field('Pijlpunt', zpSelect([['none', 'Geen'], ['end', 'Aan het eind'], ['both', 'Beide kanten']].map(([v, l]) => ({ value: v, label: l })), s.arrow || 'none', (v) => applyToSel({ arrow: v })))) : null,
-        DK.canRotate(s) ? h('div', { class: 'zp-btnrow dk-turnrow' },
-          h('button', { class: 'btn zp-btn', title: '15° linksom ([)', onclick: () => turnSel(-15) }, '↺ 15°'),
-          DK.ownRot(s) ? h('button', { class: 'btn zp-btn', title: 'Recht zetten (0°)', disabled: !s.rot || null, onclick: () => applyToSel({ rot: 0 }) }, icon('refresh'), s.rot ? `Recht (nu ${Math.round(s.rot)}°)` : 'Recht') : null,
-          h('button', { class: 'btn zp-btn', title: '15° rechtsom (])', onclick: () => turnSel(15) }, '↻ 15°')) : null,
-        s.type === 'icon' ? h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => labelIcon(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…')) : null,
-        s.type === 'text' ? h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => openText(s) }, icon('edit'), 'Tekst bewerken')) : null,
-        s.type === 'map' ? h('p', { class: 'zp-hint' }, 'Een kaart beheer je onder het tabblad Kaart: vergrendelen, dekking, centreren.') : null) : null,
+    const patch = (p2) => { applyToSel(p2); paintSide(); };
+    return h('div', { class: 'zp-panel dk-panel' },
+      // The same three sections as on the COA Planner and Teken Schip (drawkit.js).
+      dkToolSection({ tools: WB_TOOLS, cur: cfg.tool, setTool }),
+      dkStyleSection({
+        colors: WB_COLORS, widths: WB_WIDTHS, color: cfg.color, width: cfg.width, dash: DK.canDash(s) ? !!s.dash : cfg.dash, fill: cfg.fill,
+        onColor: (c) => { cfg.color = c; save(); applyToSel({ color: c }); paintSide(); paintBar(); },
+        onWidth: (wd) => { cfg.width = wd; save(); applyToSel({ width: wd }); paintSide(); },
+        onDash: (v) => { cfg.dash = v; save(); if (DK.canDash(s)) applyToSel({ dash: v || undefined }); paintSide(); },
+        onFill: (v) => { cfg.fill = v; save(); applyToSel({ fill: v }); },
+        sizes: [
+          { label: 'Tekstgrootte', values: [12, 14, 18, 24, 32, 48, 64], cur: cfg.fontSize, on: (v) => { cfg.fontSize = +v; save(); applyToSel({ size: +v }, 'text'); } },
+          { label: 'Icoongrootte', values: [40, 60, 80, 110, 150, 200], cur: cfg.iconSize, on: (v) => { cfg.iconSize = +v; save(); applyToSel({ size: +v }, 'icon'); } },
+        ],
+      }),
+      dkSelSection(s, {
+        turn: turnSel, straight: () => patch({ rot: 0 }), label: () => labelIcon(s), edit: () => openText(s), arrow: (v) => patch({ arrow: v }), unbend: () => patch({ via: undefined }),
+        front: () => { const b2 = JSON.parse(JSON.stringify(s)); s.z = nextZ(); commit(s, b2); },
+        back: () => { const b2 = JSON.parse(JSON.stringify(s)); s.z = lowZ(); commit(s, b2); },
+        copy: () => { const c = JSON.parse(JSON.stringify(s)); delete c.id; delete c.updatedAt; delete c.z; moveBy(c, 30 / view.k, 30 / view.k); commit(c); sel = c.id; request(); paintSide(); },
+        remove: () => { remove(s); request(); paintSide(); },
+        extra: s && s.type === 'map' ? h('p', { class: 'zp-hint' }, 'Een kaart beheer je onder het tabblad Kaart: vergrendelen, dekking, centreren.') : null,
+      }),
       h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Bord')),
         field('Achtergrond', h('div', { class: 'wb-bgs' }, Object.entries(WB_BG).map(([k, d]) => h('button', { class: 'wb-bg' + (cur === k ? ' on' : ''), style: `--c:${d.fill}`, title: d.name, onclick: () => setBg(k) }, h('i'), h('span', {}, d.name))))),
         field('Raster', segmented([{ value: 'off', label: 'Geen' }, { value: 'dots', label: 'Stippen' }, { value: 'lines', label: 'Lijnen' }], gridMode(), (v) => { cfg.grid = v; save(); request(); })),
@@ -854,7 +903,8 @@ function wbCreate(body, w) {
         h('div', { class: 'zp-btnrow' },
           h('button', { class: 'btn zp-btn', onclick: exportPng }, icon('download'), 'Als PNG'),
           h('button', { class: 'btn zp-btn danger', onclick: () => { if (!els.length) return; confirmDialog('Bord leegmaken', `Alle ${els.length} elementen van dit bord verwijderen, ook op de andere schermen?`, 'Leegmaken', () => { hist.push(cfg.boardId, els.map((e) => ({ id: e.id, before: clean(e), after: null }))); OPS.putMany('boards', els.map((e) => ({ list: 'elements', id: e.id, item: null }))); sel = null; scheduleThumb(); toast('Bord leeggemaakt · Ongedaan maken zet alles terug'); }); } }, icon('trash'), 'Leegmaken')),
-        h('p', { class: 'zp-hint' }, 'Vrije pijl (F): teken als met de pen, de punt komt vanzelf aan het eind. De rode prullenbak onder een selectie verwijdert haar. Verplaatsen zonder te wisselen: sleep een icoon of tekst direct, of druk even op een lijn, pijl of vorm en sleep. Draaien aan de ronde greep boven de selectie, met twee vingers of met [ en ]; schalen aan de hoeken. Sneltoetsen: V selecteren, H verschuiven, P pen, M markeerstift, L lijn, A pijl, R rechthoek, E ellips, T tekst, I icoon, X gum, K kaart; + − 0 zoomen; pijltjes verplaatsen de selectie; Delete verwijdert haar; Shift houdt lijnen op 45° en vormen vierkant. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
+        h('p', { class: 'zp-hint' }, 'Vrije pijl (F): teken als met de pen, de punt komt vanzelf aan het eind. De rode prullenbak onder een selectie verwijdert haar. Verplaatsen zonder te wisselen: sleep een icoon of tekst direct, of druk even op een lijn, pijl of vorm en sleep. Draaien aan de ronde greep boven de selectie, met twee vingers of met [ en ]; schalen aan de hoeken. Sneltoetsen: V selecteren, H verschuiven, P pen, M markeerstift, L lijn, A pijl, R rechthoek, E ellips, T tekst, I icoon, X gum, K kaart; + − 0 zoomen; pijltjes verplaatsen de selectie; Delete verwijdert haar; Shift houdt lijnen op 45° en vormen vierkant. Dubbeltik op tekst om te bewerken, op een icoon voor een label.'),
+        h('p', { class: 'zp-hint dk-tip' }, DK_TIP)));
   }
   function turnSel(d) { const e = selEl(); if (!e) return; const before = DK.copy(e); Object.assign(e, DK.transform(e, { drot: d }, measure)); commit(e, before); request(); paintSide(); }
   function applyToSel(patch, type) {

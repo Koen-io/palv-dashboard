@@ -235,4 +235,4 @@ function start(opts) {
   setInterval(pickup, 3000).unref();
 }
 
-module.exports = { start, status, send, seal, open, explain, INFO, AAD, EMAIL };
+module.exports = { start, status, send, seal, open, explain, render, INFO, AAD, EMAIL };

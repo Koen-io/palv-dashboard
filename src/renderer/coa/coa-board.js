@@ -74,7 +74,7 @@ function coaBarb(cx, cy, a, kt, len, color, w = 3) {
   while (rest >= 50) {
     const [x0, y0] = coaAt(cx, cy, pos, a), [x2, y2] = coaAt(cx, cy, pos - step * 1.4, a);
     const [x1, y1] = coaAt(x0, y0, fl, a + 62);
-    out += `<path d="M${coaF(x0)} ${coaF(y0)}L${coaF(x1)} ${coaF(y1)}L${coaF(x2)} ${coaF(y2)}Z" fill="${color}"/>`;
+    out += `<path d="M${coaF(x0)} ${coaF(y0)}L${coaF(x1)} ${coaF(y1)}L${coaF(x2)} ${coaF(y2)}Z" fill="${color}" stroke="${color}" stroke-width="${coaF(w * 0.5)}" stroke-linejoin="round"/>`;
     pos -= step * 1.8; rest -= 50;
   }
   while (rest >= 10) { out += feather(pos, 1); pos -= step; rest -= 10; }
@@ -89,27 +89,17 @@ const coaRelText = (c) => (c.rel ? `${c.rel.text} - ${Math.round(c.app.spd)} kt`
 // side it comes from (L/R).
 const coaHeloText = (hl) => `${hl.head >= 0 ? 'HW' : 'TW'} ${Math.abs(Math.round(hl.head))} kt · XW ${Math.abs(Math.round(hl.cross))} kt${hl.side ? ' ' + hl.side : ''}`;
 
-/* ---------- one COA card ---------- */
-function coaCard(vm, c, i, P, id) {
-  const { w, h, gap, col } = COA_CARD;
-  const left = i === 0 || i === 3, top = i < 2;
-  const x0 = left ? 0 : w + gap, y0 = top ? 0 : h + gap;
-  // The picture on the inner side, the figures on the outer side.
-  const dx = left ? x0 + col : x0, dw = w - col;
-  const cx = dx + dw / 2, cy = y0 + h / 2 + (top ? -16 : 16);
-  const fx = left ? x0 : x0 + w - col;
+/* ---------- the picture of one COA ---------- */
+// The ship in its ring at (cx, cy): the sea disc, the 10-degree ticks, the window of the COA (nominal
+// ±45°), the tactical bearings 45/90/139 when switched on (vm.tac), the heading, the shadow, the ship,
+// the helicopter on the assault track and the relative wind as an arrow over the ship with its value in a
+// plate. `box` keeps the plates inside the card ({ x0, y0, x1, y1 }); `k` scales the plates (print).
+function coaPic(vm, c, P, id, cx, cy, { box = null, k = 1, avoid = [], plateAt = null, pk = 1 } = {}) {
   const up = vm.up;
   const scr = (dir) => dir - up; // screen angle of a true direction
   const hdg = scr(c.heading);
-  const ref = vm.refText, dd = (t) => `${vm.fmt(t)}°${ref}`;
+  const strong = coaIsExpected(vm, c);
   const o = [];
-  const strong = c.brc;
-  o.push(`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="22" fill="${P.card}" stroke="${strong ? P.accent : P.edge}" stroke-width="${strong ? 3.5 : 1.6}"/>`);
-  // The figures column has its own shade.
-  const fr = left ? `M${x0 + 22} ${y0}H${x0 + col}V${y0 + h}H${x0 + 22}Q${x0} ${y0 + h} ${x0} ${y0 + h - 22}V${y0 + 22}Q${x0} ${y0} ${x0 + 22} ${y0}Z`
-    : `M${x0 + w - col} ${y0}H${x0 + w - 22}Q${x0 + w} ${y0} ${x0 + w} ${y0 + 22}V${y0 + h - 22}Q${x0 + w} ${y0 + h} ${x0 + w - 22} ${y0 + h}H${x0 + w - col}Z`;
-  o.push(`<path d="${fr}" fill="${P.card2}"/>`, `<path d="M${left ? x0 + col : x0 + w - col} ${y0 + 18}V${y0 + h - 18}" stroke="${P.edge}" stroke-width="1"/>`);
-  // Picture: faint sea grid, the ring with the course window, the tactical rays, then the ship.
   o.push(`<circle cx="${cx}" cy="${cy}" r="${COA_RING}" fill="${P.sea}"/>`);
   for (const r of [COA_RING * 0.55, COA_RING]) o.push(`<circle cx="${cx}" cy="${cy}" r="${coaF(r)}" fill="none" stroke="${P.faint}" stroke-width="${r === COA_RING ? 1.6 : 1}" ${r === COA_RING ? '' : 'stroke-dasharray="4 6"'}/>`);
   for (let a = 0; a < 360; a += 10) {
@@ -121,10 +111,10 @@ function coaCard(vm, c, i, P, id) {
     const a0 = scr(c.nominal - 45), a1 = scr(c.nominal + 45), r = COA_RING + 20;
     const [sx, sy] = coaAt(cx, cy, r, a0), [ex, ey] = coaAt(cx, cy, r, a1);
     o.push(`<path d="M${coaF(sx)} ${coaF(sy)}A${r} ${r} 0 0 1 ${coaF(ex)} ${coaF(ey)}" fill="none" stroke="${P.accent}" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>`);
-    for (const [a, t] of [[a0, c.nominal - 45], [a1, c.nominal + 45]]) { const [lx, ly] = coaAt(cx, cy, r + 26, a); o.push(coaText(lx, ly, `${vm.fmt(t)}°`, { size: 17, weight: 600, fill: P.muted, family: 'mono' })); }
+    for (const [a, t] of [[a0, c.nominal - 45], [a1, c.nominal + 45]]) { const [lx, ly] = coaAt(cx, cy, r + 26, a); o.push(coaText(lx, ly, `${vm.fmt(t)}°`, { size: 17 * k, weight: 600, fill: P.muted, family: 'mono' })); }
   }
-  // Rays from the bow, relative to the ship: 45, 90 and 139 degrees, red to port and green to starboard.
-  for (const rel of [45, 90, 139]) for (const side of [1, -1]) {
+  // The tactical bearings from the bow (a quick setting): 45, 90 and 139 degrees, red to port, green to starboard.
+  if (vm.tac) for (const rel of [45, 90, 139]) for (const side of [1, -1]) {
     const a = hdg + side * rel, col2 = side > 0 ? P.stbd : P.port;
     const [ax, ay] = coaAt(cx, cy, 60, a), [bx, by] = coaAt(cx, cy, COA_RING - 2, a);
     o.push(`<path d="M${coaF(ax)} ${coaF(ay)}L${coaF(bx)} ${coaF(by)}" stroke="${col2}" stroke-width="2.2" stroke-opacity="0.85"/>`);
@@ -136,8 +126,8 @@ function coaCard(vm, c, i, P, id) {
     const [ax, ay] = coaAt(cx, cy, 50 * COA_SHIP_K + 6, hdg), [bx, by] = coaAt(cx, cy, COA_RING + 4, hdg);
     o.push(`<path d="M${coaF(ax)} ${coaF(ay)}L${coaF(bx)} ${coaF(by)}" stroke="${P.text}" stroke-width="2.4" stroke-dasharray="7 5"/>`);
     const [lx, ly] = coaAt(cx, cy, COA_RING + 38, hdg);
-    o.push(`<rect x="${coaF(lx - 37)}" y="${coaF(ly - 15)}" width="74" height="30" rx="8" fill="${P.plate}" stroke="${strong ? P.accent : P.edge}" stroke-width="1.4"/>`);
-    o.push(coaText(lx, ly + 1, `${vm.fmt(c.heading)}°`, { size: 21, weight: 800, fill: P.text, family: 'mono' }));
+    o.push(`<rect x="${coaF(lx - 37 * k)}" y="${coaF(ly - 15 * k)}" width="${coaF(74 * k)}" height="${coaF(30 * k)}" rx="8" fill="${P.plate}" stroke="${strong ? P.accent : P.edge}" stroke-width="1.4"/>`);
+    o.push(coaText(lx, ly + 1, `${vm.fmt(c.heading)}°`, { size: 21 * k, weight: 800, fill: P.text, family: 'mono' }));
   }
   // The shadow of the ship (sun by day, a full enough moon at night), beside it and under it.
   if (vm.shadow && vm.showShadow !== false) {
@@ -147,63 +137,136 @@ function coaCard(vm, c, i, P, id) {
   }
   o.push(`<g transform="translate(${coaF(cx)} ${coaF(cy)}) rotate(${coaF(hdg)}) scale(${COA_SHIP_K})">${coaShip(id, coaShipInner(id, vm.shipMarks, P))}</g>`);
   // The helicopter on the assault track, outside the ring where it comes from, flying towards the ship.
+  const heloA = scr(vm.at + 180);
   {
-    const a = scr(vm.at + 180);
-    const [hx, hy] = coaAt(cx, cy, COA_RING + 4, a), [tx, ty] = coaAt(cx, cy, COA_RING - 34, a);
+    const [hx, hy] = coaAt(cx, cy, COA_RING + 4, heloA), [tx, ty] = coaAt(cx, cy, COA_RING - 34, heloA);
     o.push(`<path d="M${coaF(hx)} ${coaF(hy)}L${coaF(tx)} ${coaF(ty)}" stroke="${P.helo}" stroke-width="3" stroke-linecap="round"/>`);
-    const [p1x, p1y] = coaAt(tx, ty, 14, a + 26), [p2x, p2y] = coaAt(tx, ty, 14, a - 26);
+    const [p1x, p1y] = coaAt(tx, ty, 14, heloA + 26), [p2x, p2y] = coaAt(tx, ty, 14, heloA - 26);
     o.push(`<path d="M${coaF(tx)} ${coaF(ty)}L${coaF(p1x)} ${coaF(p1y)}L${coaF(p2x)} ${coaF(p2y)}Z" fill="${P.helo}"/>`);
     o.push(`<circle cx="${coaF(hx)}" cy="${coaF(hy)}" r="9" fill="${P.helo}" stroke="${P.plate}" stroke-width="2.5"/>`);
   }
-  // Where the apparent wind comes from, on the ring: a blue arrowhead pointing in.
+  // The relative wind over the deck as a wind barb, the way aviation charts draw it: the staff from the
+  // ship (the station) towards where the apparent wind comes from, the feathers at its outer end on the
+  // clockwise side (pennant 50, full feather 10, half feather 5 kt, rounded to 5 kt; a circle when calm),
+  // in the wind colour on a halo so it reads over the hull. Its value ("G045 - 15 kt") in a plate outside.
   if (c.app.dir != null) {
     const a = scr(c.app.dir);
-    const [ox, oy] = coaAt(cx, cy, COA_RING + 2, a), [ix, iy] = coaAt(cx, cy, COA_RING - 26, a);
-    const [q1x, q1y] = coaAt(ix, iy, 16, a + 28), [q2x, q2y] = coaAt(ix, iy, 16, a - 28);
-    o.push(`<path d="M${coaF(ox)} ${coaF(oy)}L${coaF(ix)} ${coaF(iy)}" stroke="${P.wind}" stroke-width="3.2" stroke-dasharray="5 4"/>`);
-    o.push(`<path d="M${coaF(ix)} ${coaF(iy)}L${coaF(q1x)} ${coaF(q1y)}L${coaF(q2x)} ${coaF(q2y)}Z" fill="${P.wind}"/>`);
-    o.push(`<circle cx="${coaF(ox)}" cy="${coaF(oy)}" r="6" fill="${P.wind}"/>`);
+    const len = COA_RING - 4;
+    o.push(`<g class="coa-relwind">${coaBarb(cx, cy, a, c.app.spd, len, P.plate, 10)}${coaBarb(cx, cy, a, c.app.spd, len, P.wind, 5)}`
+      + `<circle cx="${coaF(cx)}" cy="${coaF(cy)}" r="7" fill="${P.wind}" stroke="${P.plate}" stroke-width="3"/></g>`);
+    // The plate: beyond the tail, turned as little as needed to stay clear of the heading plate, the
+    // helicopter, the window labels and whatever the caller keeps free (`avoid`), and inside the card.
+    const rc = c.rel ? (c.rel.side === 'G' ? P.stbd : c.rel.side === 'R' ? P.port : P.wind) : P.muted;
+    const txt = c.rel ? coaRelText(c) : 'CALM';
+    const pw = (24 + txt.length * 13.6) * k, ph = 36 * k;
+    // A fixed place (1.54): the plate sits left-bottom in every COA, smaller, out of the ship's way.
+    const pw2 = (18 + txt.length * 11.2) * pk, ph2 = 28 * pk;
+    const rectAt = (r, ang, w2, h2) => { const [x, y] = coaAt(cx, cy, r, ang); return { x0: x - w2 / 2, y0: y - h2 / 2, x1: x + w2 / 2, y1: y + h2 / 2 }; };
+    // The barb itself: its staff and feathers stay uncovered.
+    const bpts = [];
+    for (let r = (COA_RING - 4) * 0.3; r <= COA_RING - 4; r += 12) { const [x0, y0] = coaAt(cx, cy, r, a); bpts.push([x0, y0], coaAt(x0, y0, (COA_RING - 4) * 0.42, a + 62)); }
+    const barbBox = { x0: Math.min(...bpts.map((q) => q[0])), y0: Math.min(...bpts.map((q) => q[1])), x1: Math.max(...bpts.map((q) => q[0])), y1: Math.max(...bpts.map((q) => q[1])) };
+    // The hull, as a row of squares along its centre line (a turned ship has no tight box of its own).
+    const hull = [];
+    for (let t = -48; t <= 48; t += 16) { const [hx2, hy2] = coaAt(cx, cy, t * COA_SHIP_K, hdg); hull.push({ x0: hx2 - 24, y0: hy2 - 24, x1: hx2 + 24, y1: hy2 + 24 }); }
+    const obst = [barbBox, ...hull, rectAt(COA_RING + 38, hdg, 80 * k, 34 * k), rectAt(COA_RING + 4, heloA, 26, 26),
+      rectAt(COA_RING + 46, scr(c.nominal - 45), 58 * k, 24 * k), rectAt(COA_RING + 46, scr(c.nominal + 45), 58 * k, 24 * k), ...avoid];
+    const hits = (r) => obst.some((q) => r.x0 < q.x1 + 4 && r.x1 > q.x0 - 4 && r.y0 < q.y1 + 4 && r.y1 > q.y0 - 4);
+    const place = (ang) => {
+      const ra = (ang * Math.PI) / 180;
+      let [x, y] = coaAt(cx, cy, COA_RING + 16 * k + Math.abs(Math.sin(ra)) * pw / 2 + Math.abs(Math.cos(ra)) * ph / 2, ang);
+      if (box) { x = Math.max(box.x0 + pw / 2 + 4, Math.min(box.x1 - pw / 2 - 4, x)); y = Math.max(box.y0 + ph / 2 + 4, Math.min(box.y1 - ph / 2 - 4, y)); }
+      return { x, y, r: { x0: x - pw / 2, y0: y - ph / 2, x1: x + pw / 2, y1: y + ph / 2 } };
+    };
+    let best = place(a);
+    for (let d = 0; d <= 180; d += 10) {
+      const fit = [a + d, a - d].map(place).find((q) => !hits(q.r));
+      if (fit) { best = fit; break; }
+    }
+    let lx = best.x, ly = best.y;
+    if (plateAt) { lx = plateAt.x + pw2 / 2; ly = plateAt.y - ph2 / 2; }
+    o.push(`<rect x="${coaF(lx - (plateAt ? pw2 : pw) / 2)}" y="${coaF(ly - (plateAt ? ph2 : ph) / 2)}" width="${coaF(plateAt ? pw2 : pw)}" height="${coaF(plateAt ? ph2 : ph)}" rx="${coaF(8 * (plateAt ? pk : k))}" fill="${P.plate}" stroke="${P.wind}" stroke-width="2"/>`);
+    o.push(coaText(lx, ly + 1, txt, { size: plateAt ? 19 * pk : 23 * k, weight: 800, fill: rc, family: 'mono' }));
   }
+  return o.join('');
+}
 
-  // Figures: title, the relative wind with its dial, then the helicopter, the approach and the sea.
-  const mx = fx + col / 2, lx = fx + 22;
-  let y = y0 + 40;
-  o.push(coaText(lx, y, `COA ${c.n}`, { size: 34, weight: 800, fill: P.text, anchor: 'start', family: 'display' }));
-  if (strong) {
-    o.push(`<rect x="${fx + col - 92}" y="${y - 15}" width="72" height="30" rx="15" fill="${P.accent}"/>`);
-    o.push(coaText(fx + col - 56, y + 1, 'BRC', { size: 17, weight: 800, fill: '#1a1200' }));
+// The COA that is expected (the most likely one): chosen in the plan (`expect` 1-4, 0 none), or by
+// default the one sailing the Boat Reference Course.
+function coaIsExpected(vm, c) {
+  const ex = vm.p ? vm.p.expect : null;
+  if (ex === 0) return false;
+  if (ex >= 1 && ex <= 4) return c.n === ex;
+  return !!c.brc;
+}
+// The uniform frame around the expected COA: drawn last, inside the card edge, the same width all round.
+function coaExpectFrame(x, y, w, h, P, { sw = 8, label = true, k = 1, rx = 22 } = {}) {
+  const o = [`<rect x="${coaF(x + sw / 2)}" y="${coaF(y + sw / 2)}" width="${coaF(w - sw)}" height="${coaF(h - sw)}" rx="${coaF(Math.max(2, rx - sw / 2))}" fill="none" stroke="${P.accent}" stroke-width="${sw}"/>`];
+  if (label) {
+    const t = 'MOST LIKELY', tw = (t.length * 11 + 30) * k, th = 26 * k;
+    o.push(`<rect x="${coaF(x + w / 2 - tw / 2)}" y="${coaF(y + sw / 2 - th / 2)}" width="${coaF(tw)}" height="${coaF(th)}" rx="${coaF(th / 2)}" fill="${P.accent}"/>`);
+    o.push(coaText(x + w / 2, y + sw / 2 + 1, t, { size: 14 * k, weight: 800, fill: '#1a1200', extra: 'letter-spacing="2"' }));
   }
-  y += 34;
-  o.push(coaText(lx, y, `Ship HDG ${dd(c.heading)}`, { size: 17, weight: 600, fill: P.muted, anchor: 'start' }));
-  // The dial: the relative wind as a barb in a circle, the ship's bow as a tick at the top of it.
-  y += 70;
-  const R = 50;
-  o.push(`<circle cx="${mx}" cy="${y}" r="${R}" fill="${P.compass}" stroke="${P.wind}" stroke-width="2.2"/>`);
-  {
-    const [bx, by] = coaAt(mx, y, R, hdg), [cx2, cy2] = coaAt(mx, y, R - 11, hdg);
-    o.push(`<path d="M${coaF(bx)} ${coaF(by)}L${coaF(cx2)} ${coaF(cy2)}" stroke="${P.text}" stroke-width="3"/>`);
-    o.push(`<g transform="translate(${coaF(mx)} ${coaF(y)}) rotate(${coaF(hdg)}) scale(0.34)" opacity="0.9"><path d="${COA_HALF_P}" fill="${P.port}"/><path d="${COA_HALF_S}" fill="${P.stbd}"/><path d="${COA_HULL}" fill="none" stroke="${P.plate}" stroke-width="3"/></g>`);
+  return o.join('');
+}
+
+/* ---------- one COA card ---------- */
+// The card on the screen in the style of the kneeboard card (1.54): the number large in the top corner,
+// the ship as large as the card allows, the relative-wind plate small in the bottom left of the picture and
+// the figures compact along the bottom, kept clear of the compass in the middle of the board.
+const COA_STRIP = 96; // height of the figures along the bottom of a card
+function coaCard(vm, c, i, P, id) {
+  const { w, h, gap } = COA_CARD;
+  const left = i === 0 || i === 3, top = i < 2;
+  const x0 = left ? 0 : w + gap, y0 = top ? 0 : h + gap;
+  const ref = vm.refText;
+  const o = [];
+  const strong = coaIsExpected(vm, c);
+  o.push(`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="22" fill="${P.card}" stroke="${P.edge}" stroke-width="1.6"/>`);
+  // The compass in the middle covers the inner corner of each card; the figures and plates stay off it.
+  const comp = { x0: COA_W / 2 - 128, y0: COA_H / 2 - 168, x1: COA_W / 2 + 128, y1: COA_H / 2 + 168 };
+  const fig = y0 + h - COA_STRIP; // top of the figures
+  const s = Math.min(1.25, (h - COA_STRIP - 18) / 350);
+  const cx = x0 + w / 2 + (left ? -40 : 40), cy = y0 + 8 + (h - COA_STRIP - 8) / 2;
+  // Plate left-bottom of the picture (on the right-hand cards just right of the compass when it is there).
+  const plx = !left && top ? comp.x1 + 8 : x0 + 16;
+  const pic = coaPic(vm, c, P, id, 0, 0, {
+    box: { x0: (x0 + 8 - cx) / s, y0: (y0 + 8 - cy) / s, x1: (x0 + w - 8 - cx) / s, y1: (fig - 4 - cy) / s },
+    avoid: [{ x0: (comp.x0 - cx) / s, y0: (comp.y0 - cy) / s, x1: (comp.x1 - cx) / s, y1: (comp.y1 - cy) / s }],
+    plateAt: { x: (plx - cx) / s, y: (fig - 10 - cy) / s }, pk: 0.9 / s,
+  });
+  o.push(`<g transform="translate(${coaF(cx)} ${coaF(cy)}) scale(${coaF(s)})">${pic}</g>`);
+  // The number, large in the top corner (outer side).
+  const nx = left ? x0 + 22 : x0 + w - 22, an = left ? 'start' : 'end';
+  o.push(coaText(nx, y0 + 30, 'COA', { size: 18, weight: 800, fill: P.muted, anchor: an, extra: 'letter-spacing="3"' }));
+  o.push(coaText(nx, y0 + 76, String(c.n), { size: 64, weight: 800, fill: P.text, anchor: an, family: 'display' }));
+  if (c.brc) {
+    const bx = left ? x0 + 22 : x0 + w - 98;
+    o.push(`<rect x="${bx}" y="${y0 + 104}" width="76" height="28" rx="14" fill="none" stroke="${P.accent}" stroke-width="2.4"/>`);
+    o.push(coaText(bx + 38, y0 + 119, 'BRC', { size: 16, weight: 800, fill: P.accent }));
   }
-  if (c.app.dir != null) o.push(coaBarb(mx, y, scr(c.app.dir), c.app.spd, R - 6, P.wind, 3.2));
-  y += R + 30;
-  o.push(coaText(mx, y, 'REL. WIND', { size: 15, weight: 800, fill: P.muted, extra: 'letter-spacing="2"' }));
-  y += 32;
-  o.push(coaText(mx, y, `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${ref} / ${Math.round(c.app.spd)} kt`, { size: 28, weight: 800, fill: P.wind, family: 'mono' }));
-  y += 34;
-  // Relative to the bow, with the knots: "G045 - 15 kt" (green, starboard) or "R120 - 8 kt" (red, port).
+  // The figures: kept on the outer side of the compass.
+  const fx0 = left ? x0 + 22 : Math.max(x0 + 22, top ? comp.x1 + 10 : x0 + 22);
+  const fx1 = x0 + w - 22;
+  const innerFree = (yy) => !(yy > comp.y0 && yy < comp.y1);
+  const xa = (yy) => (left || innerFree(yy) ? x0 + 22 : fx0);
+  const xb = (yy) => (!left || innerFree(yy) ? x0 + w - 22 : Math.min(fx1, comp.x0 - 10));
+  o.push(`<path d="M${x0 + 18} ${fig}H${x0 + w - 18}" stroke="${P.edge}" stroke-width="1.2"/>`);
   const rc = c.rel ? (c.rel.side === 'G' ? P.stbd : c.rel.side === 'R' ? P.port : P.text) : P.muted;
-  o.push(c.rel ? coaText(mx, y, coaRelText(c), { size: 26, weight: 800, fill: rc, family: 'mono' })
-    : coaText(mx, y, 'CALM OVER DECK', { size: 18, weight: 800, fill: rc, extra: 'letter-spacing="1"' }));
-  if (c.gust) { y += 28; o.push(coaText(mx, y, `Gust ${Math.round(c.gust.spd)} kt`, { size: 18, weight: 700, fill: P.muted })); }
-  y += 22;
-  o.push(`<path d="M${fx + 20} ${y}H${fx + col - 20}" stroke="${P.edge}" stroke-width="1"/>`);
-  y += 26;
-  o.push(coaText(lx, y, 'HELO ON AT', { size: 14, weight: 800, fill: P.helo, anchor: 'start', extra: 'letter-spacing="1.5"' }));
-  y += 28;
-  o.push(coaText(lx, y, coaHeloText(c.helo), { size: 20, weight: 700, fill: P.text, anchor: 'start' }));
-  y += 28;
-  o.push(coaText(lx, y, `Approach from ${c.approach.text}`, { size: 19, weight: 600, fill: P.text, anchor: 'start' }));
-  if (c.sea) { y += 26; o.push(coaText(lx, y, c.sea.name, { size: 19, weight: 600, fill: P.muted, anchor: 'start' })); }
+  const ac = c.approach.side === 'G' ? P.stbd : c.approach.side === 'R' ? P.port : P.text;
+  const hl = c.helo;
+  const row = (yy, items) => {
+    const a0 = xa(yy), b0 = xb(yy), cw = (b0 - a0) / items.length;
+    items.forEach(([k, v, col, fam, big], j) => {
+      const x = a0 + j * cw;
+      o.push(coaText(x, yy, k, { size: 12, weight: 800, fill: P.muted, anchor: 'start', extra: 'letter-spacing="1.5"' }));
+      o.push(coaText(x + (k.length * 8.6 + 10), yy, v, { size: big || 19, weight: 800, fill: col, anchor: 'start', family: fam || 'mono' }));
+    });
+  };
+  row(fig + 24, [['REL WIND', c.rel ? coaRelText(c) : 'CALM', rc, 'mono', 21], ['APP', `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${ref}/${Math.round(c.app.spd)}${c.gust ? 'G' + Math.round(c.gust.spd) : ''}`, P.wind]]);
+  row(fig + 52, [['HDG', `${vm.fmt(c.heading)}°${ref}`, P.text], ['APPR', c.approach.text, ac]]);
+  row(fig + 80, [['HELO', `${hl.head >= 0 ? 'HW' : 'TW'}${Math.abs(Math.round(hl.head))} XW${Math.abs(Math.round(hl.cross))}${hl.side}`, P.text], ['SEA', c.sea ? c.sea.name.replace(' on the ', ' on ') : '—', P.text, 'ui', 17]]);
+  if (strong) o.push(coaExpectFrame(x0, y0, w, h, P));
   return o.join('');
 }
 
@@ -412,6 +475,14 @@ function coaMarkBody(e, P) {
     const pts = e.pts || [];
     if (!pts.length) return '';
     let d = `M${coaF(pts[0][0])} ${coaF(pts[0][1])}`;
+    // A recognised shape (1.54): straight sides, closed when it is a polygon, filled on request.
+    if (e.poly) {
+      d += pts.slice(1).map((p) => `L${coaF(p[0])} ${coaF(p[1])}`).join('') + (e.closed ? 'Z' : '');
+      const fl = e.closed && e.fill ? `fill="${col}" fill-opacity="0.25"` : 'fill="none"';
+      const hd2 = e.arrow && !e.closed && typeof DK !== 'undefined' ? DK.pathHead(pts, wd) : null;
+      const head2 = hd2 ? `<path d="M${coaF(hd2.x + Math.cos(hd2.a) * wd * 0.6)} ${coaF(hd2.y + Math.sin(hd2.a) * wd * 0.6)}L${coaF(hd2.x - hd2.L * Math.cos(hd2.a - 0.45))} ${coaF(hd2.y - hd2.L * Math.sin(hd2.a - 0.45))}L${coaF(hd2.x - hd2.L * Math.cos(hd2.a + 0.45))} ${coaF(hd2.y - hd2.L * Math.sin(hd2.a + 0.45))}Z" fill="${col}"/>` : '';
+      return `<path d="${d}" ${fl} stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"${dash}/>${head2}`;
+    }
     if (pts.length < 3) d += pts.slice(1).map((p) => `L${coaF(p[0])} ${coaF(p[1])}`).join('') + (pts.length === 1 ? `l0.1 0` : '');
     else { for (let i = 1; i < pts.length - 1; i += 1) { const a = pts[i], b = pts[i + 1]; d += `Q${coaF(a[0])} ${coaF(a[1])} ${coaF((a[0] + b[0]) / 2)} ${coaF((a[1] + b[1]) / 2)}`; } const l = pts[pts.length - 1]; d += `L${coaF(l[0])} ${coaF(l[1])}`; }
     // A free arrow: the head at the end, in the direction the stroke ended.
@@ -420,10 +491,16 @@ function coaMarkBody(e, P) {
     return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${coaF(e.marker ? wd * 3 : wd)}" stroke-opacity="${e.marker ? 0.4 : 1}" stroke-linecap="round" stroke-linejoin="round"${dash}/>${head}`;
   }
   if (e.type === 'line') {
-    let out = `<path d="M${coaF(e.x1)} ${coaF(e.y1)}L${coaF(e.x2)} ${coaF(e.y2)}" stroke="${col}" stroke-width="${wd}" stroke-linecap="round"${dash}/>`;
-    const head = (fx, fy, tx, ty) => { const a = Math.atan2(ty - fy, tx - fx), L = Math.max(14, wd * 3.6); return `<path d="M${coaF(tx)} ${coaF(ty)}L${coaF(tx - L * Math.cos(a - 0.45))} ${coaF(ty - L * Math.sin(a - 0.45))}L${coaF(tx - L * Math.cos(a + 0.45))} ${coaF(ty - L * Math.sin(a + 0.45))}Z" fill="${col}"/>`; };
-    if (e.arrow === 'end' || e.arrow === 'both') out += head(e.x1, e.y1, e.x2, e.y2);
-    if (e.arrow === 'both') out += head(e.x2, e.y2, e.x1, e.y1);
+    // Straight, or bent through its anchors (DK.curvePts); the heads follow the curve at the ends.
+    const d = typeof DK !== 'undefined' ? DK.lineD(e, coaF) : `M${coaF(e.x1)} ${coaF(e.y1)}L${coaF(e.x2)} ${coaF(e.y2)}`;
+    let out = `<path d="${d}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linecap="round" stroke-linejoin="round"${dash}/>`;
+    const head = (start) => {
+      const t = typeof DK !== 'undefined' ? DK.lineEnd(e, start) : start ? { x: e.x1, y: e.y1, a: Math.atan2(e.y1 - e.y2, e.x1 - e.x2) } : { x: e.x2, y: e.y2, a: Math.atan2(e.y2 - e.y1, e.x2 - e.x1) };
+      const L = Math.max(14, wd * 3.6), a = t.a;
+      return `<path d="M${coaF(t.x)} ${coaF(t.y)}L${coaF(t.x - L * Math.cos(a - 0.45))} ${coaF(t.y - L * Math.sin(a - 0.45))}L${coaF(t.x - L * Math.cos(a + 0.45))} ${coaF(t.y - L * Math.sin(a + 0.45))}Z" fill="${col}"/>`;
+    };
+    if (e.arrow === 'end' || e.arrow === 'both') out += head(false);
+    if (e.arrow === 'both') out += head(true);
     return out;
   }
   if (e.type === 'rect' || e.type === 'ellipse') {

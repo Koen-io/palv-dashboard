@@ -11,6 +11,8 @@ const ZP_TABS = [
   { id: 'fleet', name: 'Vloot', icon: 'plane' },
   { id: 'tools', name: 'Gereedschap', icon: 'target' },
   { id: 'saved', name: 'Opgeslagen', icon: 'star' },
+  { id: 'layers', name: 'Lagen', icon: 'layers' },
+  { id: 'units', name: 'Eenheden', icon: 'gear' },
 ];
 
 function zpPanels(ctx) {
@@ -48,10 +50,8 @@ function zpPanels(ctx) {
     paintSoon();
   });
   const distSeg = segmented([{ value: 'nm', label: 'NM' }, { value: 'km', label: 'km' }], cfg.units.dist, (v) => { cfg.units.dist = v; ctx.save(); ctx.emit('units'); paintSoon(); });
-  distSeg.title = 'Afstanden in zeemijlen of kilometers (meer eenheden onder de knop Eenheden)';
+  distSeg.title = 'Afstanden in zeemijlen of kilometers (meer eenheden in het zijpaneel onder Eenheden)';
   ctx.on('units', () => distSeg.setValue(cfg.units.dist === 'km' ? 'km' : 'nm'));
-  const layersBtn = h('button', { class: 'btn zp-btn', title: 'Kaarten en kaartlagen' }, icon('layers'), 'Lagen');
-  const unitsBtn = h('button', { class: 'btn zp-btn', title: 'Eenheden' }, icon('gear'), 'Eenheden');
   // The side panel opens and closes with the tab on its edge, between the panel and the map.
   const sideBtn = h('button', { class: 'zp-side-toggle', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>' });
   const setSide = (on) => {
@@ -66,53 +66,34 @@ function zpPanels(ctx) {
   ctx.side.append(sideBtn);
   // The aircraft in a yellow frame of its own: every number in this tab follows it.
   const acft = h('div', { class: 'zp-acft', title: profSeg.title }, h('span', { class: 'zp-acft-label' }, icon('plane'), 'TOESTEL'), profSeg, regSel);
-  ctx.bar.append(acft, modes, distSeg, h('span', { class: 'zp-spacer' }), layersBtn, unitsBtn);
+  ctx.bar.append(acft, modes, distSeg, h('span', { class: 'zp-spacer' }));
 
-  /* ---------- popovers ---------- */
-  const pop = h('div', { class: 'zp-pop', hidden: true });
-  ctx.mapBox.append(pop);
-  let popKind = null;
-  const openPop = (kind) => { if (popKind === kind && !pop.hidden) { pop.hidden = true; popKind = null; return; } popKind = kind; pop.hidden = false; paintPop(); };
-  layersBtn.addEventListener('click', () => openPop('layers'));
-  unitsBtn.addEventListener('click', () => openPop('units'));
-  const closePop = (e) => { if (!pop.hidden && !pop.contains(e.target) && !layersBtn.contains(e.target) && !unitsBtn.contains(e.target)) { pop.hidden = true; popKind = null; } };
-  document.addEventListener('pointerdown', closePop, true);
-  ctx.cleanups.push(() => document.removeEventListener('pointerdown', closePop, true));
-  const popEsc = (e) => { if (e.key === 'Escape' && !pop.hidden && onScreen(ctx.body)) { pop.hidden = true; popKind = null; e.stopPropagation(); } };
-  window.addEventListener('keydown', popEsc, true);
-  ctx.cleanups.push(() => window.removeEventListener('keydown', popEsc, true));
-
+  /* ---------- map layers and units: two tabs of the side panel ---------- */
   const chk = (label, get, set, hint) => h('label', { class: 'check', title: hint || null }, h('input', { type: 'checkbox', checked: !!get(), onchange: (e) => set(e.target.checked) }), label);
-  const changed = (what) => { ctx.save(); ctx.emit('layers', what); };
-  // Each popover opens with its title and a clear close button at the top right.
-  const closePopNow = () => { pop.hidden = true; popKind = null; };
-  function paintPop() {
-    paintPopBody();
-    pop.prepend(h('div', { class: 'zp-pop-head' }, h('b', {}, icon(popKind === 'units' ? 'gear' : 'layers'), popKind === 'units' ? 'Eenheden' : 'Lagen'),
-      h('button', { class: 'zp-pop-close', title: 'Sluiten (Esc)', 'aria-label': 'Sluiten', onclick: closePopNow }, icon('close'), h('span', {}, 'Sluiten'))));
-  }
-  function paintPopBody() {
-    if (popKind === 'units') return paintUnits();
+  // A change made in the panel itself does not paint the panel again (the box under the finger stays put).
+  let ownLayers = false;
+  const changed = (what) => { ctx.save(); ownLayers = true; try { ctx.emit('layers', what); } finally { ownLayers = false; } };
+  function layersPanel() {
     const A = cfg.aero, P = cfg.points, O = cfg.offshore, W = cfg.wind, F = cfg.fleet;
     const T = ctx.aeroTypes || {};
     const groups = {};
     for (const [k, b] of Object.entries(ZP_BASES)) (groups[b.group] = groups[b.group] || []).push([k, b]);
-    const col = (title, ...kids) => h('div', { class: 'zp-pop-col' }, h('h4', {}, title), ...kids);
+    const sec = (title, ...kids) => h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, title)), ...kids);
     const aeroTypes = ZP_AIRSPACE_GROUPS.map((g2) => h('div', { class: 'zp-tgroup' }, h('b', {}, g2.name), ...g2.types.map((t) => {
       const info = T[t] || { name: t, color: '#888' };
       return h('label', { class: 'check', title: info.name }, h('input', { type: 'checkbox', checked: A.types.includes(t), onchange: (e) => { A.types = e.target.checked ? [...new Set([...A.types, t])] : A.types.filter((x) => x !== t); changed('aero'); ctx.parts.zpAero.draw(); } }), h('i', { class: 'zp-dot', style: `background:${info.color}` }), info.name);
     })));
-    pop.replaceChildren(h('div', { class: 'zp-pop-grid' },
-      col('Ondergrond', ...Object.entries(groups).map(([gname, list]) => h('div', { class: 'zp-tgroup' }, h('b', {}, gname), ...list.map(([k, b]) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'zpbase' + ctx.w.id, checked: cfg.base === k, onchange: () => { cfg.base = k; ctx.save(); ctx.base.apply(); } }), b.name)))),
+    return h('div', { class: 'zp-panel zp-layers' },
+      sec('Ondergrond', ...Object.entries(groups).map(([gname, list]) => h('div', { class: 'zp-tgroup' }, h('b', {}, gname), ...list.map(([k, b]) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'zpbase' + ctx.w.id, checked: cfg.base === k, onchange: () => { cfg.base = k; ctx.save(); ctx.base.apply(); } }), b.name)))),
         h('b', { class: 'zp-tlabel' }, 'Kaartlagen'),
         ...Object.entries(ZP_RASTER).map(([k, d]) => chk(d.name, () => (cfg.raster || []).includes(k), (on) => { cfg.raster = on ? [...new Set([...(cfg.raster || []), k])] : (cfg.raster || []).filter((x) => x !== k); ctx.save(); ctx.base.applyRaster(); }, d.hint))),
-      col('Luchtruim (openAIP)',
+      sec('Luchtruim (openAIP)',
         chk('Luchtruim tonen', () => A.on, (v) => { A.on = v; changed('aero'); ctx.parts.zpAero.draw(); }),
         chk('Vlakken inkleuren', () => A.fill, (v) => { A.fill = v; changed('aero'); ctx.parts.zpAero.draw(); }),
         chk('Namen en hoogtegrenzen', () => A.labels, (v) => { A.labels = v; changed('aero'); }),
         field('Alleen met ondergrens tot', zpSelect([1000, 2000, 3000, 4500, 6000, 10000, 19500, 99999].map((ft) => ({ value: ft, label: ft === 99999 ? 'Alles' : `${ft.toLocaleString('nl-NL')} ft` })), A.maxFloorFt ?? 99999, (v) => { A.maxFloorFt = +v; changed('aero'); ctx.parts.zpAero.draw(); })),
         ...aeroTypes),
-      col('Punten',
+      sec('Punten',
         chk('Luchthavens en vliegvelden', () => P.airports, (v) => { P.airports = v; changed('points'); }),
         chk('Heliports', () => P.heliports, (v) => { P.heliports = v; changed('points'); }),
         chk('Ziekenhuishelipads', () => P.hospitals, (v) => { P.hospitals = v; changed('points'); }),
@@ -121,46 +102,47 @@ function zpPanels(ctx) {
         chk('Obstakels', () => P.obstacles, (v) => { P.obstacles = v; changed('points'); }, 'openAIP: masten, schoorstenen, gebouwen (vanaf zoom 9)'),
         field('Obstakels vanaf', zpSelect([0, 100, 200, 300, 500, 1000].map((ft) => ({ value: ft, label: `${ft} ft hoog` })), P.obstacleMinFt, (v) => { P.obstacleMinFt = +v; changed('points'); })),
         chk('Windturbines', () => P.turbines, (v) => { P.turbines = v; changed('points'); }, 'openAIP-obstakels en Rijkswaterstaat (op zee), vanaf zoom 10'),
-        chk('Windparken en veiligheidszones', () => P.farms, (v) => { P.farms = v; ctx.save(); ctx.parts.zpOffshore.drawFarms(); }),
-        h('b', { class: 'zp-tlabel' }, 'Offshore'),
+        chk('Windparken en veiligheidszones', () => P.farms, (v) => { P.farms = v; ctx.save(); ctx.parts.zpOffshore.drawFarms(); })),
+      sec('Offshore',
         chk('Platforms tonen', () => O.on, (v) => { O.on = v; changed('offshore'); }),
         ...Object.entries(ZP_KINDS).map(([k, d]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: O.kinds.includes(k), onchange: (e) => { O.kinds = e.target.checked ? [...new Set([...O.kinds, k])] : O.kinds.filter((x) => x !== k); changed('offshore'); } }), h('i', { class: 'zp-dot sq', style: `background:${d.color}` }), d.name)),
         chk('Alleen in gebruik', () => O.active, (v) => { O.active = v; changed('offshore'); }),
         chk('Rest van de wereld (OpenStreetMap)', () => O.world, (v) => { O.world = v; changed('offshore'); }),
         chk('Namen', () => O.labels, (v) => { O.labels = v; changed('offshore'); })),
-      col('Weer',
+      sec('Weer',
         chk('Wind', () => W.on, (v) => { W.on = v; ctx.save(); ctx.parts.zpWind.apply(); }),
         field('Weergave', zpSelect([{ value: 'flow', label: 'Stromingslijnen (zoals Windy)' }, { value: 'field', label: 'Kleurvlak' }, { value: 'both', label: 'Stromingslijnen + kleurvlak' }, { value: 'none', label: 'Alleen windveren' }], W.style, (v) => { W.style = v; ctx.save(); ctx.parts.zpWind.apply(); })),
         chk('Windveren', () => W.barbs, (v) => { W.barbs = v; ctx.save(); ctx.cv.request(); }),
         chk('Weerstations (METAR/TAF)', () => cfg.wx.metar, (v) => { cfg.wx.metar = v; changed('wx'); }),
         field('Toetsen aan BOM-profiel', zpSelect(WX.PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.wx.profile || 'mpd', (v) => { cfg.wx.profile = v; changed('wx'); })),
-        chk('SIGMET', () => cfg.wx.sigmet, (v) => { cfg.wx.sigmet = v; changed('wx'); }),
-        h('b', { class: 'zp-tlabel' }, 'Vloot'),
+        chk('SIGMET', () => cfg.wx.sigmet, (v) => { cfg.wx.sigmet = v; changed('wx'); })),
+      sec('Vloot',
         chk('Live eenheden', () => F.on, (v) => { F.on = v; changed('fleet'); }),
         ...Object.entries(ZP_FLEET_GROUPS).map(([k, n]) => chk(n, () => F.groups.includes(k), (v) => { F.groups = v ? [...new Set([...F.groups, k])] : F.groups.filter((x) => x !== k); changed('fleet'); trafficWatch(); })),
         field('Vooruitprojectie', zpSelect([{ value: 0, label: 'Uit' }, { value: 1, label: '1 minuut' }, { value: 2, label: '1, 2 en 5 minuten' }, { value: 3, label: '1, 2, 5 en 10 minuten' }], F.vectors, (v) => { F.vectors = +v; changed('fleet'); })),
         chk('Labels', () => F.labels, (v) => { F.labels = v; changed('fleet'); }),
-        chk('Gevlogen route', () => F.trails, (v) => { F.trails = v; changed('fleet'); }),
-        h('b', { class: 'zp-tlabel' }, 'Overig'),
+        chk('Gevlogen route', () => F.trails, (v) => { F.trails = v; changed('fleet'); })),
+      sec('Overig',
         chk('Coördinatenraster', () => cfg.grid, (v) => { cfg.grid = v; changed('grid'); }),
-        chk('Dag/nachtgrens', () => cfg.terminator, (v) => { cfg.terminator = v; changed('terminator'); }))));
+        chk('Dag/nachtgrens', () => cfg.terminator, (v) => { cfg.terminator = v; changed('terminator'); })));
   }
-  function paintUnits() {
+  function unitsPanel() {
     const U = PlanUnits, u = cfg.units;
-    const set = (k) => (v) => { u[k] = v; ctx.save(); ctx.emit('units'); paintSoon(); paintPop(); };
+    const set = (k) => (v) => { u[k] = v; ctx.save(); ctx.emit('units'); };
     const opt = (tbl) => Object.entries(tbl).map(([k, d]) => ({ value: k, label: d.label }));
-    pop.replaceChildren(h('div', { class: 'zp-pop-units' },
-      h('h4', {}, 'Eenheden'),
-      field('Afstand', zpSelect(opt(U.DIST), u.dist, set('dist'))),
-      field('Snelheid', zpSelect(opt(U.SPEED), u.speed, set('speed'))),
-      field('Hoogte', zpSelect(opt(U.ALT), u.alt, set('alt'))),
-      field('Brandstof', zpSelect(opt(U.FUEL), u.fuel, set('fuel'))),
-      field('Windsnelheid', zpSelect(opt(U.WIND), u.wind, set('wind'))),
-      field('Koersen', zpSelect([{ value: 'mag', label: 'Magnetisch (WMM2025)' }, { value: 'true', label: 'Waar noord' }], u.north, set('north')), `Magnetische variatie hier: ${(ctx.mag(map.getCenter().lat, map.getCenter().lng)).toFixed(1).replace('.', ',')}° oost`),
-      field('Coördinaten', zpSelect([{ value: 'ddm', label: 'Graden, decimale minuten (N52°18,517\')' }, { value: 'dms', label: 'Graden, minuten, seconden' }, { value: 'dd', label: 'Decimale graden' }, { value: 'avi', label: 'Luchtvaart compact (N52 18.52)' }, { value: 'rd', label: 'Rijksdriehoek (RD)' }, { value: 'mgrs', label: 'MGRS' }, { value: 'utm', label: 'UTM' }], u.coord, set('coord'))),
-      field('Tijd', zpSelect([{ value: 'utc', label: 'UTC (Z)' }, { value: 'lt', label: 'Lokale tijd' }], u.time, set('time'))),
-      h('button', { class: 'btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); paintSoon(); paintPop(); } }, 'Standaard luchtvaart (NM, kt, ft, kg)'),
-      h('button', { class: 'zp-linkbtn zp-deep', onclick: () => { pop.hidden = true; openSettings('zoekplan'); } }, icon('gear'), 'Bronnen, sleutels, offline kaarten en profielbestand…')));
+    return h('div', { class: 'zp-panel' },
+      h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Eenheden')),
+        h('div', { class: 'zp-units' },
+          field('Afstand', zpSelect(opt(U.DIST), u.dist, set('dist'))),
+          field('Snelheid', zpSelect(opt(U.SPEED), u.speed, set('speed'))),
+          field('Hoogte', zpSelect(opt(U.ALT), u.alt, set('alt'))),
+          field('Brandstof', zpSelect(opt(U.FUEL), u.fuel, set('fuel'))),
+          field('Windsnelheid', zpSelect(opt(U.WIND), u.wind, set('wind'))),
+          field('Tijd', zpSelect([{ value: 'utc', label: 'UTC (Z)' }, { value: 'lt', label: 'Lokale tijd' }], u.time, set('time'))),
+          field('Koersen', zpSelect([{ value: 'mag', label: 'Magnetisch (WMM2025)' }, { value: 'true', label: 'Waar noord' }], u.north, set('north')), `Magnetische variatie hier: ${(ctx.mag(map.getCenter().lat, map.getCenter().lng)).toFixed(1).replace('.', ',')}° oost`),
+          field('Coördinaten', zpSelect([{ value: 'ddm', label: 'Graden, decimale minuten (N52°18,517\')' }, { value: 'dms', label: 'Graden, minuten, seconden' }, { value: 'dd', label: 'Decimale graden' }, { value: 'avi', label: 'Luchtvaart compact (N52 18.52)' }, { value: 'rd', label: 'Rijksdriehoek (RD)' }, { value: 'mgrs', label: 'MGRS' }, { value: 'utm', label: 'UTM' }], u.coord, set('coord')))),
+        h('div', { class: 'zp-btnrow' }, h('button', { class: 'btn zp-btn', onclick: () => { cfg.units = { ...U.DEFAULTS }; ctx.save(); ctx.emit('units'); } }, 'Standaard luchtvaart (NM, kt, ft, kg)'))),
+      h('button', { class: 'zp-linkbtn zp-deep', onclick: () => openSettings('zoekplan') }, icon('gear'), 'Bronnen, sleutels, offline kaarten en profielbestand…'));
   }
 
   /* ---------- the card ---------- */
@@ -209,10 +191,10 @@ function zpPanels(ctx) {
   ctx.cv.add(90, () => { const s = ctx.selected; pulse.place(s && s.lat != null ? [s.lat, s.lon] : null, s && s.kind); });
 
   /* ---------- side panel ---------- */
-  const tabs = h('div', { class: 'zp-tabs', role: 'tablist' });
+  const tabs = h('div', { class: 'zp-tabs zp-segtabs zp-tabs8', role: 'tablist' });
   const content = h('div', { class: 'zp-side-body' });
   ctx.side.append(tabs, content);
-  const paintTabs = () => tabs.replaceChildren(...ZP_TABS.map((t) => h('button', { class: 'zp-tab' + (cfg.sideTab === t.id ? ' on' : ''), title: t.name, onclick: () => { cfg.sideTab = t.id; ctx.save(); paintTabs(); paintSide(); } }, icon(t.icon), h('span', {}, t.name))));
+  const paintTabs = () => tabs.replaceChildren(...ZP_TABS.map((t) => h('button', { class: 'zp-tab' + (cfg.sideTab === t.id ? ' on' : ''), title: t.name, role: 'tab', 'aria-selected': String(cfg.sideTab === t.id), onclick: () => { cfg.sideTab = t.id; ctx.save(); paintTabs(); paintSide(); } }, icon(t.icon), h('span', {}, t.name))));
   paintTabs();
   let pending = false;
   function paintSide() {
@@ -231,6 +213,8 @@ function zpPanels(ctx) {
         case 'tools': el = ctx.parts.zpTools.panel(); break;
         case 'profile': el = zpProfilePanel(ctx); break;
         case 'saved': el = zpSavedPanel(ctx); break;
+        case 'layers': el = layersPanel(); break;
+        case 'units': el = unitsPanel(); break;
         default: el = h('div');
       }
     } catch (err) { plog('warn', 'zoek & plan: paneel mislukt', String(err && err.stack || err)); el = h('p', { class: 'zp-hint warn' }, 'Dit paneel kon niet worden getoond.'); }
@@ -261,9 +245,10 @@ function zpPanels(ctx) {
   ctx.on('first', paintIf('fleet'));
   ctx.on('select', paintIf('tools', 'fleet'));
   ctx.on('wx', paintIf('brief'));
-  ctx.on('aero', paintIf('brief', 'sources'));
+  ctx.on('aero', paintIf('brief', 'sources', 'layers'));
   ctx.on('offshore', paintIf('sources'));
-  ctx.on('layers', () => { if (!pop.hidden && popKind === 'layers') paintPop(); ctx.cv.request(); });
+  // Layers changed elsewhere (the wind legend's close button, Briefing's station switch) show in the tab Lagen.
+  ctx.on('layers', () => { if (!ownLayers && cfg.sideTab === 'layers') paintSoon(); ctx.cv.request(); });
   ctx.on('ready', paintSide);
 
   function fleetPanel() {
@@ -281,7 +266,11 @@ function zpPanels(ctx) {
         })) : h('p', { class: 'zp-hint' }, 'Geen eigen eenheden in de lucht (of zet de groepen aan onder Lagen › Vloot).')));
   }
   const showTab = (id) => { cfg.sideTab = id; ctx.save(); if (!cfg.side) setSide(true); paintTabs(); paintSoon(); };
-  return { paintSide: paintSoon, paintPop, showTab };
+  // Lagen and Eenheden used to be popovers above the map; asking for one now opens its tab.
+  const openPop = (kind) => showTab(kind === 'units' ? 'units' : 'layers');
+  // The panel is as wide as the screen wants it (grip on its edge); the map and the contents follow.
+  ctx.cleanups.push(zpSideWidth({ root: ctx.root, side: ctx.side, mapBox: ctx.mapBox, map, cv: ctx.cv, cfg, save: ctx.save, onWidth: () => paintSoon() }));
+  return { paintSide: paintSoon, paintPop: () => { if (cfg.sideTab === 'layers' || cfg.sideTab === 'units') paintSoon(); }, openPop, showTab };
 }
 
 /* ---------- pieces of the card ---------- */

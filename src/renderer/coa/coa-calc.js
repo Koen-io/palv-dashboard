@@ -84,8 +84,12 @@
     const rel = relative(app.dir, c.heading);
     const helo = components(app.dir, app.spd, p.at);
     const heloGust = gust ? components(gust.dir, gust.spd, p.at) : null;
-    // The helicopter flies the AT towards the ship: seen from the ship it comes from the reciprocal.
-    const approach = relative(norm(p.at + 180), c.heading);
+    // The approach as P-ALV names it (1.54): the side of the ship the helicopter flies TOWARDS, i.e. its
+    // track relative to the bow. Coming in from the port quarter (R135) over the ship to the starboard bow
+    // is "approach G045"; flying the ship's own course (coming from astern) is "000", head-on is "180".
+    // `from` is where it comes from as seen from the ship, for the picture.
+    const approach = relative(norm(p.at), c.heading);
+    approach.from = relative(norm(p.at + 180), c.heading);
     const sea = p.waveDir != null ? seaRelative(p.waveDir, c.heading) : null;
     return { ...c, app, gust, rel, helo, heloGust, approach, sea };
   }

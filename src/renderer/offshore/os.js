@@ -481,11 +481,11 @@ function osCreate(body, w) {
   /* ---------- toolbar and side panel ---------- */
   const OS_TABS = [{ id: 'ships', name: 'Schepen', icon: 'globe' }, { id: 'layers', name: 'Lagen', icon: 'layers' }, { id: 'platforms', name: 'Platforms', icon: 'system' }];
   if (!OS_TABS.some((t) => t.id === cfg.sideTab)) cfg.sideTab = 'ships';
-  const tabs = h('div', { class: 'zp-tabs os-tabs' });
+  const tabs = h('div', { class: 'zp-tabs zp-segtabs os-tabs', role: 'tablist' });
   const content = h('div', { class: 'zp-side-body' });
   const sideBtn = h('button', { class: 'zp-side-toggle', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>', onclick: () => { cfg.side = !cfg.side; root.classList.toggle('side-off', !cfg.side); save(); setTimeout(() => map.invalidateSize(), 220); } });
   side.append(tabs, content, sideBtn);
-  const paintTabs = () => tabs.replaceChildren(...OS_TABS.map((t) => h('button', { class: 'zp-tab' + (cfg.sideTab === t.id ? ' on' : ''), onclick: () => { cfg.sideTab = t.id; save(); paintTabs(); paintSide(); } }, icon(t.icon), h('span', {}, t.name))));
+  const paintTabs = () => tabs.replaceChildren(...OS_TABS.map((t) => h('button', { class: 'zp-tab' + (cfg.sideTab === t.id ? ' on' : ''), title: t.name, role: 'tab', 'aria-selected': String(cfg.sideTab === t.id), onclick: () => { cfg.sideTab = t.id; save(); paintTabs(); paintSide(); } }, icon(t.icon), h('span', {}, t.name))));
   paintTabs();
   let pending = false;
   const paintSoon = () => { if (!pending) { pending = true; requestAnimationFrame(paintSide); } };
@@ -565,9 +565,9 @@ function osCreate(body, w) {
   loadPlatforms(); loadPlaces(); loadDecks(); aisLoop(); paintStatus(); paintSide();
   const unsubPriv = OPS.on('private', () => { if (sel && sel.kind === 'platform') paintCard(); });
   cleanups.push(unsubPriv);
-  const ro = new ResizeObserver(() => { map.invalidateSize(false); ctx.cv.request(); });
-  ro.observe(body);
+  // The side panel is as wide as the screen wants it (grip on its edge); the map follows every change.
+  cleanups.push(zpSideWidth({ root, side, mapBox, map, cv: ctx.cv, cfg, save, onWidth: () => paintSoon() }));
   return {
-    destroy() { ro.disconnect(); for (const t of timers) clearInterval(t); for (const fn of cleanups) { try { fn(); } catch { /* gone */ } } report('ais:' + w.id); ctx.base.destroy(); map.remove(); },
+    destroy() { for (const t of timers) clearInterval(t); for (const fn of cleanups) { try { fn(); } catch { /* gone */ } } report('ais:' + w.id); ctx.base.destroy(); map.remove(); },
   };
 }

@@ -195,6 +195,7 @@ function createWindow() {
     minHeight: 576,
     frame: false,
     show: false,
+    focusable: !shotPath,
     backgroundColor: '#0b1320',
     title: 'P-ALV Dashboard',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
@@ -219,8 +220,12 @@ function createWindow() {
 
   win.once('ready-to-show', () => {
     if (shotPath) {
+      // A test run renders for the screenshot only: shown without focus, fully transparent and out of the
+      // taskbar, so it never comes up on the screen of whoever is working (it still paints and captures).
       win.setContentSize(...shotSize('shot-size', [1920, 1080]));
-      win.show();
+      win.setSkipTaskbar(true);
+      win.setOpacity(0);
+      win.showInactive();
     } else if (target) {
       // Op het onthouden scherm neerzetten en daar pas volledig scherm maken, zodat het op dat scherm blijft.
       win.setBounds(target.bounds);
@@ -305,6 +310,16 @@ function createWindow() {
       setTimeout(async () => {
         const img = await win.webContents.capturePage();
         fs.writeFileSync(shotPath, img.toPNG());
+        // --shot-dump=<dir>: the attachments the page left in window.__palvDump ([{ format, name, html,
+        // pageSize, width }]) rendered as the mail would, to look at an export without sending it.
+        const dumpDir = argValue('shot-dump');
+        if (dumpDir) {
+          try {
+            const list = await win.webContents.executeJavaScript('window.__palvDump || []', true);
+            fs.mkdirSync(dumpDir, { recursive: true });
+            for (const f of list) { const r = await mail.render(f); fs.writeFileSync(path.join(dumpDir, r.filename), r.content); }
+          } catch (err) { console.error('shot-dump failed:', err); }
+        }
         app.quit();
       }, delay);
     });

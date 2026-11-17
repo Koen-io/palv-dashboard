@@ -401,6 +401,25 @@ function pointFrom(c, p, ti, stale) {
   return out;
 }
 
+// The point at its hour, or (with `frac`) blended towards the next hour: the wind as a vector (so 350°
+// and 010° average to 000°, not 180°), the gust and the temperature linearly. `validTime` is then the
+// exact time asked for; `hours` says which two model hours it came from.
+function blendPoint(found, p, stale) {
+  const a = pointFrom(found.c, p, found.ti, stale);
+  const out = { ...a, past: p.past || undefined };
+  if (!(p.frac > 0) || found.ti + 1 >= found.c.times.length) return out;
+  const b = pointFrom(found.c, p, found.ti + 1, stale);
+  if (!Number.isFinite(a.speedKt) || !Number.isFinite(b.speedKt)) return out;
+  const f = p.frac, wa = uv(a.speedKt, a.dirDeg), wb = uv(b.speedKt, b.dirDeg);
+  const w = fromUv(wa.u + (wb.u - wa.u) * f, wa.v + (wb.v - wa.v) * f);
+  const lin = (x, y) => (Number.isFinite(x) && Number.isFinite(y) ? Math.round((x + (y - x) * f) * 10) / 10 : Number.isFinite(x) ? x : y);
+  return {
+    ...out, dirDeg: Math.round(w.dirFrom) % 360, speedKt: Math.round(w.speed * 10) / 10,
+    gustKt: lin(a.gustKt, b.gustKt), tempC: lin(a.tempC, b.tempC),
+    validTime: a.validTime + Math.round(f * 3600000), hours: [a.validTime, b.validTime],
+  };
+}
+
 function lookupPoint(p, freshOnly) {
   const c = pointCache.get(p.key);
   if (!c) return null;
@@ -440,17 +459,23 @@ async function points(list) {
     const hourT = Math.max(h0, hourStart(Number.isFinite(t) ? t : now()));
     if (hourT - h0 >= MAX_FORECAST_H * 3600000) return { bad: MSG.far };
     const rl = roundTo(lat, 0.05), ro = roundTo(((lon + 540) % 360) - 180, 0.05);
-    return { lat: rl, lon: ro, key: locKey(rl, ro), hourT, ftAmsl: Number(p.ftAmsl) };
+    // `interp`: between the two model hours around the time (the COA Planner wants the wind of the
+    // minute, not of the hour before it); otherwise the hour the time falls in, as the route always had.
+    const exact = Number.isFinite(t) ? t : now();
+    const frac = p.interp && exact > hourT ? Math.min(1, (exact - hourT) / 3600000) : 0;
+    return { lat: rl, lon: ro, key: locKey(rl, ro), hourT, frac, ftAmsl: Number(p.ftAmsl), past: Number.isFinite(t) && t < h0 };
   });
   const need = new Map();
-  for (const p of ps) if (!p.bad && !lookupPoint(p, true)) {
+  // The hour after it too when interpolating.
+  const lastHour = (p) => p.hourT + (p.frac > 0 ? 3600000 : 0);
+  for (const p of ps) if (!p.bad && (!lookupPoint(p, true) || (p.frac > 0 && !lookupPoint({ ...p, hourT: p.hourT + 3600000 }, true)))) {
     const n = need.get(p.key);
-    if (!n || n.hourT < p.hourT) need.set(p.key, p);
+    if (!n || lastHour(n) < lastHour(p)) need.set(p.key, p);
   }
   let error = null;
   if (need.size) {
     const todo = [...need.values()];
-    const span = Math.max(...todo.map((p) => p.hourT));
+    const span = Math.max(...todo.map(lastHour));
     const hours = Math.max(HOURS, Math.min(MAX_FORECAST_H, Math.round((span - h0) / 3600000) + 1));
     const key = 'p:' + hours + ':' + todo.map((p) => p.key).sort().join(';');
     try { await once(key, () => fetchPoints(todo, hours)); lastError = null; } catch (err) { error = err.message; lastError = err.message; }
@@ -458,9 +483,9 @@ async function points(list) {
   return ps.map((p) => {
     if (p.bad) return { ok: false, error: p.bad };
     const fresh = lookupPoint(p, true);
-    if (fresh) { if (!need.has(p.key)) counters.pointHits++; return pointFrom(fresh.c, p, fresh.ti); }
+    if (fresh) { if (!need.has(p.key)) counters.pointHits++; return blendPoint(fresh, p); }
     const old = lookupPoint(p, false);
-    if (old) return pointFrom(old.c, p, old.ti, error || MSG.bad);
+    if (old) return blendPoint(old, p, error || MSG.bad);
     return { ok: false, error: error || MSG.bad };
   });
 }

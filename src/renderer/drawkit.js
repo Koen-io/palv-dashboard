@@ -47,7 +47,10 @@ const DK = {
       const p = ((e.width || 4) * (e.marker ? 3 : 1)) / 2;
       return { x: x0 - p, y: y0 - p, w: x1 - x0 + 2 * p, h: y1 - y0 + 2 * p };
     }
-    if (e.type === 'line') { const x = Math.min(e.x1, e.x2), y = Math.min(e.y1, e.y2); return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) }; }
+    if (e.type === 'line') {
+      if (DK.bent(e)) { const pts = DK.curvePts(e); const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]); const x = Math.min(...xs), y = Math.min(...ys); return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }; }
+      const x = Math.min(e.x1, e.x2), y = Math.min(e.y1, e.y2); return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
+    }
     if (e.type === 'text') { const lines = String(e.text || '').split('\n'); const w = Math.max(...lines.map((l) => measure(l, e.size))); return { x: e.x, y: e.y, w, h: lines.length * e.size * 1.25 }; }
     if (e.type === 'icon') { const s = e.size || 80; return { x: e.x - s / 2, y: e.y - s / 2, w: s, h: s }; }
     return { x: Math.min(e.x, e.x + e.w), y: Math.min(e.y, e.y + e.h), w: Math.abs(e.w), h: Math.abs(e.h) };
@@ -68,9 +71,19 @@ const DK = {
     if (e.type === 'path') {
       const r = (e.width || 4) * (e.marker ? 1.5 : 0.5) + tol, p = e.pts || [];
       for (let j = 1; j < p.length; j += 1) if (DK.segDist(lx, ly, p[j - 1][0], p[j - 1][1], p[j][0], p[j][1]) <= r) return true;
+      if (e.closed && p.length > 2) {
+        if (DK.segDist(lx, ly, p[p.length - 1][0], p[p.length - 1][1], p[0][0], p[0][1]) <= r) return true;
+        if (e.fill) { let inside = false; for (let i = 0, j = p.length - 1; i < p.length; j = i, i += 1) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > ly) !== (yj > ly) && lx < ((xj - xi) * (ly - yi)) / (yj - yi) + xi) inside = !inside; } if (inside) return true; }
+      }
       return p.length === 1 && Math.hypot(lx - p[0][0], ly - p[0][1]) <= r;
     }
-    if (e.type === 'line') return DK.segDist(lx, ly, e.x1, e.y1, e.x2, e.y2) <= (e.width || 4) / 2 + tol;
+    if (e.type === 'line') {
+      const r = (e.width || 4) / 2 + tol;
+      if (!DK.bent(e)) return DK.segDist(lx, ly, e.x1, e.y1, e.x2, e.y2) <= r;
+      const p = DK.curvePts(e);
+      for (let j = 1; j < p.length; j += 1) if (DK.segDist(lx, ly, p[j - 1][0], p[j - 1][1], p[j][0], p[j][1]) <= r) return true;
+      return false;
+    }
     if (e.type === 'ellipse' && !e.fill) { const cx = b.x + b.w / 2, cy = b.y + b.h / 2, rx = b.w / 2 || 1, ry = b.h / 2 || 1; const d = Math.hypot((lx - cx) / rx, (ly - cy) / ry); return Math.abs(d - 1) * Math.min(rx, ry) <= (e.width || 4) / 2 + tol; }
     if (e.type === 'rect' && !e.fill) return !(lx > b.x + tol && ly > b.y + tol && lx < b.x + b.w - tol && ly < b.y + b.h - tol);
     return true;
@@ -88,13 +101,13 @@ const DK = {
   inBox(e, x, y, pad, measure) { const [lx, ly] = DK.local(e, x, y, measure); const b = DK.box(e, measure); return lx >= b.x - pad && ly >= b.y - pad && lx <= b.x + b.w + pad && ly <= b.y + b.h + pad; },
   moveBy(e, dx, dy) {
     if (e.type === 'path') e.pts = e.pts.map(([x, y]) => [x + dx, y + dy]);
-    else if (e.type === 'line') { e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; }
+    else if (e.type === 'line') { e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; if (e.via) e.via = e.via.map(([x, y]) => [x + dx, y + dy]); }
     else { e.x += dx; e.y += dy; }
   },
   scaleBy(e, f, cx, cy) {
     const s = (x, y) => [cx + (x - cx) * f, cy + (y - cy) * f];
     if (e.type === 'path') { e.pts = e.pts.map(([x, y]) => s(x, y)); e.width = Math.max(0.5, (e.width || 4) * f); }
-    else if (e.type === 'line') { [e.x1, e.y1] = s(e.x1, e.y1); [e.x2, e.y2] = s(e.x2, e.y2); e.width = Math.max(0.5, (e.width || 4) * f); }
+    else if (e.type === 'line') { [e.x1, e.y1] = s(e.x1, e.y1); [e.x2, e.y2] = s(e.x2, e.y2); if (e.via) e.via = e.via.map(([x, y]) => s(x, y)); e.width = Math.max(0.5, (e.width || 4) * f); }
     else if (e.type === 'text') { [e.x, e.y] = s(e.x, e.y); e.size = Math.max(6, e.size * f); }
     else if (e.type === 'icon') { [e.x, e.y] = s(e.x, e.y); e.size = Math.max(12, (e.size || 80) * f); }
     else if (e.type === 'map') { [e.x, e.y] = s(e.x, e.y); e.w *= f; e.h *= f; e.zoom = Math.max(2, Math.min(20, e.zoom + Math.log2(f))); } // same area, finer tiles
@@ -106,7 +119,7 @@ const DK = {
     if (DK.ownRot(e)) { e.rot = ((Math.round(deg * 10) / 10 % 360) + 360) % 360; return; }
     const [cx, cy] = DK.centre(e, measure), a = DK.rad(deg - (e.rot || 0));
     const r = (x, y) => { const dx = x - cx, dy = y - cy; return [cx + dx * Math.cos(a) - dy * Math.sin(a), cy + dx * Math.sin(a) + dy * Math.cos(a)]; };
-    if (e.type === 'path') e.pts = e.pts.map(([x, y]) => r(x, y)); else { [e.x1, e.y1] = r(e.x1, e.y1); [e.x2, e.y2] = r(e.x2, e.y2); }
+    if (e.type === 'path') e.pts = e.pts.map(([x, y]) => r(x, y)); else { [e.x1, e.y1] = r(e.x1, e.y1); [e.x2, e.y2] = r(e.x2, e.y2); if (e.via) e.via = e.via.map(([x, y]) => r(x, y)); }
     e.rot = 0;
   },
   // A turn of `d` degrees, landing on a multiple of 45 when close (or on 15-degree steps with `fine`).
@@ -166,6 +179,65 @@ const DK = {
   // The dash pattern for a stroke this wide (round caps make the dashes a width longer and the gaps shorter).
   dashArray: (wd) => [wd * 2, wd * 3],
   selectAfter: (e) => !!e && (e.type === 'line' || e.type === 'rect' || e.type === 'ellipse' || e.type === 'icon' || e.type === 'text' || (e.type === 'path' && !!e.arrow)),
+  /* ---------- bent lines and arrows (1.54) ---------- */
+  // A line or arrow can be bent at anchor points (`via`, board points between its two ends): it then runs
+  // as a smooth curve through all of them (centripetal Catmull-Rom, so it never loops or overshoots).
+  bent: (e) => !!e && e.type === 'line' && Array.isArray(e.via) && e.via.length > 0,
+  ctrlPts: (e) => [[e.x1, e.y1], ...(e.via || []), [e.x2, e.y2]],
+  CURVE_N: 20, // samples per stretch between two anchors
+  curvePts(e) {
+    const c = DK.ctrlPts(e);
+    if (c.length < 3) return c;
+    const out = [c[0]];
+    for (let i = 0; i < c.length - 1; i += 1) {
+      const p0 = c[Math.max(0, i - 1)], p1 = c[i], p2 = c[i + 1], p3 = c[Math.min(c.length - 1, i + 2)];
+      const tj = (a, b) => Math.max(1e-6, Math.hypot(b[0] - a[0], b[1] - a[1]) ** 0.5);
+      const t0 = 0, t1 = t0 + tj(p0, p1), t2 = t1 + tj(p1, p2), t3 = t2 + tj(p2, p3);
+      for (let k = 1; k <= DK.CURVE_N; k += 1) {
+        const t = t1 + ((t2 - t1) * k) / DK.CURVE_N;
+        const L = (a, b, ta, tb) => (tb - ta < 1e-9 ? a : [a[0] + ((b[0] - a[0]) * (t - ta)) / (tb - ta), a[1] + ((b[1] - a[1]) * (t - ta)) / (tb - ta)]);
+        const A1 = L(p0, p1, t0, t1), A2 = L(p1, p2, t1, t2), A3 = L(p2, p3, t2, t3);
+        const B1 = L(A1, A2, t0, t2), B2 = L(A2, A3, t1, t3);
+        out.push(L(B1, B2, t1, t2));
+      }
+    }
+    return out;
+  },
+  // Where an arrow head sits and which way it points, at the end (`start` for the other end): along the
+  // last stretch of the curve, so the head follows the bend.
+  lineEnd(e, start) {
+    const p = DK.bent(e) ? DK.curvePts(e) : [[e.x1, e.y1], [e.x2, e.y2]];
+    const q = start ? [...p].reverse() : p;
+    const tip = q[q.length - 1];
+    let i = q.length - 2;
+    const need = Math.max(6, (e.width || 4) * 2.5);
+    while (i > 0 && Math.hypot(tip[0] - q[i][0], tip[1] - q[i][1]) < need) i -= 1;
+    return { x: tip[0], y: tip[1], a: Math.atan2(tip[1] - q[i][1], tip[0] - q[i][0]) };
+  },
+  // A new anchor where the board point lies nearest the line; returns its index in ctrlPts.
+  insertVia(e, x, y) {
+    const c = DK.ctrlPts(e);
+    let best = 0, bd = Infinity;
+    if (DK.bent(e)) {
+      const p = DK.curvePts(e);
+      for (let j = 1; j < p.length; j += 1) { const d = DK.segDist(x, y, p[j - 1][0], p[j - 1][1], p[j][0], p[j][1]); if (d < bd) { bd = d; best = Math.floor((j - 1) / DK.CURVE_N); } }
+    }
+    const via = [...(e.via || [])];
+    via.splice(Math.min(best, c.length - 2), 0, [x, y]);
+    e.via = via;
+    return Math.min(best, c.length - 2) + 1;
+  },
+  setCtrl(e, idx, x, y) {
+    const n = (e.via || []).length + 2;
+    if (idx <= 0) { e.x1 = x; e.y1 = y; } else if (idx >= n - 1) { e.x2 = x; e.y2 = y; } else { e.via = e.via.map((q, i) => (i === idx - 1 ? [x, y] : q)); }
+  },
+  removeVia(e, idx) { if (idx > 0 && e.via && idx <= e.via.length) { e.via = e.via.filter((_, i) => i !== idx - 1); if (!e.via.length) delete e.via; } },
+  // An SVG path for a line, bent or not.
+  lineD(e, f = (v) => (Math.round(v * 10) / 10).toString()) {
+    const p = DK.bent(e) ? DK.curvePts(e) : [[e.x1, e.y1], [e.x2, e.y2]];
+    return p.map((q, i) => `${i ? 'L' : 'M'}${f(q[0])} ${f(q[1])}`).join('');
+  },
+
   // The head of a free arrow (a stroke with `arrow`): at its last point, pointing the way the stroke went at
   // the end. The direction is taken over the last stretch of at least a few line widths, so the jitter of
   // the final pixels of a hand-drawn line does not turn the head. Returns { x, y, a, L } or null.
@@ -205,7 +277,61 @@ function dkSelection(host, a) {
   const del = h('button', { class: 'dk-del', type: 'button', title: 'Verwijderen (Delete)', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/></svg>' });
   el.append(frame, stem, rot, ...corners, del);
   const badge = h('div', { class: 'dk-badge', hidden: true });
-  host.append(el, badge);
+  // The anchors of a selected line or arrow (1.54): its two ends, the points it is bent at, and a small
+  // "+" halfway along each stretch to bend it there. Drag to bend; double-tap a bend point to straighten.
+  const ptsEl = h('div', { class: 'dk-pts', hidden: true });
+  host.append(el, badge, ptsEl);
+  let pg = null; // a drag on an anchor: { idx, mid, e0, id, moved }
+  function paintPts(e) {
+    if (!e || e.type !== 'line' || !a.toBoard || (g && g.kind !== 'pt')) { ptsEl.hidden = true; return; }
+    ptsEl.hidden = false;
+    const c = DK.ctrlPts(e);
+    const curve = DK.bent(e) ? DK.curvePts(e) : null;
+    const mids = [];
+    for (let i = 0; i < c.length - 1; i += 1) mids.push(curve ? curve[i * DK.CURVE_N + DK.CURVE_N / 2] : [(c[i][0] + c[i + 1][0]) / 2, (c[i][1] + c[i + 1][1]) / 2]);
+    const want = [...c.map((q, i) => ({ q, idx: i, kind: i === 0 || i === c.length - 1 ? 'end' : 'via' })), ...(pg ? [] : mids.map((q, i) => ({ q, idx: i, kind: 'mid' })))];
+    while (ptsEl.children.length < want.length) {
+      const n = h('div', { class: 'dk-pt' });
+      n.addEventListener('pointerdown', ptDown); n.addEventListener('pointermove', ptMove); n.addEventListener('pointerup', ptUp); n.addEventListener('pointercancel', ptUp);
+      n.addEventListener('dblclick', (ev) => { ev.stopPropagation(); const s = a.sel(); if (!s || n.dataset.kind !== 'via') return; const before = DK.copy(s); const f = DK.copy(s); DK.removeVia(f, +n.dataset.idx); a.live(f); a.commit(a.sel(), before); paint(a.sel()); });
+      ptsEl.append(n);
+    }
+    [...ptsEl.children].forEach((n, i) => {
+      const w = want[i];
+      n.hidden = !w;
+      if (!w) return;
+      const [sx, sy] = a.toScreen(w.q[0], w.q[1]);
+      n.className = `dk-pt ${w.kind}` + (pg && pg.idx === w.idx && w.kind !== 'mid' ? ' busy' : '');
+      n.dataset.kind = w.kind; n.dataset.idx = String(w.idx);
+      n.title = w.kind === 'mid' ? 'Sleep om de lijn hier om te buigen' : w.kind === 'via' ? 'Ankerpunt: sleep om de bocht te verplaatsen · dubbeltik: weghalen' : 'Eindpunt: sleep om te verplaatsen';
+      n.style.left = `${sx}px`; n.style.top = `${sy}px`;
+    });
+  }
+  function ptDown(ev) {
+    const s = a.sel();
+    if (!s || ev.button > 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+    const n = ev.currentTarget;
+    pg = { idx: +n.dataset.idx, mid: n.dataset.kind === 'mid', e0: DK.copy(s), id: ev.pointerId, moved: false };
+    paintPts(s);
+  }
+  function ptMove(ev) {
+    if (!pg || ev.pointerId !== pg.id) return;
+    const b = a.toBoard(ev.clientX, ev.clientY);
+    if (!b) return;
+    const f = DK.copy(pg.e0);
+    let idx = pg.idx;
+    if (pg.mid) { f.via = [...(f.via || [])]; f.via.splice(pg.idx, 0, [b[0], b[1]]); idx = pg.idx + 1; } else DK.setCtrl(f, idx, b[0], b[1]);
+    pg.moved = true; pg.shown = idx;
+    a.live(f);
+  }
+  function ptUp(ev) {
+    if (!pg || ev.pointerId !== pg.id) return;
+    const done = pg; pg = null;
+    if (done.moved && a.sel()) a.commit(a.sel(), done.e0);
+    paint(a.sel());
+  }
   let g = null;      // a turn or scale in progress: { kind, e0, c, a0, d0, id }
   let over = null;   // a frame to show instead (a line being turned): { e0, drot }
   let last = null;
@@ -213,6 +339,7 @@ function dkSelection(host, a) {
 
   function paint(e) {
     last = e || null;
+    paintPts(e);
     if (!e) { el.hidden = true; badge.hidden = true; return; }
     let fe = e, r = DK.ownRot(e) ? e.rot || 0 : 0;
     if (over && over.e0 && over.e0.id === e.id && !DK.ownRot(e)) { fe = over.e0; r = over.drot; }
@@ -313,7 +440,7 @@ function dkSelection(host, a) {
     el,
     paint,
     repaint: () => paint(last && a.sel()),
-    busy: () => !!g,
+    busy: () => !!g || !!pg,
     // A gesture elsewhere (two fingers) that turns a line or stroke: show its frame turned with it.
     hold(e0, drot) { over = e0 ? { e0, drot } : null; },
     // A short pulse: the object has been picked up by a press held still.
@@ -469,4 +596,119 @@ function dkPanelGrip(panel, { get, set, min = 170, max = 460 }) {
   grip.addEventListener('pointercancel', end);
   grip.addEventListener('dblclick', () => { set(null); apply(null); });
   return grip;
+}
+
+/* ---------- the tool panel, the same on every drawing surface (1.54) ---------- */
+// The Whiteboard, the drawing layer of the COA Planner and Teken Schip build their panel from these three
+// sections, so the tools, colours and selection buttons sit in the same place with the same words.
+const DK_TIP = 'Houd aan het eind van een streek je vinger even stil: een lijn, boog, cirkel, ellips, vierkant, rechthoek, driehoek, ruit, vijf-, zes- of achthoek of ster wordt er netjes van gemaakt. Een lijn of pijl buig je om door haar te selecteren en een “+”-greep te slepen, of door op de lijn te drukken en even vast te houden; dubbeltik op een ankerpunt haalt de bocht weg.';
+const DK_TYPE_NAME = { path: 'streek', line: 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon', map: 'kaart' };
+const dkTypeName = (s) => (s.type === 'path' ? (s.arrow ? 'vrije pijl' : s.closed ? 'vorm' : 'streek') : s.type === 'line' ? `${s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn'}${DK.bent(s) ? ' (gebogen)' : ''}` : DK_TYPE_NAME[s.type] || s.type);
+const dkSec = (title, badge, ...kids) => h('div', { class: 'zp-sec dk-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, title), badge || null), ...kids.filter(Boolean));
+
+// Gereedschap: one grid of buttons (`tools` as { key: { name, icon, hint, key? } }), the hint of the tool in use.
+function dkToolSection({ tools, cur, setTool, skip = ['icon'] }) {
+  const t = tools[cur] || tools.pen;
+  return dkSec('Gereedschap', null,
+    h('div', { class: 'wb-tools dk-toolgrid' }, Object.entries(tools).filter(([k]) => !skip.includes(k)).map(([k, d]) => h('button', { class: 'wb-toolbtn' + (cur === k ? ' on' : ''), title: `${d.name}${d.key ? ` (${d.key})` : ''} — ${d.hint}`, onclick: () => setTool(k) }, icon(d.icon), h('span', {}, d.name)))),
+    h('p', { class: 'zp-hint' }, t.hint));
+}
+// Kleur en dikte: colours, widths, solid or dashed, fill, and the sizes (text, icon) as selects.
+function dkStyleSection({ colors, widths, color, width, dash, fill, onColor, onWidth, onDash, onFill, sizes = [] }) {
+  return dkSec('Kleur en dikte', null,
+    h('div', { class: 'wb-colors' }, colors.map((c) => h('button', { class: 'wb-color' + (color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => onColor(c) }))),
+    h('div', { class: 'wb-widths' }, widths.map((wd) => h('button', { class: 'wb-width' + (width === wd ? ' on' : ''), title: `${wd}`, onclick: () => onWidth(wd) }, h('i', { style: `height:${Math.min(12, wd)}px` })))),
+    dkDashPicker(dash, onDash),
+    checkbox('Vormen vullen', !!fill, onFill),
+    sizes.length ? h('div', { class: 'row dk-sizes' }, ...sizes.map((z) => field(z.label, zpSelect(z.values.map((v) => ({ value: v, label: `${v}` })), z.cur, z.on)))) : null);
+}
+// Selectie: what it is, turning, what this kind has of its own, then order, copy and delete.
+//   a = { turn(d), straight(), label(), edit(), arrow(v), unbend(), front(), back(), copy(), remove(), extra }
+function dkSelSection(s, a) {
+  if (!s) return null;
+  return dkSec('Selectie', h('span', { class: 'zp-fold-badge' }, dkTypeName(s)),
+    DK.canRotate(s) ? h('div', { class: 'zp-btnrow dk-turnrow' },
+      h('button', { class: 'btn zp-btn', title: '15° linksom ([)', onclick: () => a.turn(-15) }, '↺ 15°'),
+      DK.ownRot(s) ? h('button', { class: 'btn zp-btn', title: 'Recht zetten (0°)', disabled: !s.rot || null, onclick: () => a.straight() }, icon('refresh'), s.rot ? `Recht (nu ${Math.round(s.rot)}°)` : 'Recht') : null,
+      h('button', { class: 'btn zp-btn', title: '15° rechtsom (])', onclick: () => a.turn(15) }, '↻ 15°')) : null,
+    s.type === 'line' ? h('div', { class: 'row' }, field('Pijlpunt', zpSelect([['none', 'Geen'], ['end', 'Aan het eind'], ['both', 'Beide kanten']].map(([v, l]) => ({ value: v, label: l })), s.arrow || 'none', (v) => a.arrow(v)))) : null,
+    h('div', { class: 'zp-btnrow' },
+      s.type === 'icon' && a.label ? h('button', { class: 'btn zp-btn', onclick: () => a.label() }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…') : null,
+      s.type === 'text' && a.edit ? h('button', { class: 'btn zp-btn', onclick: () => a.edit() }, icon('edit'), 'Tekst bewerken') : null,
+      DK.bent(s) && a.unbend ? h('button', { class: 'btn zp-btn', title: 'Alle bochten weg: weer een rechte lijn', onclick: () => a.unbend() }, icon('min'), 'Recht maken') : null),
+    h('div', { class: 'zp-btnrow' },
+      h('button', { class: 'btn zp-btn', title: 'Bovenop leggen', onclick: () => a.front() }, icon('arrowUp'), 'Voor'),
+      h('button', { class: 'btn zp-btn', title: 'Onderop leggen', onclick: () => a.back() }, icon('arrowDown'), 'Achter'),
+      h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => a.copy() }, icon('history'), 'Kopie'),
+      h('button', { class: 'btn zp-btn danger', title: 'Verwijderen (Delete)', onclick: () => a.remove() }, icon('trash'), 'Verwijderen')),
+    a.extra || null);
+}
+
+/* ---------- hold to snap: a hand-drawn stroke becomes a clean shape (1.54) ---------- */
+// While drawing with the pen, the free arrow or the marker, a finger (or mouse) held still for DK_SNAP_MS
+// at the end of the stroke hands the stroke to the recogniser (shapes.js). A shape it is sure of replaces
+// the stroke with a short cross-fade, and as long as the finger stays down the clean shape follows it: a
+// line's end goes with the finger, any other shape turns and scales about its centre.
+const DK_SNAP_MS = 480;
+const DK_MORPH_MS = 300;
+Object.assign(DK, {
+  // The element for a recognised shape, in the style of the stroke it came from.
+  fromShape(sh, src) {
+    if (!sh) return null;
+    const base = { color: src.color, width: src.width, ...(src.dash && !src.marker ? { dash: true } : {}) };
+    const arrow = !!src.arrow;
+    const path = (pts, more) => ({ type: 'path', pts: pts.map(([x, y]) => [x, y]), ...base, ...(src.marker ? { marker: true } : {}), ...more });
+    if (src.marker) {
+      // A marker only straightens: a highlighter line stays a highlighter line.
+      if (sh.kind === 'line' || sh.kind === 'arrow') return path([[sh.x1, sh.y1], [sh.x2, sh.y2]], { poly: true });
+      if (sh.kind === 'polyline') return path(sh.pts, { poly: true });
+      if (sh.kind === 'arc') return path(sh.pts, {});
+      return null;
+    }
+    const fill = !!src.fillShapes;
+    switch (sh.kind) {
+      case 'line': return { type: 'line', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, arrow: arrow ? 'end' : 'none', ...base };
+      case 'arrow': return { type: 'line', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, arrow: 'end', ...base };
+      case 'arc': return path(sh.pts, arrow ? { arrow: 'end' } : {});
+      case 'polyline': return path(sh.pts, { poly: true, ...(arrow ? { arrow: 'end' } : {}) });
+      case 'ellipse': return { type: 'ellipse', x: sh.cx - sh.rx, y: sh.cy - sh.ry, w: 2 * sh.rx, h: 2 * sh.ry, rot: ((Math.round((sh.rot || 0) * 10) / 10) % 360 + 360) % 360, fill, ...base };
+      case 'rect': return { type: 'rect', x: sh.cx - sh.w / 2, y: sh.cy - sh.h / 2, w: sh.w, h: sh.h, rot: ((Math.round((sh.rot || 0) * 10) / 10) % 360 + 360) % 360, fill, ...base };
+      case 'polygon': return path(sh.pts, { poly: true, closed: true, ...(fill ? { fill: true } : {}) });
+      default: return null;
+    }
+  },
+  // Try to snap the stroke `e` (a path being drawn); `k` pixels per board unit. Returns the snap state or null.
+  trySnap(e, k, pointer) {
+    const R = typeof DK_SHAPES !== 'undefined' ? DK_SHAPES : null;
+    if (!R || !e || e.type !== 'path' || !e.pts || e.pts.length < 4) return null;
+    let sh = null;
+    try { sh = R.recognize(e.pts, { scale: k }); } catch { sh = null; }
+    const out = DK.fromShape(sh, e);
+    if (!out) return null;
+    const c = DK.centre(out);
+    return { shape: sh, el: out, ghost: DK.copy(e), t0: performance.now(), c, p0: pointer, e0: DK.copy(out), name: sh.name || '' };
+  },
+  // The snapped shape following the finger while it stays down.
+  snapFollow(st, x, y) {
+    const e = st.e0;
+    if (e.type === 'line') { const f = DK.copy(e); f.x2 = x; f.y2 = y; return f; }
+    const [cx, cy] = st.c, [px, py] = st.p0;
+    const d0 = Math.hypot(px - cx, py - cy);
+    if (d0 < 4) return DK.copy(e);
+    const f = Math.max(0.2, Math.min(5, Math.hypot(x - cx, y - cy) / d0));
+    let drot = ((Math.atan2(y - cy, x - cx) - Math.atan2(py - cy, px - cx)) * 180) / Math.PI;
+    drot = ((drot + 540) % 360) - 180;
+    return DK.transform(e, { drot, f });
+  },
+  // How far the cross-fade is (0..1, eased), and whether it is still running.
+  morphT(st) { if (!st) return 1; const t = Math.min(1, (performance.now() - st.t0) / DK_MORPH_MS); return 1 - (1 - t) ** 3; },
+});
+// A press held still while drawing: `fire()` after DK_SNAP_MS unless the pointer moves more than a few
+// pixels (then it starts counting again).
+function dkSnapTimer(fire) {
+  let t = null, at = null;
+  return {
+    move(ev) { if (at && Math.hypot(ev.clientX - at[0], ev.clientY - at[1]) < 5) return; at = [ev.clientX, ev.clientY]; clearTimeout(t); t = setTimeout(fire, DK_SNAP_MS); },
+    cancel() { clearTimeout(t); t = null; at = null; },
+  };
 }

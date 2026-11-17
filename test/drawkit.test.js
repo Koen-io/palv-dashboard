@@ -138,3 +138,40 @@ test('tekenkit: stippellijn voor streken, lijnen en vormen, nooit voor de markee
   for (const type of ['text', 'icon', 'map']) assert.ok(!DK.canDash({ type }), type);
   assert.strictEqual(JSON.stringify(DK.dashArray(4)), '[8,12]');
 });
+
+test('tekenkit: een lijn of pijl ombuigen aan ankerpunten (1.54)', () => {
+  const J = (v) => JSON.parse(JSON.stringify(v));
+  const ln = { type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, arrow: 'end', width: 4 };
+  assert.strictEqual(DK.bent(ln), false);
+  const f = DK.copy(ln);
+  const idx = DK.insertVia(f, 100, 0);
+  assert.strictEqual(idx, 1, 'het eerste ankerpunt zit tussen de twee uiteinden');
+  DK.setCtrl(f, idx, 100, 80);
+  assert.ok(DK.bent(f));
+  const pts = DK.curvePts(f);
+  // The curve runs exactly through both ends and the anchor.
+  assert.deepStrictEqual(J(pts[0]), [0, 0]);
+  assert.deepStrictEqual(J(pts[pts.length - 1]), [200, 0]);
+  assert.ok(pts.some(([x, y]) => Math.abs(x - 100) < 0.01 && Math.abs(y - 80) < 0.01), 'door het ankerpunt');
+  // Box, hit test and the arrow head follow the bend.
+  const b = DK.box(f);
+  close(b.h, 80, 0.5, 'hoogte van de bocht');
+  assert.ok(DK.hitOne(f, 100, 80, 2), 'op de bocht is raak');
+  assert.ok(!DK.hitOne(f, 100, 0, 2), 'op de oude rechte lijn niet meer');
+  const end = DK.lineEnd(f);
+  assert.ok(end.a < -0.2 && end.a > -Math.PI / 2, 'na de bocht omlaag komt de lijn weer omhoog: de punt wijst schuin omhoog: ' + end.a);
+  // A second anchor on the right half goes after the first.
+  const j = DK.insertVia(f, 160, 50);
+  assert.strictEqual(j, 2);
+  assert.deepStrictEqual(J(f.via.map((q) => q.map(Math.round))), [[100, 80], [160, 50]]);
+  // Moving, turning and scaling take the anchors along.
+  const m = DK.transform(f, { dx: 10, dy: 5 });
+  assert.deepStrictEqual(J(m.via[0]), [110, 85]);
+  const r = DK.transform(f, { drot: 180 });
+  const c = DK.centre(f);
+  close(r.via[0][0], 2 * c[0] - 100, 0.01, 'gedraaid om het midden');
+  // Straightening: removing the last anchor makes it a plain line again.
+  DK.removeVia(f, 2); DK.removeVia(f, 1);
+  assert.strictEqual(DK.bent(f), false);
+  assert.strictEqual(f.via, undefined);
+});

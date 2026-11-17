@@ -197,3 +197,17 @@ body.touch .dk-urbar.big .dk-ur-ic svg { width: 1.6rem; height: 1.6rem; }
 .dk-grip:hover i, .dk-grip.busy i { border-color: var(--accent); background-color: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); height: 3.8rem; }
 body.touch .dk-grip { width: 22px; margin: 0 -11px; }
 body.touch .dk-grip i { width: 12px; height: 3.6rem; background-position: 3px center, 6px center; }
+
+/* Anchors of a selected line or arrow (bend points), 1.54 */
+.dk-pts { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.dk-pts[hidden], .dk-pt[hidden] { display: none; }
+.dk-pt { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #fff; border: 2.5px solid #2f8cff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); pointer-events: auto; touch-action: none; cursor: grab; transition: transform 0.12s ease; }
+.dk-pt::after { content: ''; position: absolute; inset: -12px; border-radius: 50%; }
+.dk-pt.end { border-color: #ffd21f; }
+.dk-pt.via { background: #2f8cff; border-color: #fff; width: 16px; height: 16px; margin: -8px 0 0 -8px; }
+.dk-pt.mid { width: 12px; height: 12px; margin: -6px 0 0 -6px; background: rgba(255, 255, 255, 0.85); border: 1.5px solid #2f8cff; opacity: 0.85; }
+.dk-pt.mid::before { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font: 800 11px/1 system-ui, sans-serif; color: #2f8cff; }
+.dk-pt:hover, .dk-pt.busy { transform: scale(1.25); }
+.dk-pt.busy { cursor: grabbing; }
+body.touch .dk-pt { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+body.touch .dk-pt.mid { width: 16px; height: 16px; margin: -8px 0 0 -8px; }

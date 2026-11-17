@@ -31,7 +31,7 @@ function coaNewPlan(name) {
     hhour: Math.ceil(now / 300000) * 300000,
     lat: null, lon: null, posAt: null, posLabel: '', mmsi: null, dr: false,
     windSrc: { kind: 'manual' }, heights: [coaBaseRow(), coaBaseRow(), coaBaseRow()], sep: 500,
-    baseLat: b.lat, baseLon: b.lon,
+    baseLat: b.lat, baseLon: b.lon, board: 2,
   });
   return id;
 }
@@ -58,7 +58,15 @@ function coaModel(p, offMin = 0) {
   let shadow = C.shadow(sun.az, sun.alt);
   if (!shadow && dark && moon.fraction > 0.35) { const m = C.shadow(moon.az, moon.alt); if (m) shadow = { ...m, moon: true }; }
   const brc = p.brc == null ? null : coas.find((c) => c.brc) || null;
+  // Sun and moon right now at the same place (the ship's position, or where dead reckoning puts it now),
+  // beside the H-hour: the header shows "now", so the two can be laid side by side.
+  const tNow = Date.now();
+  const posNow = pos && p.dr && pos.dr ? C.positionAt({ ...p, hhour: tNow }) || pos : pos;
+  const latNow = posNow ? posNow.lat : lat, lonNow = posNow ? posNow.lon : lon;
+  const now = { t: tNow, sun: ASTRO.sunPosition(tNow, latNow, lonNow), moon: ASTRO.moon(tNow, latNow, lonNow), light: ASTRO.light(tNow, latNow, lonNow) };
+  const expectN = p.expect === 0 ? null : p.expect >= 1 && p.expect <= 4 ? p.expect : brc ? brc.n : null;
   return {
+    now, expectN, tac: p.tac === true,
     p, base, pos, lat, lon, at, wd, ws, gust, decl, ref, refText: ref, up: p.up === 'n' ? 0 : at,
     fmt: (t) => C.deg3(disp(t)), disp, coas, brc, sun, moon, light, phase: C.lightPhase(sun.alt), dark,
     glareSun: !!(glareSun && glareSun.on), glareMoon: !!(glareMoon && glareMoon.on), shadow, showShadow: p.shadow !== false, tAstro, offMin, sea,
@@ -98,7 +106,7 @@ function coaCreate(body, w) {
   }
   function load() {
     const it = plan();
-    const keep = P && P._sea !== undefined && P.id === (it && it.id) ? { _sea: P._sea, _wind: P._wind } : {};
+    const keep = P && P._sea !== undefined && P.id === (it && it.id) ? { _sea: P._sea, _wind: P._wind, _windNow: P._windNow, _shipNow: P._shipNow } : {};
     P = it ? { ...it, ...keep } : null;
     if (P && !Array.isArray(P.heights)) P.heights = [coaBaseRow(), coaBaseRow(), coaBaseRow()];
   }
@@ -118,7 +126,7 @@ function coaCreate(body, w) {
     if (!saveTimer) return;
     clearTimeout(saveTimer); saveTimer = null;
     if (!P || !P.id) return;
-    const out = { ...P }; delete out.id; delete out.updatedAt; delete out._sea; delete out._wind;
+    const out = { ...P }; for (const k of ['id', 'updatedAt', '_sea', '_wind', '_windNow', '_shipNow']) delete out[k];
     OPS.put('coa', 'plans', P.id, out);
   }
   const unsub = OPS.on('coa', (what) => {
@@ -133,10 +141,28 @@ function coaCreate(body, w) {
 
   /* ---------- toolbar ---------- */
   const sel = h('select', { class: 'input zp-sel coa-sel', title: 'Plan kiezen', onchange: () => { flush(); cfg.planId = sel.value || null; save(); layer.clearSel(); load(); paint({ inputs: true }); fetchSoon(true); } });
+  // The quick settings of the picture, behind one button (1.54): north reference, what points up, the
+  // shadow and the tactical bearings. All part of the plan, so every screen and the A5 card follow.
   const refSeg = segmented([{ value: 'T', label: '°T', title: 'Ware graden (true)' }, { value: 'M', label: '°M', title: 'Magnetische graden: met de variatie op de positie (WMM2025)' }], 'T', (v) => set({ ref: v }));
   const upSeg = segmented([{ value: 'at', label: 'AT boven', title: 'De Assault Track wijst omhoog: de heli komt van onderen' }, { value: 'n', label: 'N boven', title: 'Noord boven' }], 'at', (v) => set({ up: v }));
-  // The shadow of the ship (sun or moon) beside each ship: part of the plan, so every screen and the A5 card follow.
-  const shadowSw = switchTool('Schaduw', 'De schaduw van het schip (zon of maan) naast elk schip aan of uit, ook op de A5-afdruk', () => !P || P.shadow !== false, () => set({ shadow: !(P && P.shadow !== false) }, { repaintInputs: false }));
+  const shadowSw = switchTool('', 'De schaduw van het schip (zon of maan) naast elk schip aan of uit, ook op de A5-afdruk', () => !P || P.shadow !== false, () => set({ shadow: !(P && P.shadow !== false) }, { repaintInputs: false }));
+  const tacSw = switchTool('', 'De tactische peilingen 45°, 90° en 139° vanaf de boeg rond elk schip aan of uit, ook op de afdruk', () => !!(P && P.tac), () => set({ tac: !(P && P.tac) }, { repaintInputs: false }));
+  const layoutSeg = segmented(Object.entries(COA_PRINT_LAYOUTS).map(([k, l]) => ({ value: k, label: k.toUpperCase(), title: `${l.name}: ${l.hint}` })), 'a', (v) => set({ printLayout: v }, { repaintInputs: false }));
+  const setRow = (title, sub, ctl) => h('div', { class: 'coa-setrow' }, h('div', { class: 'coa-settxt' }, h('b', {}, title), h('small', {}, sub)), ctl);
+  const setPanel = h('div', { class: 'coa-setpop', hidden: true, role: 'dialog', 'aria-label': 'Weergave' },
+    h('div', { class: 'coa-sethead' }, h('b', {}, 'Weergave'), h('small', {}, 'Geldt voor dit plan, op alle schermen en op de afdruk')),
+    setRow('Noord', 'Ware of magnetische graden', refSeg),
+    setRow('Boven', 'Wat er omhoog wijst', upSeg),
+    setRow('Schaduw', 'Van zon of maan naast elk schip', shadowSw),
+    setRow('Tactische graden', '45°, 90° en 139° rond het schip', tacSw),
+    setRow('Afdruk', 'Indeling van de A5-kaart, PDF en e-mail', layoutSeg));
+  const setBtn = h('button', { class: 'btn zp-btn coa-setbtn', title: 'Weergave: noord, boven, schaduw en tactische graden', 'aria-haspopup': 'dialog', onclick: (ev) => { ev.stopPropagation(); setPanel.hidden = !setPanel.hidden; setBtn.classList.toggle('on', !setPanel.hidden); } }, icon('gear'), 'Weergave', h('span', { class: 'coa-setsum' }));
+  const setWrap = h('span', { class: 'coa-setwrap' }, setBtn, setPanel);
+  const closeSet = (ev) => { if (!setPanel.hidden && !setWrap.contains(ev.target)) { setPanel.hidden = true; setBtn.classList.remove('on'); } };
+  document.addEventListener('pointerdown', closeSet, true);
+  cleanups.push(() => document.removeEventListener('pointerdown', closeSet, true));
+  // Which COA is expected (most likely): framed on the board and on the print. Auto = the one on the BRC.
+  const expSel = h('select', { class: 'input zp-sel coa-expsel', title: 'Verwachte COA (most likely): krijgt de oranje rand, ook op de afdruk', onchange: () => set({ expect: expSel.value === 'auto' ? null : +expSel.value }) });
   const drawSw = switchTool('Tekenen', 'Tekenen op de COA-planning aan of uit: de tekengereedschappen staan dan links', () => cfg.draw, () => { cfg.draw = !cfg.draw; save(); paintMode(); });
   const newBtn = h('button', { class: 'btn zp-btn primary', title: 'Een nieuw plan', onclick: () => {
     const n = coaPlans().length + 1;
@@ -157,13 +183,24 @@ function coaCreate(body, w) {
   const printBtn = h('button', { class: 'btn zp-btn primary', title: 'Afdrukken op A5 staand, voor het kniebord', onclick: () => exportA5('print') }, icon('note'), 'Afdrukken A5');
   const mailBtn = h('button', { class: 'btn zp-btn', title: 'Deze COA-planning e-mailen vanaf het dashboardadres (PDF en/of afbeelding)', onclick: () => mailPlan() }, icon('mail'), 'E-mail');
   bar.append(h('span', { class: 'mp-title coa-title' }, icon('target'), 'COA PLANNER'), sel, newBtn, renBtn, delBtn,
-    h('span', { class: 'coa-barsep' }), refSeg, upSeg, shadowSw, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn, mailBtn, pdfBtn, printBtn);
+    h('span', { class: 'coa-barsep' }), setWrap, drawSw, shipBtn, h('span', { class: 'zp-spacer' }), missionBtn,
+    h('label', { class: 'coa-explbl', title: 'Verwachte COA (most likely)' }, h('span', {}, 'Verwacht'), expSel), mailBtn, pdfBtn, printBtn);
   function paintBar() {
     const list = coaPlans();
     sel.replaceChildren(...list.map((p) => h('option', { value: p.id, selected: p.id === cfg.planId || null }, p.name)));
     sel.value = cfg.planId || '';
     if (P) { refSeg.setValue(P.ref === 'M' ? 'M' : 'T'); upSeg.setValue(P.up === 'n' ? 'n' : 'at'); }
-    shadowSw.paint();
+    shadowSw.paint(); tacSw.paint();
+    layoutSeg.setValue(P && COA_PRINT_LAYOUTS[P.printLayout] ? P.printLayout : 'a');
+    // What the settings are now, small beside the button: "°T · AT↑".
+    setBtn.querySelector('.coa-setsum').textContent = P ? `°${P.ref === 'M' ? 'M' : 'T'} · ${P.up === 'n' ? 'N' : 'AT'}↑` : '';
+    const brcN = vm && vm.brc ? vm.brc.n : null;
+    const ex = P ? P.expect : null;
+    expSel.replaceChildren(
+      h('option', { value: 'auto' }, brcN ? `Auto · COA ${brcN} (BRC)` : 'Auto (BRC)'),
+      ...[1, 2, 3, 4].map((n) => h('option', { value: String(n) }, `COA ${n}`)),
+      h('option', { value: '0' }, 'Geen'));
+    expSel.value = ex === 0 ? '0' : ex >= 1 && ex <= 4 ? String(ex) : 'auto';
     drawSw.paint();
     // How many drawings the ship of this plan has.
     const n = P ? OPS.list('coa', 'shipmarks').filter((m) => m.plan === P.id).length : 0;
@@ -213,12 +250,17 @@ function coaCreate(body, w) {
   // The two steps before anything is typed: 1. the ship (position, and from AIS its course and speed),
   // 2. the weather at that position on the H-hour.
   const stepBtn = (n, title, sub, onclick) => {
-    const el = h('button', { class: 'coa-stepcta', onclick }, h('span', { class: 'coa-stepn' }, String(n)), h('span', { class: 'coa-steptxt' }, h('b', {}, `${n}. ${title}`), h('small', {}, sub)), icon('right'));
+    const subEl = h('small', {}, sub);
+    const el = h('button', { class: 'coa-stepcta', onclick }, h('span', { class: 'coa-stepn' }, String(n)), h('span', { class: 'coa-steptxt' }, h('b', {}, `${n}. ${title}`), subEl), icon('right'));
     el.setNum = (done) => { el.classList.toggle('done', done); el.querySelector('.coa-stepn').replaceChildren(done ? icon('check') : String(n)); };
+    el.setSub = (t) => { subEl.textContent = t; };
     return el;
   };
   const posBtn = stepBtn(1, 'Kies schip', 'Positie, koers en vaart (AIS)', () => pickPosition());
-  const wxBtn = stepBtn(2, 'Weer overnemen', 'Wind op de positie op het H-uur', () => windFromModel(true));
+  // Step 2 in two ways (1.54): the wind at the ship now (its live AIS position, else the fix carried
+  // forward), or the forecast for the H-hour at the position the ship will be in then.
+  const wxShipBtn = stepBtn('2a', 'Weer bij schip overnemen', 'Wind nu op de positie van het schip', () => windFromShip(true));
+  const wxBtn = stepBtn('2b', 'Weer H-hour overnemen', 'Verwachte wind op het H-uur op de positie', () => windFromModel(true));
   const wxEl = h('div', { class: 'coa-pos coa-wxstate' });
   const posEl = h('div', { class: 'coa-pos' });
   const drChk = h('input', { type: 'checkbox', onchange: (e) => set({ dr: e.target.checked }) });
@@ -229,6 +271,7 @@ function coaCreate(body, w) {
   const nowBtn = h('button', { class: 'btn zp-btn coa-now', title: 'H-uur op nu', onclick: () => set({ hhour: Math.round(Date.now() / 60000) * 60000 }) }, 'Nu');
   const slider = h('input', { class: 'coa-slider', type: 'range', min: '-720', max: '720', step: '10', value: '0', title: 'Tijdschuif: zon en maan rond het H-uur' });
   const sliderLbl = h('span', { class: 'coa-sliderlbl' });
+  const hWarn = h('div', { class: 'coa-warn coa-hwarn', hidden: true });
   slider.addEventListener('input', () => { offMin = +slider.value; paint({ inputs: false }); });
   const sliderReset = h('button', { class: 'coa-clear', title: 'Terug naar het H-uur', onclick: () => { offMin = 0; slider.value = '0'; paint({ inputs: false }); } }, icon('refresh'));
   const metarBtn = h('button', { class: 'btn zp-btn', title: 'De wind uit de laatste METAR van de basis', onclick: () => windFromMetar() }, icon('cloud'), 'METAR');
@@ -236,10 +279,10 @@ function coaCreate(body, w) {
   input.append(
     h('section', { class: 'coa-sec coa-steps' }, h('h3', {}, 'In twee stappen'),
       posBtn, posEl, h('label', { class: 'check coa-dr' }, drChk, 'Gegist bestek naar het H-uur'),
-      wxBtn, wxEl),
+      wxShipBtn, wxBtn, wxEl),
     sec('Koers en vaart', atIn, brcIn, bsIn),
     sec('Wind', wdIn, wsIn, gustIn, h('div', { class: 'coa-srcrow' }, windSrcEl, metarBtn)),
-    sec('H-uur (UTC)', h('div', { class: 'coa-hrow' }, dateIn, timeIn, nowBtn), h('div', { class: 'coa-srow' }, icon('sun'), slider, sliderReset), sliderLbl),
+    sec('H-uur (UTC)', h('div', { class: 'coa-hrow' }, dateIn, timeIn, nowBtn), h('div', { class: 'coa-srow' }, icon('sun'), slider, sliderReset), sliderLbl, hWarn),
   );
   function paintInputs() {
     if (!P) return;
@@ -255,15 +298,23 @@ function coaCreate(body, w) {
     const src = P.windSrc || manual;
     const age = wxAge();
     const old = age && age.old ? ` · ${ageText(age.ms)} oud` : '';
-    windSrcEl.textContent = src.kind === 'model' ? `Open-Meteo op positie${src.at ? ' · ' + zulu(src.at) : ''}${old}` : src.kind === 'metar' ? `METAR ${src.label || ''}${src.at ? ' · ' + zulu(src.at) : ''}${old}` : 'Handmatig ingevuld';
-    windSrcEl.className = 'coa-src ' + src.kind + (old ? ' old' : '');
+    windSrcEl.textContent = src.kind === 'model' ? `Open-Meteo, H-uur op positie${src.at ? ' · ' + zulu(src.at) : ''}${old}` : src.kind === 'ship' ? `Open-Meteo, nu bij het schip${src.at ? ' · ' + zulu(src.at) : ''}${old}` : src.kind === 'metar' ? `METAR ${src.label || ''}${src.at ? ' · ' + zulu(src.at) : ''}${old}` : 'Handmatig ingevuld';
+    windSrcEl.className = 'coa-src ' + (src.kind === 'ship' ? 'model' : src.kind) + (old ? ' old' : '');
     const has = P.lat != null;
     posBtn.setNum(has);
+    wxShipBtn.setNum(has && src.kind === 'ship');
     wxBtn.setNum(has && src.kind === 'model');
-    wxBtn.disabled = !has;
+    wxShipBtn.disabled = !has; wxBtn.disabled = !has;
+    const hz = `${zulu(P.hhour || Date.now())}`;
+    const wn = P._windNow, wh = P._wind;
+    const wtxt = (x) => `${vm.fmt(x.dirDeg)}°${vm.refText} / ${Math.round(x.speedKt)}${x.gustKt != null && x.gustKt > x.speedKt + 2 ? 'G' + Math.round(x.gustKt) : ''} kt`;
+    wxShipBtn.setSub(has && wn && wn.ok ? `Nu ${wtxt(wn)} · ${P._shipNow && P._shipNow.src === 'ais' ? 'AIS-positie' : P._shipNow && P._shipNow.src === 'dr' ? 'gegist naar nu' : 'gekozen positie'}` : 'Wind nu op de positie van het schip');
+    wxBtn.setSub(has && wh && wh.ok ? `${hz}: ${wtxt(wh)}${wh.past ? ' (H-uur voorbij: nu)' : ''}` : `Verwachte wind op het H-uur (${hz})`);
+    const applied = `${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt`;
     wxEl.replaceChildren(!has ? h('small', {}, 'Eerst stap 1: het schip.')
-      : src.kind === 'model' ? h('small', { class: old ? 'coa-old' : '' }, `Overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt${src.at ? ' · verwachting ' + zulu(src.at) : ''}${old}`)
-        : h('small', {}, src.kind === 'metar' ? `Nu: wind uit de METAR van ${src.label || 'de basis'}` : 'Nu: wind met de hand ingevuld'));
+      : src.kind === 'model' ? h('small', { class: old ? 'coa-old' : '' }, `In gebruik (2b): ${applied}${src.at ? ' · verwachting voor ' + zulu(src.at) : ''}${src.past ? ' · H-uur ligt in het verleden, wind van nu' : ''}${old}`)
+        : src.kind === 'ship' ? h('small', { class: old ? 'coa-old' : '' }, `In gebruik (2a): ${applied} · nu bij het schip${src.at ? ' (' + zulu(src.at) + ')' : ''}${old}`)
+          : h('small', {}, src.kind === 'metar' ? `In gebruik: wind uit de METAR van ${src.label || 'de basis'}` : 'In gebruik: wind met de hand ingevuld'));
     posEl.replaceChildren(
       has ? h('b', {}, PlanCoords.fmt(P.lat, P.lon, 'ddm')) : h('b', { class: 'muted' }, 'Nog geen positie gekozen'),
       h('small', {}, has ? `${P.posLabel || 'Gekozen punt'}${P.posAt ? ' · fix ' + zulu(P.posAt) : ''}` : `Zon en maan voor ${vm.base.name}`),
@@ -272,6 +323,13 @@ function coaCreate(body, w) {
     const t = vm.tAstro;
     sliderLbl.textContent = offMin ? `Zon/maan op H${offMin > 0 ? '+' : '−'}${pad2(Math.floor(Math.abs(offMin) / 60))}:${pad2(Math.abs(offMin) % 60)} · ${zulu(t)}` : `Zon/maan op het H-uur · ${zulu(t)}`;
     sliderReset.hidden = !offMin;
+    // An H-hour far from now (an old plan opened again): say so, since sun, moon and the forecast follow it.
+    const dh = ((P.hhour || Date.now()) - Date.now()) / 3600000;
+    hWarn.hidden = Math.abs(dh) < 3;
+    if (!hWarn.hidden) {
+      const span = Math.abs(dh) >= 36 ? `${Math.round(Math.abs(dh) / 24)} dagen` : `${Math.round(Math.abs(dh))} uur`;
+      hWarn.replaceChildren(icon('alert'), h('span', {}, h('b', {}, `H-uur ligt ${span} ${dh < 0 ? 'in het verleden' : 'vooruit'}`), ' · zon, maan en de H-hour-wind gelden voor dat moment. ', h('button', { class: 'btn zp-btn coa-hnow', onclick: () => set({ hhour: Math.round(Date.now() / 60000) * 60000 }) }, 'H-uur op nu')));
+    }
   }
 
   /* ---------- the board ---------- */
@@ -321,7 +379,7 @@ function coaCreate(body, w) {
     const rc = c.rel ? (c.rel.side === 'G' ? 'g' : c.rel.side === 'R' ? 'r' : '') : '';
     return card('coa-brc', `Op BRC · COA ${c.n}`, h('span', { class: 'coa-badge' }, `${vm.fmt(c.heading)}°${vm.refText} · ${Math.round(+P.bs)} kt`),
       h('div', { class: 'coa-big' }, h('span', { class: 'coa-wind' }, `${c.app.dir == null ? '---' : vm.fmt(c.app.dir)}°${vm.refText} / ${Math.round(c.app.spd)} kt`), h('span', { class: 'coa-rel ' + rc + (c.rel ? '' : ' calm') }, coaRelText(c))),
-      h('div', { class: 'coa-line' }, `Helo on AT: ${coaHeloText(c.helo)}${c.gust ? ` · gust ${Math.round(c.gust.spd)} kt` : ''} · approach from ${c.approach.text}`));
+      h('div', { class: 'coa-line' }, `Helo on AT: ${coaHeloText(c.helo)}${c.gust ? ` · gust ${Math.round(c.gust.spd)} kt` : ''} · approach ${c.approach.text}`));
   }
   function seaCard() {
     const sea = P._sea, wind = P._wind;
@@ -340,31 +398,41 @@ function coaCreate(body, w) {
       rel ? kv('Ship motion', rel.motion.replace(/^./, (x) => x.toUpperCase()), 'em') : null,
       m && m.swell != null ? kv('Swell', `${m.swell.toFixed(1)} m${m.swellPeriod ? ` · ${Math.round(m.swellPeriod)} s` : ''}`) : null,
       m && m.sst != null ? kv('Sea temp (SST)', `${m.sst.toFixed(1)} °C`) : null);
-    const wrow = wind && wind.ok ? h('div', { class: 'coa-wx' }, icon('wind'), h('div', {},
-      h('b', {}, `${vm.fmt(wind.dirDeg)}°${vm.refText} / ${Math.round(wind.speedKt)}${wind.gustKt != null ? 'G' + Math.round(wind.gustKt) : ''} kt`),
-      h('small', {}, `Forecast for H (${zulu(wind.validTime)}), Open-Meteo`)),
-      h('button', { class: 'btn zp-btn', title: 'Deze wind in de COA Planner zetten (stap 2)', onclick: () => windFromModel(true) }, 'Overnemen'))
-      : wind && !wind.ok ? h('p', { class: 'coa-hint' }, `Wind: ${wind.error || 'niet beschikbaar'}`) : null;
+    const wnow = P._windNow, sh = P._shipNow;
+    const wline = (x, label, sub, btn, fn, on) => h('div', { class: 'coa-wx' + (on ? ' on' : '') }, icon('wind'), h('div', {},
+      h('b', {}, `${vm.fmt(x.dirDeg)}°${vm.refText} / ${Math.round(x.speedKt)}${x.gustKt != null ? 'G' + Math.round(x.gustKt) : ''} kt`),
+      h('small', {}, `${label} · ${sub}`)),
+      h('button', { class: 'btn zp-btn' + (on ? ' on' : ''), title: `Deze wind in de COA Planner zetten (stap ${btn})`, onclick: fn }, on ? `${btn} ✓` : btn));
+    const kind = P.windSrc && P.windSrc.kind;
+    const wrow = h('div', { class: 'coa-wxrows' },
+      wnow && wnow.ok ? wline(wnow, `Now ${zulu(wnow.validTime)}`, sh && sh.src === 'ais' ? 'live AIS position' : sh && sh.src === 'dr' ? 'DR position now' : 'chosen position', '2a', () => windFromShip(true), kind === 'ship') : null,
+      wind && wind.ok ? wline(wind, `H-hour ${zulu(wind.validTime)}`, wind.past ? 'H-hour passed: now' : vm.pos && vm.pos.dr ? 'DR position at H' : 'position at H', '2b', () => windFromModel(true), kind === 'model') : null,
+      wind && !wind.ok ? h('p', { class: 'coa-hint' }, `Wind: ${wind.error || 'niet beschikbaar'}`) : null);
     const near = sea && Array.isArray(sea.nearest) && sea.nearest.length ? h('p', { class: 'coa-hint' }, 'Dichtstbij gemeten: ' + sea.nearest.slice(0, 2).map((o) => `${o.name} ${o.hs != null ? o.hs.toFixed(1).replace('.', ',') + ' m' : ''} (${Math.round(o.km)} km)`).join(' · ')) : null;
     return card('coa-seacard', 'Zee en weer', h('span', { class: 'coa-badge' }, where), h('div', { class: 'coa-searow' }, tile, rows), wrow, near,
       sea && sea.modelError ? h('p', { class: 'coa-hint' }, `Golfmodel: ${sea.modelError}`) : null);
   }
-  // One row per body: disc, name, direction (or light level) and the detail, in fixed columns so all three line up.
-  const bodyRow = (kind, down, disc, name, value, sub) => h('div', { class: `coa-body2 coa-b-${kind}` + (down ? ' coa-down' : ''), title: down ? `${name === 'SUN' ? 'Zon' : 'Maan'} onder de horizon` : '' },
-    h('span', { class: 'coa-bodydisc' }, disc), h('small', {}, name), h('b', {}, value), h('span', { class: 'coa-bodysub' }, sub));
+  // One row per body, in fixed columns: disc, name, then the H-hour and now side by side (1.54), each with
+  // direction and elevation, so the "now" column can be laid next to the header of the dashboard.
+  const cell = (main, sub, down) => h('div', { class: 'coa-bcell' + (down ? ' coa-down' : '') }, h('b', {}, main), h('span', {}, sub));
+  const bodyRow = (kind, disc, name, atH, atNow) => h('div', { class: `coa-body2 coa-b-${kind}` }, h('span', { class: 'coa-bodydisc' }, disc), h('small', {}, name), atH, atNow);
   function astroCard() {
-    const s = vm.sun, m = vm.moon, lx = ASTRO.formatLux(vm.light.lux);
+    const s = vm.sun, m = vm.moon, n = vm.now;
+    const lx = ASTRO.formatLux(vm.light.lux), lxn = ASTRO.formatLux(n.light.lux);
     const warn = [];
     if (vm.glareSun) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Approach into sun'), ` · elevation ${Math.round(s.alt)}°, ${Math.round(Math.abs(C.signed(s.az - vm.at)))}° off the AT`)));
     if (vm.glareMoon) warn.push(h('div', { class: 'coa-warn' }, icon('alert'), h('span', {}, h('b', {}, 'Approach into moon (NVG)'), ` · elevation ${Math.round(m.alt)}°, ${Math.round(m.fraction * 100)}% illuminated, ${Math.round(Math.abs(C.signed(m.az - vm.at)))}° off the AT`)));
+    const el = (a) => `${a >= 0 ? '' : '−'}${Math.abs(a).toFixed(1).replace('.', ',')}°`;
+    const head = h('div', { class: 'coa-body2 coa-bhead' }, h('span'), h('small'), h('small', {}, `H ${zulu(vm.tAstro)}${offMin ? ' (schuif)' : ''}`), h('small', {}, `Nu ${zulu(n.t)}`));
     return card('coa-astro', 'Zon en maan', h('span', { class: 'coa-badge' + (vm.dark ? ' night' : '') }, vm.phase ? vm.phase.name : ''),
-      h('div', { class: 'coa-bodies' },
-        bodyRow('sun', s.alt < 0, h('span', { class: 'coa-sundisc' }), 'SUN', `${vm.fmt(s.az)}°${vm.refText}`, `elev ${Math.round(s.alt)}°`),
-        bodyRow('moon', m.alt < 0, moonSvg(m, 'mo-disc coa-moondisc'), 'MOON', `${vm.fmt(m.az)}°${vm.refText}`, `elev ${Math.round(m.alt)}° · ${Math.round(m.fraction * 100)}%`),
-        bodyRow('lux', false, h('span', { class: 'coa-luxdisc' }), 'LIGHT', `${lx.value} ${lx.unit}`, m.phaseName)),
+      h('div', { class: 'coa-bodies' }, head,
+        bodyRow('sun', h('span', { class: 'coa-sundisc' }), 'SUN', cell(`${vm.fmt(s.az)}°${vm.refText}`, `elev ${el(s.alt)}`, s.alt < 0), cell(`${vm.fmt(n.sun.az)}°${vm.refText}`, `elev ${el(n.sun.alt)}`, n.sun.alt < 0)),
+        bodyRow('moon', moonSvg(m, 'mo-disc coa-moondisc'), 'MOON', cell(`${vm.fmt(m.az)}°${vm.refText}`, `elev ${el(m.alt)} · ${Math.round(m.fraction * 100)}%`, m.alt < 0), cell(`${vm.fmt(n.moon.az)}°${vm.refText}`, `elev ${el(n.moon.alt)} · ${Math.round(n.moon.fraction * 100)}%`, n.moon.alt < 0)),
+        bodyRow('lux', h('span', { class: 'coa-luxdisc' }), 'LIGHT', cell(`${lx.value} ${lx.unit}`, vm.phase ? vm.phase.name : ''), cell(`${lxn.value} ${lxn.unit}`, C.lightPhase(n.sun.alt) ? C.lightPhase(n.sun.alt).name : ''))),
+      h('p', { class: 'coa-hint' }, `Maan: ${m.phaseName}.`),
       ...warn,
       vm.shadow ? h('p', { class: 'coa-hint' }, `Schaduw ${vm.shadow.moon ? 'van de maan ' : ''}valt naar ${vm.fmt(vm.shadow.dir)}°${vm.refText}, ${vm.shadow.len < 1 ? 'kort' : vm.shadow.len < 2.5 ? 'middellang' : 'lang'}${vm.showShadow ? ' (getekend naast elk schip)' : ' (niet getekend: Schaduw staat uit)'}.`) : null,
-      h('p', { class: 'coa-hint' }, `${offMin ? 'Tijdschuif ' : ''}${zulu(vm.tAstro)} · ${vm.ref === 'M' ? `variatie ${Math.abs(vm.decl).toFixed(1).replace('.', ',')}°${vm.decl >= 0 ? 'E' : 'W'} · ` : ''}${vm.pos ? 'op de positie van het schip' : 'voor ' + vm.base.name}`));
+      h('p', { class: 'coa-hint' }, `${vm.ref === 'M' ? `Variatie ${Math.abs(vm.decl).toFixed(1).replace('.', ',')}°${vm.decl >= 0 ? 'E' : 'W'} · ` : ''}${vm.pos ? (vm.pos.dr ? 'Op de gegiste positie van het schip' : 'Op de positie van het schip') : 'Voor ' + vm.base.name} (${PlanCoords.fmt(vm.lat, vm.lon, 'ddm')}). Elevatie met straalbreking; ware graden tenzij °M.`));
   }
   // The heights card. Typing in it never repaints the whole column (the focus would be lost); a change
   // repaints only what depends on it: the red rows, the cross-section and the conflicts.
@@ -419,29 +487,67 @@ function coaCreate(body, w) {
     const pos = C.positionAt(P) || { lat: P.lat, lon: P.lon };
     const hour = Math.floor((P.hhour || Date.now()) / 3600000);
     // Rounded as the sources round it: a few hundred metres more never asks again.
-    const key = `${P.id}|${pos.lat.toFixed(2)}|${pos.lon.toFixed(2)}|${hour}`;
+    // The wind at the ship "now" is asked again every ten minutes.
+    const key = `${P.id}|${pos.lat.toFixed(2)}|${pos.lon.toFixed(2)}|${hour}|${P.mmsi || ''}|${Math.floor(Date.now() / 600000)}`;
     if (!force && key === fetchKey) return;
     fetchKey = key;
     const id = P.id;
-    const [sea, wind] = await Promise.all([
+    const ship = await shipNow();
+    const ask = (q) => window.palv.plan.windPoints([{ lat: q.lat, lon: q.lon, time: q.time, ftAmsl: 0, interp: true }]).then((r) => (r && Array.isArray(r.list) ? r.list[0] : null)).catch(() => null);
+    const [sea, wind, windNow] = await Promise.all([
       window.palv.data.seaAt(pos.lat, pos.lon).catch(() => null),
-      window.palv.plan.windPoints([{ lat: pos.lat, lon: pos.lon, time: P.hhour || Date.now(), ftAmsl: 0 }]).then((r) => (r && Array.isArray(r.list) ? r.list[0] : null)).catch(() => null),
+      ask({ lat: pos.lat, lon: pos.lon, time: P.hhour || Date.now() }),
+      ship ? ask({ lat: ship.lat, lon: ship.lon, time: Date.now() }) : Promise.resolve(null),
     ]);
     if (!P || P.id !== id) return;
-    P._sea = sea; P._wind = wind;
+    P._sea = sea; P._wind = wind; P._windNow = windNow; P._shipNow = ship;
     // A plan whose wind came from the model follows the model; a wind typed by hand stays.
-    if (wind && wind.ok && P.windSrc && P.windSrc.kind === 'model') windFromModel(false);
+    const kind = P.windSrc && P.windSrc.kind;
+    if (kind === 'model' && wind && wind.ok) windFromModel(false);
+    else if (kind === 'ship' && windNow && windNow.ok) windFromShip(false);
     else paint({ inputs: false });
     checkWxAge();
   }
+  // Where the ship is right now: its live AIS position when it was picked from AIS, else the fix carried
+  // forward on its course and speed (up to a day), else the fix itself.
+  async function shipNow() {
+    if (!P || P.lat == null) return null;
+    const t = Date.now();
+    if (P.mmsi) {
+      try {
+        const r = await window.palv.ais.snap(0);
+        const v = r && r.ok && Array.isArray(r.vessels) ? r.vessels.find((x) => x.mmsi === P.mmsi) : null;
+        const q = v ? (typeof osNow === 'function' ? osNow(v, t) : v.lat != null ? [v.lat, v.lon] : null) : null;
+        if (q) return { lat: q[0], lon: q[1], src: 'ais', at: v.posAt || t };
+      } catch { /* AIS not there: the fix */ }
+    }
+    if (P.brc != null && +P.bs > 0 && P.posAt) {
+      const q = C.positionAt({ ...P, dr: true, hhour: t });
+      if (q && q.dr) return { lat: q.lat, lon: q.lon, src: 'dr', at: t };
+    }
+    return { lat: P.lat, lon: P.lon, src: 'fix', at: P.posAt || t };
+  }
+  const gustOf = (x) => (x.gustKt != null && x.gustKt > x.speedKt + 2 ? Math.round(x.gustKt) : null);
+  // 2b: the forecast for the H-hour (between the model hours, to the minute) at the H-hour position.
   function windFromModel(ask) {
     const wd = P && P._wind;
     if (!wd || !wd.ok) {
-      if (ask) { if (P && P.lat == null) toast('Kies eerst de positie van het schip', true); else { toast('De wind op de positie wordt opgehaald…'); fetchSoon(true); P.windSrc = { kind: 'model' }; } }
+      if (ask) { if (P && P.lat == null) toast('Kies eerst de positie van het schip', true); else { toast('De verwachte wind op het H-uur wordt opgehaald…'); P.windSrc = { kind: 'model' }; fetchSoon(true); } }
       return;
     }
-    set({ wd: C.norm(wd.dirDeg), ws: Math.round(wd.speedKt), gust: wd.gustKt != null && wd.gustKt > wd.speedKt + 2 ? Math.round(wd.gustKt) : null, windSrc: { kind: 'model', at: wd.validTime, fetched: wd.fetchedAt || Date.now() } });
-    if (ask) toast(`Weer overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt op de positie`);
+    set({ wd: C.norm(wd.dirDeg), ws: Math.round(wd.speedKt), gust: gustOf(wd), windSrc: { kind: 'model', at: wd.validTime, fetched: wd.fetchedAt || Date.now(), past: !!wd.past } });
+    if (ask) toast(`H-hour-weer overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt voor ${zulu(wd.validTime)}${wd.past ? ' (het H-uur is voorbij: de wind van nu)' : ''}`);
+  }
+  // 2a: the wind now, at the position the ship is in now.
+  function windFromShip(ask) {
+    const wd = P && P._windNow;
+    if (!wd || !wd.ok) {
+      if (ask) { if (P && P.lat == null) toast('Kies eerst het schip (stap 1)', true); else { toast('De wind bij het schip wordt opgehaald…'); P.windSrc = { kind: 'ship' }; fetchSoon(true); } }
+      return;
+    }
+    const s = P._shipNow;
+    set({ wd: C.norm(wd.dirDeg), ws: Math.round(wd.speedKt), gust: gustOf(wd), windSrc: { kind: 'ship', at: wd.validTime, fetched: wd.fetchedAt || Date.now(), pos: s ? s.src : 'fix' } });
+    if (ask) toast(`Weer bij het schip overgenomen: ${vm.fmt(P.wd)}°${vm.refText} / ${Math.round(+P.ws)}${P.gust ? 'G' + Math.round(+P.gust) : ''} kt nu (${s && s.src === 'ais' ? 'live AIS-positie' : s && s.src === 'dr' ? 'gegiste positie van nu' : 'gekozen positie'})`);
   }
   function windFromMetar() {
     const icao = activeBase().icao;
@@ -455,14 +561,14 @@ function coaCreate(body, w) {
   }
   // How old the weather in the plan is: a METAR by its observation time (old after an hour), a model wind
   // by when it was fetched (old after three hours; while online it is refreshed every time it is opened).
-  const WX_OLD = { metar: 60 * 60000, model: 3 * 3600000 };
+  const WX_OLD = { metar: 60 * 60000, model: 3 * 3600000, ship: 60 * 60000 };
   function wxAge() {
     const src = P && P.windSrc;
     if (!src) return null;
-    const t = src.kind === 'metar' ? src.at : src.kind === 'model' ? src.fetched : null;
+    const t = src.kind === 'metar' ? src.at : src.kind === 'model' || src.kind === 'ship' ? src.fetched : null;
     if (!t) return null;
     const ms = Date.now() - t;
-    return { t, ms, old: ms > WX_OLD[src.kind], what: src.kind === 'metar' ? `de METAR van ${src.label || 'de basis'}` : 'de Open-Meteo-verwachting op de positie', kind: src.kind };
+    return { t, ms, old: ms > WX_OLD[src.kind], what: src.kind === 'metar' ? `de METAR van ${src.label || 'de basis'}` : src.kind === 'ship' ? 'Open-Meteo bij het schip' : 'de Open-Meteo-verwachting op de positie', kind: src.kind };
   }
   // Old weather gets a pop-up once per plan and per data time, and only while the tab is in view.
   const wxWarned = new Set();
@@ -484,7 +590,7 @@ function coaCreate(body, w) {
         h('p', { class: 'coa-hint' }, a.kind === 'metar' ? 'Een METAR is een waarneming op de basis, niet een verwachting op de positie van het schip. Neem bij voorkeur het weer op de positie over (stap 2), of controleer de wind voordat je de COA gebruikt.'
           : 'Nieuwe gegevens konden niet worden opgehaald (geen verbinding?). Controleer de wind voordat je de COA gebruikt, of probeer het opnieuw.'),
       ],
-      actions: [{ label: 'Begrepen' }, { label: P.lat != null ? 'Weer opnieuw ophalen' : 'METAR opnieuw', primary: true, onClick: () => { if (P.lat != null) { P.windSrc = { kind: 'model' }; fetchSoon(true); toast('Het weer op de positie wordt opgehaald…'); } else windFromMetar(); } }],
+      actions: [{ label: 'Begrepen' }, { label: P.lat != null ? 'Weer opnieuw ophalen' : 'METAR opnieuw', primary: true, onClick: () => { if (P.lat != null) { P.windSrc = { kind: a.kind === 'ship' ? 'ship' : 'model' }; fetchSoon(true); toast('Het weer op de positie wordt opgehaald…'); } else windFromMetar(); } }],
     });
   }
   const unwatchWx = watchWx(() => {});
@@ -759,76 +865,12 @@ svg { width: 190mm; height: 106.9mm; display: block; margin-top: 1.5mm; }
   }
 
   /* ---------- A5 portrait: print and PDF ---------- */
-  function a5Html(how) {
-    const Pp = COA_PAL.print;
-    const v = vm;
-    const svg = coaBoardSvg(v, Pp, { id: 'p' }).replace('</svg>', `${layer.marks().map((m) => coaMarkSvg(m, Pp)).join('')}</svg>`);
-    const e = escHtml;
-    const d = new Date(P.hhour || Date.now());
-    const dtg = `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z ${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
-    const R = v.refText;
-    const pos = v.pos ? `${PlanCoords.fmt(v.pos.lat, v.pos.lon, 'ddm')}${v.pos.dr ? ' (DR at H)' : ''}` : '—';
-    const heloShort = (hl) => `${hl.head >= 0 ? 'HW' : 'TW'}${Math.abs(Math.round(hl.head))} XW${Math.abs(Math.round(hl.cross))}${hl.side}`;
-    const rows = v.coas.map((c) => `<tr class="${c.brc ? 'brc' : ''}"><td><b>COA ${c.n}</b>${c.brc ? ' <i>BRC</i>' : ''}</td><td>${v.fmt(c.heading)}°</td><td><b>${c.app.dir == null ? '---' : v.fmt(c.app.dir)}° / ${Math.round(c.app.spd)}</b>${c.gust ? ` (G${Math.round(c.gust.spd)})` : ''}</td><td class="${c.rel && c.rel.side === 'G' ? 'g' : c.rel && c.rel.side === 'R' ? 'r' : ''}"><b>${e(coaRelText(c))}</b></td><td>${heloShort(c.helo)}</td><td>${c.approach.text}</td><td>${c.sea ? e(c.sea.name) : '—'}</td></tr>`).join('');
-    const m = P._sea && P._sea.model, ds = m && m.hs != null ? COA_CALC.douglas(m.hs) : null;
-    const srel = m && m.dir != null ? COA_CALC.seaRelative(m.dir, v.brc ? v.brc.heading : v.at) : null;
-    const sea = m ? `Sea state <b>${ds ? ds.code + ' ' + ds.name : '–'}</b> · Hs ${m.hs != null ? m.hs.toFixed(1) + ' m' : '–'} · Tm ${m.period != null ? m.period.toFixed(0) + ' s' : '–'} · waves from ${m.dir != null ? v.fmt(m.dir) + '°' : '–'}${srel ? ` · ${v.brc ? 'on BRC' : 'on COA 1'}: ${srel.name.toLowerCase()}, ${srel.motion}` : ''}${m.sst != null ? ' · SST ' + m.sst.toFixed(0) + ' °C' : ''}` : 'Sea: no data';
-    const warn = [v.glareSun ? 'APPROACH INTO SUN' : '', v.glareMoon ? 'APPROACH INTO MOON (NVG)' : ''].filter(Boolean).join(' · ');
-    const lx = ASTRO.formatLux(v.light.lux);
-    const sm = `Sun <b>${v.fmt(v.sun.az)}°</b> elev ${Math.round(v.sun.alt)}° · Moon <b>${v.fmt(v.moon.az)}°</b> elev ${Math.round(v.moon.alt)}° ${Math.round(v.moon.fraction * 100)}% · ${e(v.phase ? v.phase.name : '')} · ${lx.value} ${lx.unit}`;
-    const conf = COA_CALC.heightConflicts(P.heights, +P.sep || 500);
-    const bad = new Set(conf.flatMap((c) => [c.a.i, c.b.i]));
-    const hrows = P.heights.filter((r) => r.cs || r.type || r.alt || r.role);
-    const xsec = P.heights.some((r) => COA_CALC.parseFt(r.alt) != null) ? coaHeightSvg(P.heights, +P.sep || 500, bad, Pp, { w: 300, h: 150 }) : '';
-    const ht = (hrows.length ? P.heights.map((r, i) => (r.cs || r.type || r.alt || r.role ? `<tr class="${bad.has(i) ? 'bad' : ''}"><td>${e(r.cs || '')}</td><td>${e(r.type || '')}</td><td><b>${e(r.alt || '')}</b></td><td>${e(r.role || '')}</td></tr>` : '')).join('') : '') + Array.from({ length: Math.max(0, 4 - hrows.length) }, () => '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>').join('');
-    return `<!doctype html><html><head><meta charset="utf-8"><style>
-@page { size: A5 portrait; margin: 0; }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: 'Segoe UI', -apple-system, sans-serif; color: #0b1320; font-size: 7.4pt; }
-.pg { width: 132mm; padding: 0; }
-.hd { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1.6pt solid #0b1320; padding-bottom: 1.2mm; }
-.hd h1 { font: 800 12pt Bahnschrift, 'Segoe UI', sans-serif; letter-spacing: 0.08em; margin: 0; }
-.hd span { font-size: 8pt; font-weight: 700; }
-.meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6mm 2mm; margin: 1.4mm 0 1mm; }
-.meta div { border: 0.4pt solid #9aa8bb; border-radius: 1mm; padding: 0.6mm 1.2mm; }
-.meta small { display: block; color: #4a5a70; font-size: 5.6pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.meta b { font-size: 8.2pt; font-family: Consolas, monospace; }
-.board svg { width: 132mm; height: 101.5mm; display: block; }
-table { width: 100%; border-collapse: collapse; margin-top: 1.2mm; }
-th { background: #e6ebf2; font-size: 6pt; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.6mm 0.8mm; border: 0.4pt solid #9aa8bb; text-align: left; }
-td { border: 0.4pt solid #9aa8bb; padding: 0.7mm 0.8mm; font-family: Consolas, monospace; font-size: 7pt; }
-tr.brc td { background: #fff3df; }
-tr.bad td { background: #ffe3e3; }
-td i { font-style: normal; background: #c46f00; color: #fff; border-radius: 1mm; padding: 0 0.8mm; font-size: 5.6pt; font-family: 'Segoe UI', sans-serif; font-weight: 800; }
-td.g b { color: #1b8a3a; } td.r b { color: #c8161c; }
-.ln { margin-top: 1.2mm; font-size: 7.2pt; }
-.warn { margin-top: 1mm; background: #c8161c; color: #fff; font-weight: 800; padding: 0.8mm 1.4mm; border-radius: 1mm; letter-spacing: 0.04em; }
-.two { display: grid; grid-template-columns: 1fr 44mm; gap: 2mm; align-items: start; }
-.two table { margin-top: 1.2mm; }
-.xs svg { width: 44mm; height: auto; display: block; margin-top: 1.2mm; border: 0.4pt solid #9aa8bb; border-radius: 1mm; }
-.ft { margin-top: 1.2mm; color: #4a5a70; font-size: 5.6pt; display: flex; justify-content: space-between; }
-.ref { font-weight: 800; }
-</style></head><body><div class="pg" style="margin: ${how === 'print' ? '7mm' : '0'} auto 0">
-<div class="hd"><h1>COA PLANNER</h1><span>${e(P.name)} · ${dtg}</span></div>
-<div class="meta">
-<div><small>Assault Track</small><b>${v.fmt(v.at)}°${R}</b></div>
-<div><small>Boat Ref Course</small><b>${v.brc ? v.fmt(v.brc.heading) + '°' + R : '—'}</b></div>
-<div><small>Boat Speed</small><b>${Math.round(+P.bs)} kt</b></div>
-<div><small>W/V</small><b>${v.fmt(v.wd)}°${R}/${Math.round(v.ws)}${v.gust ? 'G' + Math.round(v.gust) : ''}</b></div>
-<div style="grid-column: span 2"><small>Ship position${P.posLabel ? ' · ' + e(P.posLabel) : ''}</small><b>${e(pos)}</b></div>
-<div><small>H-hour</small><b>${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z</b></div>
-<div><small>Reference</small><b class="ref">°${R}${R === 'M' ? ` var ${Math.abs(v.decl).toFixed(1)}${v.decl >= 0 ? 'E' : 'W'}` : ''}</b></div>
-</div>
-<div class="board">${svg}</div>
-<table><thead><tr><th>COA</th><th>Ship HDG</th><th>Rel. wind °/kt</th><th>Rel. bearing</th><th>Helo on AT</th><th>Approach</th><th>Sea</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="ln">${sm}</div>
-<div class="ln">${sea}</div>
-${warn ? `<div class="warn">${warn}</div>` : ''}
-<div class="${xsec ? 'two' : ''}"><table><thead><tr><th style="width:24%">Callsign</th><th style="width:22%">Type</th><th style="width:18%">Alt ft</th><th>Task</th></tr></thead><tbody>${ht}</tbody></table>${xsec ? `<div class="xs">${xsec}</div>` : ''}</div>
-${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) => `${e(c.a.name)} ↔ ${e(c.b.name)} ${c.diff} ft`).join(' · ')} (min. ${+P.sep || 500} ft)</div>` : ''}
-<div class="ft"><span>HW/TW head-/tailwind · XW crosswind from L/R (kt) · Rel. wind = apparent wind over deck · G stbd, R port</span><span>P-ALV Dashboard · ${e(OPS.screen.name || '')} · ${zulu(Date.now())}</span></div>
-</div></body></html>`;
+  // The two-page A5 card in the layout of the plan (coa-print.js).
+  function a5Html(how, layout) {
+    return coaPrintHtml({ vm, P, marks: layer.marks(), layout: layout || P.printLayout || 'a', how });
   }
+  // For a look at the three layouts without printing (a test run, --shot-dump).
+  window.__coaPrintHtml = (layout) => (P && vm ? a5Html('pdf', layout) : null);
   async function exportA5(how) {
     if (!P || !vm) return;
     flush();
@@ -896,10 +938,38 @@ ${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) =
     }).catch((err) => toast(String(err.message || err), true));
   }
 
+  /* ---------- the card layout of 1.54 ---------- */
+  // Since 1.54 the ship sits elsewhere in each card (larger, centred above the figures). Drawings made on
+  // an older plan are moved once with the ship of the card they lie in, scaled about it, so a helicopter
+  // drawn beside COA 3 stays beside COA 3. The plan gets `board: 2` in the same write.
+  const COA_OLD = { lx: 445, rx: 855, ty: 229, by: 771 };
+  function migrateBoard() {
+    if (!P || !P.id || P.board === 2 || !onScreen(body)) return;
+    const s = Math.min(1.25, (COA_CARD.h - COA_STRIP - 18) / 350);
+    const nx = (left) => (left ? COA_CARD.w / 2 - 40 : COA_CARD.w + COA_CARD.gap + COA_CARD.w / 2 + 40);
+    const ny = (top) => (top ? 8 + (COA_CARD.h - COA_STRIP - 8) / 2 : COA_CARD.h + COA_CARD.gap + 8 + (COA_CARD.h - COA_STRIP - 8) / 2);
+    const writes = OPS.list('coa', 'marks').filter((m) => m.plan === P.id).map((m) => {
+      const e = DK.copy(m);
+      const [cx, cy] = DK.centre(e, coaMeasure);
+      const left = cx < COA_W / 2, top = cy < COA_H / 2;
+      const ox = left ? COA_OLD.lx : COA_OLD.rx, oy = top ? COA_OLD.ty : COA_OLD.by;
+      DK.scaleBy(e, s, ox, oy);
+      DK.moveBy(e, nx(left) - ox, ny(top) - oy);
+      const id = e.id; delete e.id; delete e.updatedAt;
+      return { list: 'marks', id, item: e };
+    });
+    const plan = { ...P }; for (const k of ['id', 'updatedAt', '_sea', '_wind', '_windNow', '_shipNow']) delete plan[k];
+    plan.board = 2;
+    OPS.putMany('coa', [...writes, { list: 'plans', id: P.id, item: plan }]);
+    P.board = 2;
+    if (writes.length) toast(`${writes.length} ${writes.length === 1 ? 'tekening' : 'tekeningen'} meegeschoven naar de nieuwe COA-indeling`);
+  }
+
   /* ---------- painting ---------- */
   function paint({ inputs = true, info: withInfo = true } = {}) {
     if (!P) { if (!ensurePlan()) { paintBoard(); return; } load(); }
     if (!P) return;
+    migrateBoard();
     vm = coaModel(P, offMin);
     paintBar();
     if (inputs) paintInputs();
@@ -919,7 +989,7 @@ ${conf.length ? `<div class="warn">HEIGHT CONFLICT: ${conf.slice(0, 3).map((c) =
   themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   cleanups.push(() => themeWatch.disconnect());
   // The sun and moon move on; while the tab is in view the picture follows each minute.
-  timers.push(setInterval(() => { if (onScreen(body) && P) { paint({ inputs: false }); checkWxAge(); } }, 60000));
+  timers.push(setInterval(() => { if (onScreen(body) && P) { paint({ inputs: false }); checkWxAge(); fetchSoon(); } }, 60000));
   // Coming back to the tab with a warning still waiting: show it then.
   timers.push(setInterval(() => { if (wxPending && P && onScreen(body)) checkWxAge(); }, 2000));
 

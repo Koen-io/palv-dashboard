@@ -42,6 +42,26 @@ function coaDrawLayer(o) {
   const svgHost = h('div', { class: 'coa-drawsvg' });
   o.el.append(svgHost);
   let marks = [], selId = null, drawing = null, drag = null, hold = null, pending = null, queued = false;
+  // Hold to snap (1.54): the snap in progress while the finger is down, and the cross-fade afterwards.
+  let snap = null, morph = null, lastPt = null;
+  const snapT = dkSnapTimer(() => {
+    if (!drawing || drawing.type !== 'path' || pointers.size !== 1 || snap || !lastPt) return;
+    drawing.fillShapes = !!cfg.fill;
+    const st = DK.trySnap(drawing, k(), lastPt);
+    delete drawing.fillShapes;
+    if (!st) return;
+    snap = st; morph = { ghost: st.ghost, t0: st.t0, id: null };
+    drawing = st.el;
+    animate();
+  });
+  function animate() { paintLive(); if (morph && DK.morphT(morph) < 1) requestAnimationFrame(animate); else if (morph && !snap) { morph = null; paintLive(); } }
+  // The drawing as SVG, with the cross-fade of a snap: the old stroke fading out, the clean shape in.
+  function svgOf(Pp) {
+    const p = morph ? DK.morphT(morph) : 1;
+    const fadeIn = (svg) => (p < 1 ? `<g opacity="${p.toFixed(3)}">${svg}</g>` : svg);
+    const ghost = morph && p < 1 ? `<g opacity="${(1 - p).toFixed(3)}">${coaMarkSvg(morph.ghost, Pp)}</g>` : '';
+    return `<svg viewBox="0 0 ${o.W} ${o.H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => (morph && m.id === morph.id ? fadeIn(coaMarkSvg(m, Pp)) : coaMarkSvg(m, Pp))).join('')}${ghost}${drawing ? (snap ? fadeIn(coaMarkSvg(drawing, Pp)) : coaMarkSvg(drawing, Pp)) : ''}</svg>`;
+  }
   let lastSel = null; // the selection just before the first finger came down (it may have tapped beside it)
   const pointers = new Map();
   // Undo and redo per plan (drawkit.js); the buttons in the panel and the floating pair on the surface.
@@ -63,7 +83,7 @@ function coaDrawLayer(o) {
     marks = marksOf();
     if (selId && !marks.some((m) => m.id === selId)) selId = null;
     const Pp = o.pal();
-    svgHost.innerHTML = `<svg viewBox="0 0 ${o.W} ${o.H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, Pp)).join('')}${drawing ? coaMarkSvg(drawing, Pp) : ''}</svg>`;
+    svgHost.innerHTML = svgOf(Pp);
     selUi.paint(o.on() ? selEl() : null);
     if (floatBar) floatBar.hidden = !o.on();
     for (const b of undoBars) b.paint();
@@ -78,7 +98,7 @@ function coaDrawLayer(o) {
     requestAnimationFrame(() => {
       queued = false;
       const Pp = o.pal();
-      svgHost.innerHTML = `<svg viewBox="0 0 ${o.W} ${o.H}" preserveAspectRatio="xMidYMid meet">${marks.map((m) => coaMarkSvg(m, Pp)).join('')}${drawing ? coaMarkSvg(drawing, Pp) : ''}</svg>`;
+      svgHost.innerHTML = svgOf(Pp);
       selUi.paint(o.on() ? selEl() : null);
     });
   }
@@ -152,7 +172,24 @@ function coaDrawLayer(o) {
   // text tool, anything else by pressing on it and holding still; two fingers turn, scale and move it.
   const onSel = (x, y) => { const s = selEl(); return s && DK.hitOne(s, x, y, tol(), coaMeasure) ? s : null; };
   const hitMark = (x, y) => DK.hit(marks, x, y, { tol: tol(), measure: coaMeasure });
-  function startMove(e, x, y) { select(e.id); drag = { mode: 'move', e0: DK.copy(e), e, x0: x, y0: y, moved: false }; o.el.style.cursor = 'grabbing'; }
+  function startMove(e, x, y) {
+    const was = selId === e.id;
+    select(e.id); drag = { mode: 'move', e0: DK.copy(e), e, x0: x, y0: y, moved: false }; o.el.style.cursor = 'grabbing';
+    // A line or arrow that was already selected, pressed and held still: an anchor right there, and the
+    // drag bends the line instead of moving it (1.54).
+    if (was && e.type === 'line') {
+      const d = drag;
+      d.bendT = setTimeout(() => {
+        if (drag !== d || d.moved) return;
+        const cur = selEl(); if (!cur) return;
+        const before = DK.copy(cur), f = DK.copy(cur);
+        const idx = DK.insertVia(f, x, y);
+        Object.assign(cur, f); liveSet(cur);
+        drag = { mode: 'bend', idx, before };
+        selUi.pulse(); paintLive();
+      }, DK_HOLD_MS);
+    }
+  }
   const toolCursor = () => (cfg.tool === 'select' ? 'default' : cfg.tool === 'text' ? 'text' : 'crosshair');
   o.el.addEventListener('pointerdown', (ev) => {
     if (!o.on() || !o.plan() || ev.target.closest('.dk-sel')) return;
@@ -162,6 +199,7 @@ function coaDrawLayer(o) {
     if (!pointers.size) lastSel = selId;
     pointers.set(ev.pointerId, pt);
     if (pointers.size === 2) {
+      snapT.cancel(); snap = null;
       if (hold) { hold.cancel(); hold = null; }
       pending = null;
       // An icon that the first finger was about to place is not placed: two fingers turn, not place.
@@ -214,7 +252,7 @@ function coaDrawLayer(o) {
       return;
     }
     const base = { color: cfg.color, width: cfg.width, ...(cfg.dash && tool !== 'marker' ? { dash: true } : {}) };
-    if (tool === 'pen' || tool === 'marker' || tool === 'farrow') drawing = { type: 'path', pts: [[x, y]], marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), ...base };
+    if (tool === 'pen' || tool === 'marker' || tool === 'farrow') { drawing = { type: 'path', pts: [[x, y]], marker: tool === 'marker', ...(tool === 'farrow' ? { arrow: 'end' } : {}), ...base }; snap = null; lastPt = [x, y]; snapT.move(ev); }
     else if (tool === 'line' || tool === 'arrow') drawing = { type: 'line', x1: x, y1: y, x2: x, y2: y, arrow: tool === 'arrow' ? 'end' : 'none', ...base };
     else drawing = { type: tool, x, y, w: 0, h: 0, fill: !!cfg.fill, rot: 0, ...base };
     paintLive();
@@ -237,9 +275,11 @@ function coaDrawLayer(o) {
     const [x, y] = pt;
     if (drag && drag.mode === 'erase') { const e = hitMark(x, y); if (e) { removeMark(e); paintNow(); } return; }
     if (drag && drag.mode === 'place') { if (drawing) { drawing.x = x; drawing.y = y; paintLive(); } return; }
+    if (drag && drag.mode === 'bend') { const e = selEl(); if (e) { DK.setCtrl(e, drag.idx, x, y); liveSet(e); paintLive(); } return; }
     if (drag && drag.mode === 'move') {
       const dx = x - drag.x0, dy = y - drag.y0;
-      if (!drag.moved && Math.hypot(dx, dy) * k() < 3) return;
+      if (!drag.moved && Math.hypot(dx, dy) * k() < (drag.bendT ? DK_HOLD_SLOP : 3)) return;
+      if (drag.bendT) { clearTimeout(drag.bendT); drag.bendT = null; }
       drag.moved = true;
       const fresh = DK.copy(drag.e0); DK.moveBy(fresh, dx, dy);
       const e = selEl() || drag.e;
@@ -251,7 +291,8 @@ function coaDrawLayer(o) {
       if (!drag && ev.pointerType === 'mouse' && cfg.tool !== 'eraser') { const t = onSel(x, y) || hitMark(x, y); o.el.style.cursor = t && (cfg.tool === 'select' || DK.grabMode(cfg.tool, t, selId) === 'now') ? 'move' : toolCursor(); }
       return;
     }
-    if (drawing.type === 'path') { const l = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(x - l[0], y - l[1]) * k() >= 1.5) drawing.pts.push([x, y]); }
+    if (snap) { drawing = DK.snapFollow(snap, x, y); paintLive(); return; }
+    if (drawing.type === 'path') { lastPt = [x, y]; snapT.move(ev); const l = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(x - l[0], y - l[1]) * k() >= 1.5) drawing.pts.push([x, y]); }
     else if (drawing.type === 'line') {
       drawing.x2 = x; drawing.y2 = y;
       if (ev.shiftKey) { const a = Math.round(Math.atan2(y - drawing.y1, x - drawing.x1) / (Math.PI / 4)) * (Math.PI / 4), L = Math.hypot(x - drawing.x1, y - drawing.y1); drawing.x2 = drawing.x1 + L * Math.cos(a); drawing.y2 = drawing.y1 + L * Math.sin(a); }
@@ -260,6 +301,8 @@ function coaDrawLayer(o) {
   });
   const endDraw = (ev) => {
     pointers.delete(ev.pointerId);
+    snapT.cancel();
+    const snapped = snap; snap = null;
     if (hold) { hold.cancel(); hold = null; }
     if (drag && drag.mode === 'pinch') {
       if (pointers.size < 2) { const e = selEl(); if (drag.moved && e) commitMark(e, drag.before); drag = pointers.size ? { mode: 'none' } : null; paintNow(); if (o.on()) paintTools(); }
@@ -273,8 +316,10 @@ function coaDrawLayer(o) {
       paintNow(); if (o.on()) paintTools();
       return;
     }
+    if (drag && drag.mode === 'bend') { const d = drag; drag = null; const e = selEl(); if (e) commitMark(e, d.before); paintNow(); if (o.on()) paintTools(); return; }
     if (drag && drag.mode === 'move') {
       const d = drag; drag = null;
+      if (d.bendT) clearTimeout(d.bendT);
       o.el.style.cursor = toolCursor();
       if (d.moved) commitMark(d.e, d.e0);
       else if (d.tapEdit) { const e = selEl(); if (e) textDialog(null, e); }
@@ -285,8 +330,8 @@ function coaDrawLayer(o) {
     if (drawing) {
       const d = drawing; drawing = null;
       if (d.type !== 'path' && d.type !== 'line') { if (d.w < 0) { d.x += d.w; d.w = -d.w; } if (d.h < 0) { d.y += d.h; d.h = -d.h; } }
-      const tiny = (d.type === 'line' && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) * k() < 5) || ((d.type === 'rect' || d.type === 'ellipse') && (Math.abs(d.w) * k() < 5 || Math.abs(d.h) * k() < 5));
-      if (!tiny) { commitMark(d); if (DK.selectAfter(d)) selId = d.id; }
+      const tiny = !snapped && ((d.type === 'line' && Math.hypot(d.x2 - d.x1, d.y2 - d.y1) * k() < 5) || ((d.type === 'rect' || d.type === 'ellipse') && (Math.abs(d.w) * k() < 5 || Math.abs(d.h) * k() < 5)));
+      if (!tiny) { commitMark(d); if (DK.selectAfter(d)) selId = d.id; if (snapped && morph) { morph.id = d.id; if (DK.morphT(morph) < 1) requestAnimationFrame(animate); else morph = null; } }
       paintNow(); if (o.on()) paintTools();
     }
   };
@@ -342,38 +387,35 @@ function coaDrawLayer(o) {
         light: () => !!(o.pal() && o.pal().bg && /^#[ef]/i.test(o.pal().bg)),
         picked: () => (cfg.tool === 'icon' ? cfg.iconId : null),
         pick: (ic) => { cfg.iconId = ic.id; cfg.tool = 'icon'; o.save(); o.el.style.cursor = toolCursor(); },
-        extra: h('div', { class: 'row' }, field('Icoongrootte', zpSelect([50, 70, 90, 120, 160].map((v) => ({ value: v, label: `${v}` })), cfg.iconSize, (v) => { cfg.iconSize = +v; o.save(); if (s && s.type === 'icon' && !DK.isUnderlay(s)) patchSel({ size: +v }); }))),
       });
     } else {
-      content = h('div', { class: 'zp-panel' },
-        h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Gereedschap')),
-          // The icon tool has no button: picking an icon under Iconen switches to it.
-          h('div', { class: 'wb-tools coa-toolgrid' }, Object.entries(COA_TOOLS).filter(([key]) => key !== 'icon').map(([key, t]) => h('button', { class: 'wb-toolbtn' + (cfg.tool === key ? ' on' : ''), title: `${t.name} — ${t.hint}`, onclick: () => setTool(key) }, icon(t.icon), h('span', {}, t.name)))),
-          h('p', { class: 'zp-hint' }, (COA_TOOLS[cfg.tool] || COA_TOOLS.pen).hint)),
-        h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Kleur en dikte')),
-          h('div', { class: 'wb-colors' }, COA_COLORS.map((c) => h('button', { class: 'wb-color' + (cfg.color === c ? ' on' : ''), style: `--c:${c}`, title: c, onclick: () => { cfg.color = c; o.save(); if (s) patchSel({ color: c }); else paintTools(); } }))),
-          h('div', { class: 'wb-widths' }, COA_WIDTHS.map((wd) => h('button', { class: 'wb-width' + (cfg.width === wd ? ' on' : ''), title: `${wd}`, onclick: () => { cfg.width = wd; o.save(); if (s && (s.type === 'path' || s.type === 'line' || s.type === 'rect' || s.type === 'ellipse')) patchSel({ width: wd }); else paintTools(); } }, h('i', { style: `height:${Math.min(12, wd)}px` })))),
-          dkDashPicker(DK.canDash(s) ? !!s.dash : cfg.dash, (v) => { cfg.dash = v; o.save(); if (DK.canDash(s)) patchSel({ dash: v || undefined }); else paintTools(); }),
-          checkbox('Vormen vullen', !!cfg.fill, (v) => { cfg.fill = v; o.save(); if (s && (s.type === 'rect' || s.type === 'ellipse')) patchSel({ fill: v }); }),
-          h('div', { class: 'row' }, field('Tekstgrootte', zpSelect([20, 26, 30, 40, 54].map((v) => ({ value: v, label: `${v}` })), cfg.fontSize, (v) => { cfg.fontSize = +v; o.save(); if (s && s.type === 'text') patchSel({ size: +v }); })))),
-        s ? h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Selectie'), h('span', { class: 'zp-fold-badge' }, { path: s.arrow ? 'vrije pijl' : 'streek', line: s.arrow && s.arrow !== 'none' ? 'pijl' : 'lijn', rect: 'rechthoek', ellipse: 'ellips', text: 'tekst', icon: 'icoon' }[s.type] || s.type)),
-          DK.canRotate(s) ? h('div', { class: 'zp-btnrow dk-turnrow' },
-            h('button', { class: 'btn zp-btn', title: '15° linksom ([)', onclick: () => turnSel(-15) }, '↺ 15°'),
-            DK.ownRot(s) ? h('button', { class: 'btn zp-btn', title: 'Recht zetten (0°)', disabled: !s.rot || null, onclick: () => patchSel({ rot: 0 }) }, icon('refresh'), s.rot ? `Recht (nu ${Math.round(s.rot)}°)` : 'Recht') : null,
-            h('button', { class: 'btn zp-btn', title: '15° rechtsom (])', onclick: () => turnSel(15) }, '↻ 15°')) : null,
-          h('div', { class: 'zp-btnrow' },
-            s.type === 'icon' ? h('button', { class: 'btn zp-btn', onclick: () => labelDialog(s) }, icon('keyboard'), s.label ? `Label: ${s.label}` : 'Label…') : null,
-            s.type === 'text' ? h('button', { class: 'btn zp-btn', onclick: () => textDialog(null, s) }, icon('edit'), 'Bewerken') : null,
-            s.type === 'line' ? h('button', { class: 'btn zp-btn', title: 'Pijlpunt wisselen', onclick: () => patchSel({ arrow: s.arrow === 'end' ? 'both' : s.arrow === 'both' ? 'none' : 'end' }) }, s.arrow === 'end' ? 'Pijl: beide' : s.arrow === 'both' ? 'Geen pijl' : 'Pijlpunt') : null,
-            h('button', { class: 'btn zp-btn', title: 'Bovenop leggen', onclick: () => patchSel({ z: marks.length ? Math.max(...marks.map((m) => m.z || 0)) + 1 : 1 }) }, icon('arrowUp'), 'Voor'),
-            h('button', { class: 'btn zp-btn', title: 'Onderop leggen', onclick: () => patchSel({ z: marks.length ? Math.min(...marks.map((m) => m.z || 0)) - 1 : 0 }) }, icon('arrowDown'), 'Achter'),
-            h('button', { class: 'btn zp-btn', title: 'Kopie ernaast', onclick: () => { const c = DK.copy(s); delete c.id; delete c.updatedAt; delete c.z; DK.moveBy(c, 24, 24); commitMark(c); selId = c.id; paintNow(); paintTools(); } }, icon('history'), 'Kopie'),
-            h('button', { class: 'btn zp-btn danger', onclick: () => { removeMark(s); paintNow(); paintTools(); } }, icon('trash'), 'Verwijderen'))) : null,
+      const front = () => patchSel({ z: marks.length ? Math.max(...marks.map((m) => m.z || 0)) + 1 : 1 });
+      const back = () => patchSel({ z: marks.length ? Math.min(...marks.map((m) => m.z || 0)) - 1 : 0 });
+      const copy = () => { const c = DK.copy(s); delete c.id; delete c.updatedAt; delete c.z; DK.moveBy(c, 24, 24); commitMark(c); selId = c.id; paintNow(); paintTools(); };
+      content = h('div', { class: 'zp-panel dk-panel' },
+        // The same three sections as on the Whiteboard (drawkit.js); the icon tool has no button: picking an icon under Iconen switches to it.
+        dkToolSection({ tools: COA_TOOLS, cur: cfg.tool, setTool }),
+        dkStyleSection({
+          colors: COA_COLORS, widths: COA_WIDTHS, color: cfg.color, width: cfg.width, dash: DK.canDash(s) ? !!s.dash : cfg.dash, fill: cfg.fill,
+          onColor: (c) => { cfg.color = c; o.save(); if (s) patchSel({ color: c }); else paintTools(); },
+          onWidth: (wd) => { cfg.width = wd; o.save(); if (s && (s.type === 'path' || s.type === 'line' || s.type === 'rect' || s.type === 'ellipse')) patchSel({ width: wd }); else paintTools(); },
+          onDash: (v) => { cfg.dash = v; o.save(); if (DK.canDash(s)) patchSel({ dash: v || undefined }); else paintTools(); },
+          onFill: (v) => { cfg.fill = v; o.save(); if (s && (s.type === 'rect' || s.type === 'ellipse' || (s.type === 'path' && s.closed))) patchSel({ fill: v }); },
+          sizes: [
+            { label: 'Tekstgrootte', values: [20, 26, 30, 40, 54], cur: cfg.fontSize, on: (v) => { cfg.fontSize = +v; o.save(); if (s && s.type === 'text') patchSel({ size: +v }); } },
+            { label: 'Icoongrootte', values: [50, 70, 90, 120, 160], cur: cfg.iconSize, on: (v) => { cfg.iconSize = +v; o.save(); if (s && s.type === 'icon' && !DK.isUnderlay(s)) patchSel({ size: +v }); } },
+          ],
+        }),
+        dkSelSection(s, {
+          turn: turnSel, straight: () => patchSel({ rot: 0 }), label: () => labelDialog(s), edit: () => textDialog(null, s), arrow: (v) => patchSel({ arrow: v }),
+          unbend: () => patchSel({ via: undefined }), front, back, copy, remove: () => { removeMark(s); paintNow(); paintTools(); },
+        }),
         h('div', { class: 'zp-sec' }, h('div', { class: 'zp-sec-head' }, h('h3', {}, 'Tekening')),
           h('div', { class: 'dk-urrow' }, undoBar({ labels: true })),
           h('div', { class: 'zp-btnrow' },
             h('button', { class: 'btn zp-btn danger', onclick: clearAll }, icon('trash'), 'Alles wissen')),
-          h('p', { class: 'zp-hint' }, o.hint || 'Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken; pijltjes verplaatsen. Dubbeltik op tekst om te bewerken, op een icoon voor een label.')));
+          h('p', { class: 'zp-hint' }, o.hint || 'Iconen en tekst pak je direct vast; lijnen, pijlen en vormen door er even op te drukken. Draaien aan de ronde greep, met twee vingers of met [ en ]; schalen aan de hoeken; pijltjes verplaatsen. Dubbeltik op tekst om te bewerken, op een icoon voor een label.'),
+          h('p', { class: 'zp-hint dk-tip' }, DK_TIP)));
     }
     o.tools.replaceChildren(h('div', { class: 'coa-toolhead' }, h('b', {}, o.title || 'Tekenlaag'), tabs), content);
     o.tools.scrollTop = scroll;
@@ -381,7 +423,7 @@ function coaDrawLayer(o) {
 
   // For a test run (scripted over the DevTools protocol): the state of this surface.
   o.el.dkState = () => ({ selId, drag: drag && drag.mode, drawing: drawing && drawing.type, pointers: [...pointers.keys()], hold: !!hold });
-  const unsub = OPS.on('coa', () => { if (drag && (drag.mode === 'move' || drag.mode === 'pinch')) return; paintNow(); if (o.on() && !(document.activeElement && o.tools && o.tools.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) paintTools(); });
+  const unsub = OPS.on('coa', () => { if (drag && (drag.mode === 'move' || drag.mode === 'pinch' || drag.mode === 'bend')) return; paintNow(); if (o.on() && !(document.activeElement && o.tools && o.tools.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) paintTools(); });
   return {
     paint: paintNow,
     paintTools,

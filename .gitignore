@@ -9,3 +9,6 @@ Thumbs.db
 
 # Tor, fetched and checked by scripts/haal-tor.js
 build/tor/
+
+# Example exports with real plan data (shared with Koen, not for the public repo)
+previews/coa-export/

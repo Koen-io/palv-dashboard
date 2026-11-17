@@ -39,9 +39,9 @@
 
 /* ---------- main area ---------- */
 .zp-main { flex: 1; min-height: 0; display: flex; position: relative; }
-.zp-side { flex: none; width: 27rem; max-width: 42%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; }
-/* exactly its own width (27rem, or 42% of the area when that is less), so the edge tab stays in view */
-.zp.side-off .zp-side { margin-left: calc(-1 * min(27rem, 42%)); }
+.zp-side { flex: none; width: 27rem; max-width: 48%; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border); transition: margin-left 0.2s ease; position: relative; z-index: 1100; container: zpside / inline-size; }
+/* exactly its own width (--zp-side-w, measured by zpSideWidth: the standard or the dragged width), so the edge tab stays in view */
+.zp.side-off .zp-side { margin-left: calc(-1 * var(--zp-side-w, min(27rem, 48%))); }
 .zp-mapbox { flex: 1; min-width: 0; position: relative; }
 .zp-map { position: absolute; inset: 0; }
 .zp-map[data-mode="route"], .zp-map[data-mode="route"] .leaflet-interactive,
@@ -98,21 +98,20 @@
 .zp-wl-src { margin-top: 0.2rem; font-size: 0.64rem; color: #8ea2bf; }
 .zp-wl-src.bad { color: #ffb020; }
 
-/* ---------- popovers ---------- */
-.zp-pop { position: absolute; right: 0.55rem; top: 0.55rem; z-index: 1300; max-height: calc(100% - 1.1rem); overflow: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.75rem 0.85rem; }
-.zp-pop[hidden] { display: none; }
-.zp-pop h4 { margin: 0 0 0.45rem; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
-.zp-pop-grid { display: grid; grid-template-columns: repeat(4, minmax(13rem, 1fr)); gap: 0.4rem 1.4rem; }
-.zp-pop-col { display: flex; flex-direction: column; gap: 0.32rem; min-width: 0; }
-.zp-pop .check { font-size: 0.8rem; gap: 0.45rem; }
-.zp-pop .check input { width: 0.95rem; height: 0.95rem; }
-.zp-pop .field > label { font-size: 0.64rem; }
+/* ---------- the tabs Lagen and Eenheden ---------- */
+.zp-panel.zp-layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); align-items: start; }
+.zp-layers .zp-sec { gap: 0.32rem; min-width: 0; }
+.zp-layers .check, .zp-units .check { font-size: 0.8rem; gap: 0.45rem; }
+.zp-layers .check input { width: 0.95rem; height: 0.95rem; flex: none; }
+.zp-layers .field > label, .zp-units .field > label { font-size: 0.64rem; }
+.zp-layers .field .input, .zp-units .field .input { width: 100%; min-width: 0; }
+.zp-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr)); gap: 0.5rem 0.7rem; }
+.zp-units .field .hint { font-size: 0.68rem; }
+.zp-units > .field:last-child { grid-column: 1 / -1; }
 .zp-tgroup { display: flex; flex-direction: column; gap: 0.28rem; margin-bottom: 0.25rem; }
 .zp-tgroup > b, .zp-tlabel { font-size: 0.68rem; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.35rem; }
 .zp-dot { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; vertical-align: middle; }
 .zp-dot.sq { border-radius: 2px; }
-.zp-pop-units { display: flex; flex-direction: column; gap: 0.5rem; width: 20rem; }
-@media (max-width: 1500px) { .zp-pop-grid { grid-template-columns: repeat(2, minmax(13rem, 1fr)); } }
 
 /* ---------- side panel ---------- */
 .zp-tabs { flex: none; display: grid; grid-template-columns: repeat(6, 1fr); border-bottom: 1px solid var(--border); background: var(--surface-2); }
@@ -130,7 +129,9 @@
 .zp-sub { margin: 0.4rem 0 0.1rem; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .zp-hint { margin: 0; font-size: 0.76rem; line-height: 1.45; color: var(--muted); }
 .zp-hint.warn { color: var(--accent); }
-.zp-grid4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.45rem 0.6rem; }
+.zp-grid4 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem 0.6rem; }
+.zp-grid4 .field { min-width: 0; }
+.zp-grid4 .field .input { width: 100%; min-width: 0; }
 .zp-grid4 .field > label { font-size: 0.64rem; }
 .zp-grid4 .field .hint { font-size: 0.66rem; }
 .zp-grid4 .seg button { height: 1.75rem; padding: 0 0.6rem; font-size: 0.72rem; }
@@ -159,7 +160,7 @@
 .zp-wps { display: flex; flex-direction: column; gap: 0.25rem; }
 .zp-wpr { display: grid; grid-template-columns: auto 1.6rem 1fr auto auto; gap: 0.3rem; align-items: center; padding: 0.15rem; border-radius: var(--radius-sm); background: var(--surface-2); position: relative; }
 .zp-wpr.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.zp-wpr .input { height: 1.75rem; font-size: 0.78rem; }
+.zp-wpr .input { height: 1.75rem; font-size: 0.78rem; min-width: 0; }
 .zp-wpn { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: #ff9f1c; color: #0a0f18; font-size: 0.68rem; font-weight: 800; }
 .zp-wpr:first-child .zp-wpn { background: #3ecf6e; }
 .zp-wpr:last-child:not(:first-child) .zp-wpn { background: #ff5148; color: #fff; }
@@ -254,7 +255,8 @@ html[data-theme="light"] .zp-side { background: var(--surface); }
 .zp-tool.on { border-color: var(--zp-c); box-shadow: inset 4px 0 0 var(--zp-c); }
 .zp-tool-head { width: 100%; display: flex; align-items: center; gap: 0.55rem; padding: 0.6rem 0.7rem; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .zp-tool-head > svg { width: 1.1rem; height: 1.1rem; color: var(--zp-c); flex: none; }
-.zp-tool-head > b { flex: 1; font: 600 0.92rem var(--font-display); }
+.zp-tool-head > b { flex: 1; min-width: 0; font: 600 0.92rem var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zp-tool-state { flex: none; }
 .zp-tool-head:hover { background: var(--surface-3); }
 .zp-tool-state { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.15rem 0.5rem; border-radius: 99px; background: var(--surface-3); color: var(--muted); }
 .zp-tool.on .zp-tool-state { background: var(--zp-c); color: #0a0f18; }
@@ -347,14 +349,6 @@ html[data-theme="light"] .zp-side { background: var(--surface); }
 html[data-theme="light"] .zp-acft { border-color: #d9a800; background: rgba(255, 196, 0, 0.14); }
 html[data-theme="light"] .zp-acft-label { color: #8a6500; }
 html[data-theme="light"] .zp-acft .zp-prof { background: var(--surface-3); }
-
-/* popover head: title and a close button that cannot be missed */
-.zp-pop-head { position: sticky; top: -0.75rem; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: -0.75rem -0.85rem 0.6rem; padding: 0.5rem 0.55rem 0.5rem 0.85rem; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-.zp-pop-head > b { display: inline-flex; align-items: center; gap: 0.45rem; font: 700 0.95rem var(--font-display); letter-spacing: 0.04em; }
-.zp-pop-head > b svg { width: 1rem; height: 1rem; color: var(--accent); }
-.zp-pop-close { display: inline-flex; align-items: center; gap: 0.35rem; height: 2rem; padding: 0 0.75rem 0 0.55rem; border: 1px solid var(--border-strong); border-radius: 99px; background: var(--surface-3); color: var(--text); font: 700 0.78rem var(--font-ui); cursor: pointer; }
-.zp-pop-close svg { width: 1.05rem; height: 1.05rem; }
-.zp-pop-close:hover { background: #d0342c; border-color: #d0342c; color: #fff; }
 
 /* the tab on the edge between the side panel and the map that folds the panel in and out */
 .zp-side-toggle { position: absolute; top: 50%; right: -1.65rem; width: 1.65rem; height: 5rem; margin-top: -2.5rem; padding: 0; display: grid; place-items: center; border: 1px solid var(--border-strong); border-left: 0; border-radius: 0 0.7rem 0.7rem 0; background: var(--surface); color: var(--text); cursor: pointer; box-shadow: 4px 0 10px rgba(0, 0, 0, 0.28); transition: background-color 0.15s ease, color 0.15s ease, width 0.15s ease, right 0.15s ease; }
@@ -496,3 +490,68 @@ body.touch .zp-rhead .zp-save { height: 2.4rem; }
 @keyframes zp-ring { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
 .page:not(.active) .zp-pulse > i { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .zp-pulse-wave { animation-duration: 4s; } .zp-pulse-ring { animation: none; } }
+
+/* ---------- side panel: tabs as one segmented control (as in the COA Planner's tool panel) ---------- */
+.zp-tabs.zp-segtabs { gap: 0.14rem; margin: 0.5rem 0.6rem 0.45rem; padding: 0.14rem; border: 0; border-radius: var(--radius-sm); background: var(--surface-3); }
+.zp-segtabs .zp-tab { min-width: 0; padding: 0.38rem 0.15rem 0.32rem; border: 0; border-radius: calc(var(--radius-sm) - 0.1rem); background: transparent; transition: background-color 0.12s ease, color 0.12s ease; }
+.zp-segtabs .zp-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zp-segtabs .zp-tab svg { flex: none; }
+.zp-segtabs .zp-tab:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.zp-segtabs .zp-tab.on { background: var(--accent); color: var(--accent-text); }
+.zp-segtabs .zp-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.zp-segtabs + .zp-side-body { border-top: 1px solid var(--border); }
+/* Zoek & Plan has eight: two rows of four, one row when the panel is wide enough */
+.zp-tabs.zp-tabs8 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container zpside (min-width: 35rem) { .zp-tabs.zp-tabs8 { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+/* very narrow: icons only (the name is in the tooltip) */
+@container zpside (max-width: 17rem) {
+  .zp-segtabs .zp-tab span { display: none; }
+  .zp-segtabs .zp-tab { padding: 0.5rem 0.1rem; }
+}
+
+/* ---------- side panel: the grip on its edge (dkPanelGrip) for the width ---------- */
+/* The strip lets every click through to the map; only the handle, above the fold tab, takes a drag. */
+.zp-main > .dk-grip.zp-sgrip, .os-body > .dk-grip.zp-sgrip { z-index: 1101; pointer-events: none; }
+.dk-grip.zp-sgrip i { position: relative; pointer-events: auto; transform: translateY(-5.6rem); }
+.dk-grip.zp-sgrip i::before { content: ""; position: absolute; inset: -0.9rem -0.55rem; }
+body.touch .dk-grip.zp-sgrip i { transform: translateY(-6.4rem); }
+.zp.side-off .zp-main > .dk-grip, .os.side-off .os-body > .dk-grip { display: none; }
+
+/* ---------- side panel: the contents follow the width ---------- */
+.zp-side .row { flex-wrap: wrap; }
+.zp-side .row > .field { flex: 1 1 9rem; }
+:is(.zp-side, .os-side) .zp-side-body .seg { flex-wrap: wrap; }
+:is(.zp-side, .os-side) .zp-side-body .seg button { flex: 1 1 auto; min-width: 0; justify-content: center; }
+.zp-rhead { flex-wrap: wrap; row-gap: 0.35rem; }
+.zp-rname { flex: 1 1 8rem; }
+.zp-tblwrap { overflow-x: auto; scrollbar-width: thin; }
+.zp-base-wxhead { flex-wrap: wrap; }
+.zp-btnrow .zp-btn { max-width: 100%; }
+@container zpside (min-width: 35rem) {
+  .zp-grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container zpside (max-width: 19rem) {
+  .zp-panel { padding: 0.5rem; gap: 0.5rem; }
+  .zp-sec { padding: 0.5rem; }
+  .zp-grid4 { grid-template-columns: minmax(0, 1fr); }
+  .zp-export-grid { grid-template-columns: minmax(0, 1fr); }
+  .zp-kv { flex-wrap: wrap; gap: 0 0.5rem; }
+  .zp-kv > b { margin-left: auto; }
+  .zp-btnrow .input { min-width: 0; flex-basis: 100%; }
+  .zp-tool:not(.on) .zp-tool-state { display: none; }
+  .zp-sec-head { flex-wrap: wrap; row-gap: 0.3rem; }
+  .zp-sec-head h3 { min-width: 7rem; }
+  .zp-windswitch .switch { white-space: normal; text-align: left; }
+  /* who gets there first: the time under the name, the wind block across */
+  .zp-first-row { grid-template-columns: auto minmax(0, 1fr); gap: 0.2rem 0.5rem; }
+  .zp-first-t { grid-column: 2; text-align: left; }
+  .zp-first-t small { display: inline; margin-right: 0.35rem; }
+  .zp-base-head { flex-wrap: wrap; row-gap: 0.35rem; }
+  .zp-base-head > div:first-child { flex-basis: 100%; }
+  .zp-li b { white-space: normal; overflow-wrap: anywhere; }
+  .zp-side-body .zp-btn { white-space: normal; height: auto; min-height: 1.95rem; padding-block: 0.25rem; line-height: 1.2; }
+  /* route points: the name gets the room, zooming to a point is also a click on the map */
+  .zp-wpr { grid-template-columns: auto 1.5rem minmax(0, 1fr) auto; gap: 0.2rem; }
+  .zp-wpr > .w-tool:not(.zp-bin) { display: none; }
+  .zp-rhead .zp-sec-tools { padding-left: 0; border-left: 0; }
+}

@@ -323,7 +323,7 @@ function zpRoute(ctx) {
       zpRow('TAS / verbruik', `${Math.round(plan.tasKt)} kt · ${Math.round(pl.flowKgh)} kg/u`, 'TAS uit de IAS op hoogte (ISA); verbruik uit het profiel')) : null;
     const warn = plan ? zpRouteWarnings(ctx, plan) : [];
     const fuelSec = plan ? zpFuelSection(ctx, plan, changed) : null;
-    return h('div', { class: 'zp-panel' }, top, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, fuelSec, tot, table);
+    return h('div', { class: 'zp-panel' }, top, settings, warn.length ? h('div', { class: 'zp-warns' }, warn) : null, fuelSec, tot, table ? h('div', { class: 'zp-tblwrap' }, table) : null);
   }
 
   function zpDepart() {
